@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import { consumePendingBeat } from "@/lib/marketplace-data";
+import { consumePendingBeat, type License } from "@/lib/marketplace-data";
+import { useLicensing } from "@/hooks/use-licensing";
 import {
   Disc3, Music2, Mic2, FolderOpen, Sparkles, Award, Play, Pause,
   Heart, Volume2, Repeat, Wand2, Flame, Feather, MessageSquareQuote,
@@ -84,6 +85,7 @@ const snapshots = [
 ];
 
 const currentBeat = {
+  id: "smoke-velvet",
   title: "Smoke & Velvet",
   producer: "NightOwl",
   bpm: 84,
@@ -93,7 +95,14 @@ const currentBeat = {
   position: "1:18",
   license: "Exclusive · Cleared",
   tag: "RW-0421",
+  prices: [
+    { license: "Lease", price: 49 },
+    { license: "Premium Lease", price: 149 },
+    { license: "Exclusive", price: 899 },
+  ] as { license: License; price: number }[],
 };
+
+
 
 export default function Studio() {
   const [playing, setPlaying] = useState(false);
@@ -112,6 +121,7 @@ export default function Studio() {
     const b = consumePendingBeat();
     if (b) {
       setLoadedBeat({
+        id: b.id,
         title: b.title,
         producer: b.producer,
         bpm: b.bpm,
@@ -121,6 +131,7 @@ export default function Studio() {
         position: "0:00",
         license: `${b.prices[0].license} · Loaded from Marketplace`,
         tag: b.tag ?? "RW-MKT",
+        prices: b.prices,
       });
       setSongState(0);
       setActiveSection(0);
@@ -132,6 +143,50 @@ export default function Studio() {
   }, []);
 
   const beat = loadedBeat ?? currentBeat;
+
+  // -------- Licensing state machine --------
+  // states: 'licensed' | 'unlicensed' | 'prompting' | 'purchasing'
+  const { licensed, license, purchase, purchases } = useLicensing(beat.id);
+  const [licenseState, setLicenseState] = useState<"licensed" | "unlicensed" | "prompting" | "purchasing">(
+    "unlicensed",
+  );
+  const [licenseFlash, setLicenseFlash] = useState<string | null>(null);
+
+  // Sync state machine with reactive licensed status (event-driven from marketplace too)
+  useEffect(() => {
+    if (licensed && licenseState !== "purchasing") {
+      setLicenseState("licensed");
+    } else if (!licensed && licenseState === "licensed") {
+      setLicenseState("unlicensed");
+    } else if (!licensed && licenseState !== "prompting" && licenseState !== "purchasing") {
+      setLicenseState("unlicensed");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [licensed, beat.id]);
+
+  const requestLicense = () => {
+    if (licenseState === "licensed") return;
+    setLicenseState("prompting");
+    setPlaying(false);
+  };
+
+  const confirmLicense = (tier: { license: License; price: number }) => {
+    setLicenseState("purchasing");
+    // Brief simulated processing for tactile feedback
+    setTimeout(() => {
+      purchase(beat.id, tier.license, tier.price);
+      setLicenseState("licensed");
+      setLicenseFlash(`${tier.license} license cleared · added to Beat Locker™ + My Licenses`);
+      setTimeout(() => setLicenseFlash(null), 4000);
+    }, 650);
+  };
+
+  // Reactive locker counts — Beat Locker, Projects, My Licenses
+  const dynamicLockerItems = lockerItems.map((it) => {
+    if (it.label === "Beat Locker") return { ...it, count: it.count + purchases.length };
+    return it;
+  });
+
 
 
   return (
@@ -212,7 +267,7 @@ export default function Studio() {
               The Locker™
             </div>
             <nav className="space-y-1">
-              {lockerItems.map((it) => {
+              {dynamicLockerItems.map((it) => {
                 const Icon = it.icon;
                 return (
                   <button
@@ -311,12 +366,22 @@ export default function Studio() {
           <HeroBeatPlayer
             beat={beat}
             playing={playing}
-            onToggle={() => setPlaying(!playing)}
+            onToggle={() => {
+              if (!licensed && licenseState !== "licensed") {
+                requestLicense();
+                return;
+              }
+              setPlaying(!playing);
+            }}
             fav={fav}
             onFav={() => setFav(!fav)}
             projects={projects}
             activeProjectId={activeProject.id}
             onAddToProject={(p) => setActiveProject(p)}
+            licenseState={licenseState}
+            licenseLabel={license ? `${license.license} · Cleared` : beat.license}
+            onRequestLicense={requestLicense}
+            licenseFlash={licenseFlash}
           />
 
 
@@ -487,6 +552,15 @@ export default function Studio() {
           onClose={() => setBoothModalOpen(false)}
         />
       )}
+
+      {/* LICENSE DIALOG */}
+      <LicenseDialog
+        open={licenseState === "prompting" || licenseState === "purchasing"}
+        beat={beat}
+        state={licenseState}
+        onConfirm={confirmLicense}
+        onClose={() => licenseState !== "purchasing" && setLicenseState(licensed ? "licensed" : "unlicensed")}
+      />
     </div>
   );
 }
@@ -695,6 +769,7 @@ type ProjectT = typeof projects[number];
 
 function HeroBeatPlayer({
   beat, playing, onToggle, fav, onFav, projects: projectList, activeProjectId, onAddToProject,
+  licenseState, licenseLabel, onRequestLicense, licenseFlash,
 }: {
   beat: typeof currentBeat;
   playing: boolean;
@@ -704,6 +779,10 @@ function HeroBeatPlayer({
   projects: ProjectT[];
   activeProjectId: string;
   onAddToProject: (p: ProjectT) => void;
+  licenseState: "licensed" | "unlicensed" | "prompting" | "purchasing";
+  licenseLabel: string;
+  onRequestLicense: () => void;
+  licenseFlash: string | null;
 }) {
   return (
     <div className="relative rounded-2xl overflow-hidden border border-gold/25 glass-panel">
@@ -723,11 +802,17 @@ function HeroBeatPlayer({
             </span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="gold-seal text-onyx text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
-              <Shield className="h-2.5 w-2.5" /> {beat.license}
-            </span>
+            <LicenseBadge state={licenseState} label={licenseLabel} onRequest={onRequestLicense} />
           </div>
         </div>
+
+        {licenseFlash && (
+          <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg border border-gold/40 bg-gold/8 text-xs animate-fade-in">
+            <CheckCircle2 className="h-3.5 w-3.5 text-gold shrink-0" />
+            <span className="text-foreground/90">{licenseFlash}</span>
+          </div>
+        )}
+
 
         <div className="flex flex-wrap items-center gap-5">
           {/* Rotating disc / cover */}
@@ -995,3 +1080,134 @@ function BoothReadyMilestone({ project, onClose }: { project: typeof projects[nu
   );
 }
 
+
+// ============================================================
+// License Badge — state machine surface
+// ============================================================
+function LicenseBadge({
+  state, label, onRequest,
+}: {
+  state: "licensed" | "unlicensed" | "prompting" | "purchasing";
+  label: string;
+  onRequest: () => void;
+}) {
+  if (state === "licensed") {
+    return (
+      <span className="gold-seal text-onyx text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+        <CheckCircle2 className="h-2.5 w-2.5" /> {label}
+      </span>
+    );
+  }
+  if (state === "purchasing") {
+    return (
+      <span className="border border-gold/40 bg-gold/10 text-gold text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-full bg-gold animate-pulse" />
+        Clearing License…
+      </span>
+    );
+  }
+  if (state === "prompting") {
+    return (
+      <span className="border border-gold/40 bg-gold/10 text-gold text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+        <Shield className="h-2.5 w-2.5" /> Awaiting License
+      </span>
+    );
+  }
+  // unlicensed
+  return (
+    <button
+      onClick={onRequest}
+      className="border border-destructive/50 bg-destructive/15 text-destructive-foreground text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 hover:bg-destructive/25 transition-colors"
+      title="License Required"
+    >
+      <Shield className="h-2.5 w-2.5" /> License Required · Tap to Clear
+    </button>
+  );
+}
+
+// ============================================================
+// License Dialog — choose a tier
+// ============================================================
+function LicenseDialog({
+  open, beat, state, onConfirm, onClose,
+}: {
+  open: boolean;
+  beat: typeof currentBeat;
+  state: "licensed" | "unlicensed" | "prompting" | "purchasing";
+  onConfirm: (tier: { license: License; price: number }) => void;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 animate-fade-in">
+      <div className="absolute inset-0 bg-onyx/85 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative glass-panel rounded-2xl w-full max-w-lg p-6 animate-scale-in border border-gold/30">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 h-8 w-8 rounded-full border border-border text-muted-foreground hover:text-gold flex items-center justify-center"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+
+        <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-gold/90 mb-3">
+          <Shield className="h-3 w-3" /> Clear This Beat
+        </div>
+
+        <h2 className="font-display text-2xl">
+          <span className="text-gold-gradient">{beat.title}</span>
+        </h2>
+        <div className="text-sm text-muted-foreground mt-1">
+          by {beat.producer} · {beat.bpm} BPM · {beat.key}
+        </div>
+
+        <div className="mt-5 text-xs text-foreground/80 leading-relaxed">
+          Writing is free in The Prep Studio™. To export, send to engineer, or mark
+          <span className="text-gold"> Booth Ready™</span>, this beat must be licensed.
+        </div>
+
+        <div className="mt-5 space-y-2">
+          {beat.prices.map((tier) => (
+            <button
+              key={tier.license}
+              disabled={state === "purchasing"}
+              onClick={() => onConfirm(tier)}
+              className="w-full group flex items-center justify-between p-4 rounded-xl border border-border hover:border-gold/50 hover:bg-gold/5 transition-all text-left disabled:opacity-60"
+            >
+              <div>
+                <div className="font-display text-base flex items-center gap-2">
+                  {tier.license}
+                  {tier.license === "Exclusive" && (
+                    <span className="text-[9px] uppercase tracking-[0.25em] gold-seal text-onyx px-1.5 py-0.5 rounded-full font-semibold">
+                      Recommended
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  {tier.license === "Lease" && "Streaming + distribution rights"}
+                  {tier.license === "Premium Lease" && "Stems + commercial rights"}
+                  {tier.license === "Exclusive" && "Full ownership · pulled from market"}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-display text-2xl text-gold-gradient">${tier.price}</span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-gold transition-colors" />
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {state === "purchasing" && (
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gold">
+            <span className="h-2 w-2 rounded-full bg-gold animate-pulse" />
+            Clearing license · syncing Beat Locker™…
+          </div>
+        )}
+
+        <div className="hairline my-5" />
+        <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground text-center">
+          Instant sync · Beat Locker · My Licenses · Recent Beats
+        </div>
+      </div>
+    </div>
+  );
+}

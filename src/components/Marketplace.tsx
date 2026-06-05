@@ -9,7 +9,7 @@ import {
 import {
   beats, producers, beatPacks, regions, moods,
   type Beat, type Producer, type BeatPack,
-  setPendingBeat, addPurchase, getPurchases,
+  setPendingBeat, addPurchase, getPurchases, purchaseBeat, LICENSE_EVENT,
 } from "@/lib/marketplace-data";
 
 // ============================================================
@@ -501,14 +501,14 @@ export default function Marketplace() {
   const togglePlay = (id: string) => setPlayingId(prev => (prev === id ? null : id));
 
   const handleBuyBeat = (b: Beat) => {
-    addPurchase({ beatId: b.id, license: b.prices[0].license, price: b.prices[0].price, purchasedAt: Date.now() });
+    purchaseBeat({ beatId: b.id, license: b.prices[0].license, price: b.prices[0].price, purchasedAt: Date.now() });
     setPurchases(getPurchases().length);
     setToast(`${b.title} — ${b.prices[0].license} license unlocked`);
     setTimeout(() => setToast(null), 2800);
   };
 
   const handleBuyPack = (p: BeatPack) => {
-    addPurchase({ beatId: p.id, license: "Premium Lease", price: p.price, purchasedAt: Date.now() });
+    purchaseBeat({ beatId: p.id, license: "Premium Lease", price: p.price, purchasedAt: Date.now() });
     setPurchases(getPurchases().length);
     setToast(`${p.title} — pack unlocked`);
     setTimeout(() => setToast(null), 2800);

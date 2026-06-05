@@ -308,3 +308,27 @@ export function consumePendingBeat(): Beat | null {
   sessionStorage.removeItem(HANDOFF_KEY);
   return beats.find(b => b.id === id) ?? null;
 }
+
+// ---- Licensing event bus + hook ----------------------------------------
+
+export const LICENSE_EVENT = "rapwriter:license-change";
+
+export function emitLicenseChange() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(LICENSE_EVENT));
+}
+
+// Patch addPurchase to emit. We keep the original export name above; consumers
+// should call purchaseBeat() for the side-effected version going forward.
+export function purchaseBeat(p: PurchasedBeat) {
+  addPurchase(p);
+  emitLicenseChange();
+}
+
+export function isBeatLicensed(beatId: string): boolean {
+  return getPurchases().some(p => p.beatId === beatId);
+}
+
+export function getBeatLicense(beatId: string): PurchasedBeat | null {
+  return getPurchases().find(p => p.beatId === beatId) ?? null;
+}
