@@ -75,11 +75,23 @@ const projects = [
 ];
 
 const snapshots = [
-  { day: "Today",     time: "12 min ago", title: "Midnight on the Strip", note: "Hook locked. Verse 1 polished. Coach approved cadence shift.", bars: 16, state: 2 },
-  { day: "Yesterday", time: "11:42 PM",   title: "Midnight on the Strip", note: "Pulled hook from Hook Locker™. Tried two cadences.",                bars: 8,  state: 1 },
-  { day: "Tuesday",   time: "1:18 AM",    title: "Velvet Pressure",       note: "Bridge rewrite. Loaded NightOwl beat pack.",                       bars: 24, state: 2 },
-  { day: "Sunday",    time: "9:04 PM",    title: "Backseat Cathedral",    note: "Booth Ready™ certified. Sent to engineer.",                       bars: 32, state: 3 },
+  { day: "Today",     time: "12 min ago", title: "Midnight on the Strip", note: "Hook locked. Verse 1 polished. Coach approved cadence shift.", bars: 16, state: 2, duration: "1h 14m", linesAdded: 22, sections: ["Hook", "Verse 1"], beat: "Smoke & Velvet", glyph: "MS", art: "linear-gradient(160deg, #0a0a1a 0%, #1a1438 50%, #c9a84c 130%)" },
+  { day: "Yesterday", time: "11:42 PM",   title: "Midnight on the Strip", note: "Pulled hook from Hook Locker™. Tried two cadences.",                bars: 8,  state: 1, duration: "42m",    linesAdded: 14, sections: ["Hook"],           beat: "Smoke & Velvet", glyph: "MS", art: "linear-gradient(160deg, #0a0a1a 0%, #1a1438 50%, #c9a84c 130%)" },
+  { day: "Tuesday",   time: "1:18 AM",    title: "Velvet Pressure",       note: "Bridge rewrite. Loaded NightOwl beat pack.",                       bars: 24, state: 2, duration: "2h 03m", linesAdded: 31, sections: ["Bridge", "Verse 2"], beat: "Lowlight",     glyph: "VP", art: "linear-gradient(180deg, #051a1a 0%, #0d3838 50%, #5cbdb9 130%)" },
+  { day: "Sunday",    time: "9:04 PM",    title: "Backseat Cathedral",    note: "Booth Ready™ certified. Sent to engineer.",                       bars: 32, state: 3, duration: "3h 21m", linesAdded: 48, sections: ["Hook", "V1", "V2", "Bridge", "Outro"], beat: "Cathedral 88", glyph: "BC", art: "linear-gradient(200deg, #2d0a1f 0%, #5c1840 50%, #d4842a 110%)" },
 ];
+
+const currentBeat = {
+  title: "Smoke & Velvet",
+  producer: "NightOwl",
+  bpm: 84,
+  key: "F# Minor",
+  mood: "Late-Night · Sultry",
+  duration: "3:42",
+  position: "1:18",
+  license: "Exclusive · Cleared",
+  tag: "RW-0421",
+};
 
 export default function Studio() {
   const [playing, setPlaying] = useState(false);
