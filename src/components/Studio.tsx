@@ -760,6 +760,7 @@ type ProjectT = typeof projects[number];
 
 function HeroBeatPlayer({
   beat, playing, onToggle, fav, onFav, projects: projectList, activeProjectId, onAddToProject,
+  licenseState, licenseLabel, onRequestLicense, licenseFlash,
 }: {
   beat: typeof currentBeat;
   playing: boolean;
@@ -769,6 +770,10 @@ function HeroBeatPlayer({
   projects: ProjectT[];
   activeProjectId: string;
   onAddToProject: (p: ProjectT) => void;
+  licenseState: "licensed" | "unlicensed" | "prompting" | "purchasing";
+  licenseLabel: string;
+  onRequestLicense: () => void;
+  licenseFlash: string | null;
 }) {
   return (
     <div className="relative rounded-2xl overflow-hidden border border-gold/25 glass-panel">
