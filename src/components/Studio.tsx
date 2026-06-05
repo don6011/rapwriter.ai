@@ -527,24 +527,58 @@ function SnapshotHistory() {
                   ? "bg-gold border-gold shadow-[0_0_12px_var(--gold)]"
                   : "bg-onyx border-gold/60"
               )} />
-              <div className="rounded-xl bg-onyx-elev/60 border border-border p-4 hover:border-gold/30 transition-all">
-                <div className="flex items-baseline justify-between gap-3 flex-wrap">
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-[10px] uppercase tracking-[0.25em] text-gold">{s.day}</span>
-                    <span className="text-[11px] text-muted-foreground">{s.time}</span>
+              <div className="rounded-xl bg-onyx-elev/60 border border-border p-4 hover:border-gold/30 transition-all group-hover:-translate-y-px">
+                <div className="flex items-start gap-3">
+                  <div className="h-14 w-14 rounded-lg overflow-hidden border border-gold/20 shrink-0 relative">
+                    <div className="absolute inset-0" style={{ background: s.art }} />
+                    <div className="absolute inset-0 flex items-end justify-end p-1">
+                      <span className="font-display text-[10px] text-white/90 drop-shadow">{s.glyph}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-muted-foreground tabular-nums">{s.bars} bars</span>
-                    {s.state === 3 && (
-                      <span className="gold-seal text-onyx text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
-                        <Award className="h-2.5 w-2.5" /> Booth Ready™
-                      </span>
-                    )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                      <div className="flex items-baseline gap-3">
+                        <span className="text-[10px] uppercase tracking-[0.25em] text-gold">{s.day}</span>
+                        <span className="text-[11px] text-muted-foreground">{s.time}</span>
+                      </div>
+                      {s.state === 3 && (
+                        <span className="gold-seal text-onyx text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                          <Award className="h-2.5 w-2.5" /> Booth Ready™
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-display text-lg mt-0.5 truncate">{s.title}</div>
+                    <div className="text-sm text-muted-foreground mt-1 leading-relaxed">{s.note}</div>
+
+                    {/* progress strip */}
+                    <div className="flex items-center gap-1.5 mt-3">
+                      {states.map((_, idx) => (
+                        <div key={idx} className={cn(
+                          "h-1 flex-1 rounded-full",
+                          idx <= s.state ? "bg-gradient-to-r from-gold-deep to-gold" : "bg-border"
+                        )} />
+                      ))}
+                    </div>
+
+                    {/* stat chips */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[11px] text-muted-foreground">
+                      <span className="flex items-center gap-1.5"><Clock className="h-3 w-3 text-gold/70" /> {s.duration}</span>
+                      <span className="flex items-center gap-1.5"><Feather className="h-3 w-3 text-gold/70" /> +{s.linesAdded} lines</span>
+                      <span className="flex items-center gap-1.5 tabular-nums"><Music2 className="h-3 w-3 text-gold/70" /> {s.bars} bars</span>
+                      <span className="flex items-center gap-1.5"><Disc3 className="h-3 w-3 text-gold/70" /> {s.beat}</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {s.sections.map((sec) => (
+                        <span key={sec} className="text-[9px] uppercase tracking-[0.2em] px-1.5 py-0.5 rounded-md bg-gold/10 text-gold/90 border border-gold/15">
+                          {sec}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <div className="font-display text-lg mt-1">{s.title}</div>
-                <div className="text-sm text-muted-foreground mt-1 leading-relaxed">{s.note}</div>
               </div>
+
             </div>
           ))}
         </div>
