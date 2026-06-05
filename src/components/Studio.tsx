@@ -95,11 +95,12 @@ const currentBeat = {
   license: "Exclusive · Cleared",
   tag: "RW-0421",
   prices: [
-    { license: "Lease" as const, price: 49 },
-    { license: "Premium Lease" as const, price: 149 },
-    { license: "Exclusive" as const, price: 899 },
-  ],
+    { license: "Lease", price: 49 },
+    { license: "Premium Lease", price: 149 },
+    { license: "Exclusive", price: 899 },
+  ] as { license: License; price: number }[],
 };
+
 
 
 export default function Studio() {
