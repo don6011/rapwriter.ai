@@ -144,6 +144,50 @@ export default function Studio() {
 
   const beat = loadedBeat ?? currentBeat;
 
+  // -------- Licensing state machine --------
+  // states: 'licensed' | 'unlicensed' | 'prompting' | 'purchasing'
+  const { licensed, license, purchase, purchases } = useLicensing(beat.id);
+  const [licenseState, setLicenseState] = useState<"licensed" | "unlicensed" | "prompting" | "purchasing">(
+    "unlicensed",
+  );
+  const [licenseFlash, setLicenseFlash] = useState<string | null>(null);
+
+  // Sync state machine with reactive licensed status (event-driven from marketplace too)
+  useEffect(() => {
+    if (licensed && licenseState !== "purchasing") {
+      setLicenseState("licensed");
+    } else if (!licensed && licenseState === "licensed") {
+      setLicenseState("unlicensed");
+    } else if (!licensed && licenseState !== "prompting" && licenseState !== "purchasing") {
+      setLicenseState("unlicensed");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [licensed, beat.id]);
+
+  const requestLicense = () => {
+    if (licenseState === "licensed") return;
+    setLicenseState("prompting");
+    setPlaying(false);
+  };
+
+  const confirmLicense = (tier: { license: License; price: number }) => {
+    setLicenseState("purchasing");
+    // Brief simulated processing for tactile feedback
+    setTimeout(() => {
+      purchase(beat.id, tier.license, tier.price);
+      setLicenseState("licensed");
+      setLicenseFlash(`${tier.license} license cleared · added to Beat Locker™ + My Licenses`);
+      setTimeout(() => setLicenseFlash(null), 4000);
+    }, 650);
+  };
+
+  // Reactive locker counts — Beat Locker, Projects, My Licenses
+  const dynamicLockerItems = lockerItems.map((it) => {
+    if (it.label === "Beat Locker") return { ...it, count: it.count + purchases.length };
+    return it;
+  });
+
+
 
   return (
     <div className="min-h-screen w-full text-foreground relative">
