@@ -230,9 +230,9 @@ export default function Studio() {
 
           {/* Project / Track header */}
           <div className="glass-panel rounded-2xl p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="h-20 w-20 rounded-xl overflow-hidden border border-gold/30 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.6)] shrink-0">
+                <div className="h-16 w-16 rounded-xl overflow-hidden border border-gold/30 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.6)] shrink-0 relative">
                   <ProjectArtwork project={activeProject} />
                 </div>
                 <div>
@@ -241,59 +241,36 @@ export default function Studio() {
                     <span className="h-1 w-1 rounded-full bg-gold/60" />
                     <span>{activeProject.tracks} track{activeProject.tracks > 1 ? "s" : ""}</span>
                   </div>
-                  <h1 className="font-display text-3xl md:text-4xl mt-1">
+                  <h1 className="font-display text-2xl md:text-3xl mt-0.5">
                     <span className="text-gold-gradient">{activeProject.title}</span>
                   </h1>
-                  <div className="text-sm text-muted-foreground mt-1">
+                  <div className="text-sm text-muted-foreground">
                     Track 03 — <span className="text-foreground/90">Midnight on the Strip</span>
                   </div>
                 </div>
               </div>
-
-              {/* Beat player */}
-              <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-onyx/70 border border-border min-w-[280px]">
-                <button
-                  onClick={() => setPlaying(!playing)}
-                  className="gold-seal h-11 w-11 rounded-full flex items-center justify-center text-onyx shrink-0"
-                >
-                  {playing ? <Pause className="h-5 w-5" fill="currentColor" /> : <Play className="h-5 w-5 ml-0.5" fill="currentColor" />}
+              <div className="flex items-center gap-2">
+                <button className="px-3 py-2 rounded-lg border border-border text-xs text-muted-foreground hover:text-gold hover:border-gold/40 flex items-center gap-2">
+                  <Share2 className="h-3.5 w-3.5" /> Share
                 </button>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm truncate">Smoke & Velvet</div>
-                  <div className="text-[11px] text-muted-foreground flex items-center gap-2">
-                    <span>prod. NightOwl</span>
-                    <span className="h-1 w-1 rounded-full bg-gold/60" />
-                    <span>84 BPM</span>
-                  </div>
-                  <div className="flex items-end gap-[2px] h-5 mt-1.5">
-                    {Array.from({ length: 28 }).map((_, i) => (
-                      <span
-                        key={i}
-                        className="w-[3px] bg-gold/70 rounded-full"
-                        style={{
-                          height: `${20 + Math.sin(i * 0.7) * 50 + (playing ? Math.random() * 30 : 0)}%`,
-                          animation: playing ? `vu-pulse ${0.6 + (i % 5) * 0.15}s ease-in-out infinite` : "none",
-                          transformOrigin: "bottom",
-                          opacity: i < 14 ? 1 : 0.35,
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <button onClick={() => setFav(!fav)} className="text-muted-foreground hover:text-gold transition">
-                    <Heart className={cn("h-4 w-4", fav && "fill-gold text-gold")} />
-                  </button>
-                  <button className="text-muted-foreground hover:text-gold transition">
-                    <Repeat className="h-4 w-4" />
-                  </button>
-                  <button className="text-muted-foreground hover:text-gold transition">
-                    <Volume2 className="h-4 w-4" />
-                  </button>
-                </div>
+                <button className="px-3 py-2 rounded-lg border border-gold/30 text-gold text-xs hover:bg-gold/10 flex items-center gap-2">
+                  <Plus className="h-3.5 w-3.5" /> Add Track
+                </button>
               </div>
             </div>
           </div>
+
+          {/* HERO BEAT PLAYER */}
+          <HeroBeatPlayer
+            playing={playing}
+            onToggle={() => setPlaying(!playing)}
+            fav={fav}
+            onFav={() => setFav(!fav)}
+            projects={projects}
+            activeProjectId={activeProject.id}
+            onAddToProject={(p) => setActiveProject(p)}
+          />
+
 
           {/* Section tabs + writing pad */}
           <div className="glass-panel rounded-2xl overflow-hidden">
