@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
+import { consumePendingBeat } from "@/lib/marketplace-data";
 import {
   Disc3, Music2, Mic2, FolderOpen, Sparkles, Award, Play, Pause,
   Heart, Volume2, Repeat, Wand2, Flame, Feather, MessageSquareQuote,
   ChevronRight, Plus, Headphones, Clock, Moon, Lightbulb, EyeOff,
   Coffee, CloudRain, Wind, Camera, ArrowUpRight, Disc, CheckCircle2, X,
   SkipBack, SkipForward, Shield, Share2, Download, FileText,
-  Mail, Copy, Music
+  Mail, Copy, Music, Store, BadgeCheck
 } from "lucide-react";
 
 const lockerItems = [
@@ -102,6 +104,35 @@ export default function Studio() {
   const [fav, setFav] = useState(true);
   const [activeProject, setActiveProject] = useState(projects[0]);
   const [boothModalOpen, setBoothModalOpen] = useState(false);
+  const [loadedBeat, setLoadedBeat] = useState<typeof currentBeat | null>(null);
+  const [handoffNotice, setHandoffNotice] = useState<string | null>(null);
+
+  // Marketplace → Ghost Studio handoff
+  useEffect(() => {
+    const b = consumePendingBeat();
+    if (b) {
+      setLoadedBeat({
+        title: b.title,
+        producer: b.producer,
+        bpm: b.bpm,
+        key: b.key,
+        mood: b.mood,
+        duration: b.duration,
+        position: "0:00",
+        license: `${b.prices[0].license} · Loaded from Marketplace`,
+        tag: b.tag ?? "RW-MKT",
+      });
+      setSongState(0);
+      setActiveSection(0);
+      setPlaying(true);
+      setHandoffNotice(`New session started · writing to "${b.title}" by ${b.producer}`);
+      const t = setTimeout(() => setHandoffNotice(null), 4500);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
+  const beat = loadedBeat ?? currentBeat;
+
 
   return (
     <div className="min-h-screen w-full text-foreground relative">
@@ -152,8 +183,24 @@ export default function Studio() {
                 </button>
               );
             })}
+            <Link
+              to="/marketplace"
+              className="ml-2 px-3 py-2 rounded-lg border border-gold/30 text-gold hover:bg-gold/10 transition-all text-xs uppercase tracking-[0.2em] flex items-center gap-1.5"
+              title="Marketplace"
+            >
+              <Store className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">Marketplace</span>
+            </Link>
           </div>
         </div>
+        {handoffNotice && (
+          <div className="px-6 pb-3 -mt-1 animate-fade-in">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gold/30 bg-gold/8 text-xs">
+              <BadgeCheck className="h-3.5 w-3.5 text-gold shrink-0" />
+              <span className="text-foreground/90">{handoffNotice}</span>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main 3-column studio */}
@@ -262,6 +309,7 @@ export default function Studio() {
 
           {/* HERO BEAT PLAYER */}
           <HeroBeatPlayer
+            beat={beat}
             playing={playing}
             onToggle={() => setPlaying(!playing)}
             fav={fav}
@@ -646,8 +694,9 @@ function AmbientLayer({ mode, ambiance }: { mode: string; ambiance: string }) {
 type ProjectT = typeof projects[number];
 
 function HeroBeatPlayer({
-  playing, onToggle, fav, onFav, projects: projectList, activeProjectId, onAddToProject,
+  beat, playing, onToggle, fav, onFav, projects: projectList, activeProjectId, onAddToProject,
 }: {
+  beat: typeof currentBeat;
   playing: boolean;
   onToggle: () => void;
   fav: boolean;
@@ -675,7 +724,7 @@ function HeroBeatPlayer({
           </div>
           <div className="flex items-center gap-1.5">
             <span className="gold-seal text-onyx text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
-              <Shield className="h-2.5 w-2.5" /> {currentBeat.license}
+              <Shield className="h-2.5 w-2.5" /> {beat.license}
             </span>
           </div>
         </div>
@@ -708,17 +757,17 @@ function HeroBeatPlayer({
           {/* Meta */}
           <div className="flex-1 min-w-[240px]">
             <div className="font-display text-3xl md:text-4xl leading-tight">
-              <span className="text-gold-gradient">{currentBeat.title}</span>
+              <span className="text-gold-gradient">{beat.title}</span>
             </div>
             <div className="text-sm text-muted-foreground mt-1">
-              produced by <span className="text-foreground/90">{currentBeat.producer}</span> · {currentBeat.mood}
+              produced by <span className="text-foreground/90">{beat.producer}</span> · {beat.mood}
             </div>
 
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
-              <Stat label="BPM" value={currentBeat.bpm.toString()} />
-              <Stat label="Key" value={currentBeat.key} />
-              <Stat label="Length" value={currentBeat.duration} />
-              <Stat label="Tag" value={currentBeat.tag} mono />
+              <Stat label="BPM" value={beat.bpm.toString()} />
+              <Stat label="Key" value={beat.key} />
+              <Stat label="Length" value={beat.duration} />
+              <Stat label="Tag" value={beat.tag} mono />
             </div>
           </div>
 
@@ -764,12 +813,12 @@ function HeroBeatPlayer({
             })}
           </div>
           <div className="flex items-center justify-between mt-2 text-[11px] text-muted-foreground tabular-nums">
-            <span>{currentBeat.position}</span>
+            <span>{beat.position}</span>
             <div className="flex items-center gap-3">
               <button className="hover:text-gold"><SkipBack className="h-4 w-4" /></button>
               <button className="hover:text-gold"><SkipForward className="h-4 w-4" /></button>
             </div>
-            <span>{currentBeat.duration}</span>
+            <span>{beat.duration}</span>
           </div>
         </div>
 
