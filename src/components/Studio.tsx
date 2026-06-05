@@ -84,6 +84,7 @@ const snapshots = [
 ];
 
 const currentBeat = {
+  id: "smoke-velvet",
   title: "Smoke & Velvet",
   producer: "NightOwl",
   bpm: 84,
@@ -93,7 +94,13 @@ const currentBeat = {
   position: "1:18",
   license: "Exclusive · Cleared",
   tag: "RW-0421",
+  prices: [
+    { license: "Lease" as const, price: 49 },
+    { license: "Premium Lease" as const, price: 149 },
+    { license: "Exclusive" as const, price: 899 },
+  ],
 };
+
 
 export default function Studio() {
   const [playing, setPlaying] = useState(false);
