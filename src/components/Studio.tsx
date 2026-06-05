@@ -552,6 +552,15 @@ export default function Studio() {
           onClose={() => setBoothModalOpen(false)}
         />
       )}
+
+      {/* LICENSE DIALOG */}
+      <LicenseDialog
+        open={licenseState === "prompting" || licenseState === "purchasing"}
+        beat={beat}
+        state={licenseState}
+        onConfirm={confirmLicense}
+        onClose={() => licenseState !== "purchasing" && setLicenseState(licensed ? "licensed" : "unlicensed")}
+      />
     </div>
   );
 }
