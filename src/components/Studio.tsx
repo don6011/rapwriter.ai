@@ -267,7 +267,7 @@ export default function Studio() {
               The Locker™
             </div>
             <nav className="space-y-1">
-              {lockerItems.map((it) => {
+              {dynamicLockerItems.map((it) => {
                 const Icon = it.icon;
                 return (
                   <button
