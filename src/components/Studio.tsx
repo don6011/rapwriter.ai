@@ -643,16 +643,18 @@ function AmbientLayer({ mode, ambiance }: { mode: string; ambiance: string }) {
   );
 }
 
+type ProjectT = typeof projects[number];
+
 function HeroBeatPlayer({
-  playing, onToggle, fav, onFav, projects, activeProjectId, onAddToProject,
+  playing, onToggle, fav, onFav, projects: projectList, activeProjectId, onAddToProject,
 }: {
   playing: boolean;
   onToggle: () => void;
   fav: boolean;
   onFav: () => void;
-  projects: typeof projects;
+  projects: ProjectT[];
   activeProjectId: string;
-  onAddToProject: (p: typeof projects[number]) => void;
+  onAddToProject: (p: ProjectT) => void;
 }) {
   return (
     <div className="relative rounded-2xl overflow-hidden border border-gold/25 glass-panel">
