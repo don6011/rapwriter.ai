@@ -5,12 +5,15 @@ import {
   Play, Pause, ShoppingCart, PenLine, BadgeCheck, Sparkles,
   TrendingUp, MapPin, Heart, Headphones, Users, Star, ArrowUpRight,
   Disc3, Music2, ChevronRight, Search, Crown, Filter, Flame, Award,
+  Mic2, CheckCircle2, Activity, Quote, Youtube, Instagram, Compass, Trophy,
 } from "lucide-react";
 import {
-  beats, producers, beatPacks, regions, moods,
+  beats, producers, beatPacks, regions, moods, producerExtras,
+  recentlyWrittenTo, emotionalTagList,
   type Beat, type Producer, type BeatPack,
-  setPendingBeat, addPurchase, getPurchases, purchaseBeat, LICENSE_EVENT,
+  setPendingBeat, getPurchases, purchaseBeat,
 } from "@/lib/marketplace-data";
+
 
 // ============================================================
 // Waveform — deterministic per id
