@@ -4,7 +4,9 @@ import {
   Disc3, Music2, Mic2, FolderOpen, Sparkles, Award, Play, Pause,
   Heart, Volume2, Repeat, Wand2, Flame, Feather, MessageSquareQuote,
   ChevronRight, Plus, Headphones, Clock, Moon, Lightbulb, EyeOff,
-  Coffee, CloudRain, Wind, Camera, ArrowUpRight, Disc, CheckCircle2, X
+  Coffee, CloudRain, Wind, Camera, ArrowUpRight, Disc, CheckCircle2, X,
+  SkipBack, SkipForward, Shield, Share2, Download, FileText,
+  Mail, Copy, Music
 } from "lucide-react";
 
 const lockerItems = [
@@ -73,11 +75,23 @@ const projects = [
 ];
 
 const snapshots = [
-  { day: "Today",     time: "12 min ago", title: "Midnight on the Strip", note: "Hook locked. Verse 1 polished. Coach approved cadence shift.", bars: 16, state: 2 },
-  { day: "Yesterday", time: "11:42 PM",   title: "Midnight on the Strip", note: "Pulled hook from Hook Locker™. Tried two cadences.",                bars: 8,  state: 1 },
-  { day: "Tuesday",   time: "1:18 AM",    title: "Velvet Pressure",       note: "Bridge rewrite. Loaded NightOwl beat pack.",                       bars: 24, state: 2 },
-  { day: "Sunday",    time: "9:04 PM",    title: "Backseat Cathedral",    note: "Booth Ready™ certified. Sent to engineer.",                       bars: 32, state: 3 },
+  { day: "Today",     time: "12 min ago", title: "Midnight on the Strip", note: "Hook locked. Verse 1 polished. Coach approved cadence shift.", bars: 16, state: 2, duration: "1h 14m", linesAdded: 22, sections: ["Hook", "Verse 1"], beat: "Smoke & Velvet", glyph: "MS", art: "linear-gradient(160deg, #0a0a1a 0%, #1a1438 50%, #c9a84c 130%)" },
+  { day: "Yesterday", time: "11:42 PM",   title: "Midnight on the Strip", note: "Pulled hook from Hook Locker™. Tried two cadences.",                bars: 8,  state: 1, duration: "42m",    linesAdded: 14, sections: ["Hook"],           beat: "Smoke & Velvet", glyph: "MS", art: "linear-gradient(160deg, #0a0a1a 0%, #1a1438 50%, #c9a84c 130%)" },
+  { day: "Tuesday",   time: "1:18 AM",    title: "Velvet Pressure",       note: "Bridge rewrite. Loaded NightOwl beat pack.",                       bars: 24, state: 2, duration: "2h 03m", linesAdded: 31, sections: ["Bridge", "Verse 2"], beat: "Lowlight",     glyph: "VP", art: "linear-gradient(180deg, #051a1a 0%, #0d3838 50%, #5cbdb9 130%)" },
+  { day: "Sunday",    time: "9:04 PM",    title: "Backseat Cathedral",    note: "Booth Ready™ certified. Sent to engineer.",                       bars: 32, state: 3, duration: "3h 21m", linesAdded: 48, sections: ["Hook", "V1", "V2", "Bridge", "Outro"], beat: "Cathedral 88", glyph: "BC", art: "linear-gradient(200deg, #2d0a1f 0%, #5c1840 50%, #d4842a 110%)" },
 ];
+
+const currentBeat = {
+  title: "Smoke & Velvet",
+  producer: "NightOwl",
+  bpm: 84,
+  key: "F# Minor",
+  mood: "Late-Night · Sultry",
+  duration: "3:42",
+  position: "1:18",
+  license: "Exclusive · Cleared",
+  tag: "RW-0421",
+};
 
 export default function Studio() {
   const [playing, setPlaying] = useState(false);
@@ -216,9 +230,9 @@ export default function Studio() {
 
           {/* Project / Track header */}
           <div className="glass-panel rounded-2xl p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="h-20 w-20 rounded-xl overflow-hidden border border-gold/30 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.6)] shrink-0">
+                <div className="h-16 w-16 rounded-xl overflow-hidden border border-gold/30 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.6)] shrink-0 relative">
                   <ProjectArtwork project={activeProject} />
                 </div>
                 <div>
@@ -227,59 +241,36 @@ export default function Studio() {
                     <span className="h-1 w-1 rounded-full bg-gold/60" />
                     <span>{activeProject.tracks} track{activeProject.tracks > 1 ? "s" : ""}</span>
                   </div>
-                  <h1 className="font-display text-3xl md:text-4xl mt-1">
+                  <h1 className="font-display text-2xl md:text-3xl mt-0.5">
                     <span className="text-gold-gradient">{activeProject.title}</span>
                   </h1>
-                  <div className="text-sm text-muted-foreground mt-1">
+                  <div className="text-sm text-muted-foreground">
                     Track 03 — <span className="text-foreground/90">Midnight on the Strip</span>
                   </div>
                 </div>
               </div>
-
-              {/* Beat player */}
-              <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-onyx/70 border border-border min-w-[280px]">
-                <button
-                  onClick={() => setPlaying(!playing)}
-                  className="gold-seal h-11 w-11 rounded-full flex items-center justify-center text-onyx shrink-0"
-                >
-                  {playing ? <Pause className="h-5 w-5" fill="currentColor" /> : <Play className="h-5 w-5 ml-0.5" fill="currentColor" />}
+              <div className="flex items-center gap-2">
+                <button className="px-3 py-2 rounded-lg border border-border text-xs text-muted-foreground hover:text-gold hover:border-gold/40 flex items-center gap-2">
+                  <Share2 className="h-3.5 w-3.5" /> Share
                 </button>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm truncate">Smoke & Velvet</div>
-                  <div className="text-[11px] text-muted-foreground flex items-center gap-2">
-                    <span>prod. NightOwl</span>
-                    <span className="h-1 w-1 rounded-full bg-gold/60" />
-                    <span>84 BPM</span>
-                  </div>
-                  <div className="flex items-end gap-[2px] h-5 mt-1.5">
-                    {Array.from({ length: 28 }).map((_, i) => (
-                      <span
-                        key={i}
-                        className="w-[3px] bg-gold/70 rounded-full"
-                        style={{
-                          height: `${20 + Math.sin(i * 0.7) * 50 + (playing ? Math.random() * 30 : 0)}%`,
-                          animation: playing ? `vu-pulse ${0.6 + (i % 5) * 0.15}s ease-in-out infinite` : "none",
-                          transformOrigin: "bottom",
-                          opacity: i < 14 ? 1 : 0.35,
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <button onClick={() => setFav(!fav)} className="text-muted-foreground hover:text-gold transition">
-                    <Heart className={cn("h-4 w-4", fav && "fill-gold text-gold")} />
-                  </button>
-                  <button className="text-muted-foreground hover:text-gold transition">
-                    <Repeat className="h-4 w-4" />
-                  </button>
-                  <button className="text-muted-foreground hover:text-gold transition">
-                    <Volume2 className="h-4 w-4" />
-                  </button>
-                </div>
+                <button className="px-3 py-2 rounded-lg border border-gold/30 text-gold text-xs hover:bg-gold/10 flex items-center gap-2">
+                  <Plus className="h-3.5 w-3.5" /> Add Track
+                </button>
               </div>
             </div>
           </div>
+
+          {/* HERO BEAT PLAYER */}
+          <HeroBeatPlayer
+            playing={playing}
+            onToggle={() => setPlaying(!playing)}
+            fav={fav}
+            onFav={() => setFav(!fav)}
+            projects={projects}
+            activeProjectId={activeProject.id}
+            onAddToProject={(p) => setActiveProject(p)}
+          />
+
 
           {/* Section tabs + writing pad */}
           <div className="glass-panel rounded-2xl overflow-hidden">
@@ -536,24 +527,58 @@ function SnapshotHistory() {
                   ? "bg-gold border-gold shadow-[0_0_12px_var(--gold)]"
                   : "bg-onyx border-gold/60"
               )} />
-              <div className="rounded-xl bg-onyx-elev/60 border border-border p-4 hover:border-gold/30 transition-all">
-                <div className="flex items-baseline justify-between gap-3 flex-wrap">
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-[10px] uppercase tracking-[0.25em] text-gold">{s.day}</span>
-                    <span className="text-[11px] text-muted-foreground">{s.time}</span>
+              <div className="rounded-xl bg-onyx-elev/60 border border-border p-4 hover:border-gold/30 transition-all group-hover:-translate-y-px">
+                <div className="flex items-start gap-3">
+                  <div className="h-14 w-14 rounded-lg overflow-hidden border border-gold/20 shrink-0 relative">
+                    <div className="absolute inset-0" style={{ background: s.art }} />
+                    <div className="absolute inset-0 flex items-end justify-end p-1">
+                      <span className="font-display text-[10px] text-white/90 drop-shadow">{s.glyph}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-muted-foreground tabular-nums">{s.bars} bars</span>
-                    {s.state === 3 && (
-                      <span className="gold-seal text-onyx text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
-                        <Award className="h-2.5 w-2.5" /> Booth Ready™
-                      </span>
-                    )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                      <div className="flex items-baseline gap-3">
+                        <span className="text-[10px] uppercase tracking-[0.25em] text-gold">{s.day}</span>
+                        <span className="text-[11px] text-muted-foreground">{s.time}</span>
+                      </div>
+                      {s.state === 3 && (
+                        <span className="gold-seal text-onyx text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                          <Award className="h-2.5 w-2.5" /> Booth Ready™
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-display text-lg mt-0.5 truncate">{s.title}</div>
+                    <div className="text-sm text-muted-foreground mt-1 leading-relaxed">{s.note}</div>
+
+                    {/* progress strip */}
+                    <div className="flex items-center gap-1.5 mt-3">
+                      {states.map((_, idx) => (
+                        <div key={idx} className={cn(
+                          "h-1 flex-1 rounded-full",
+                          idx <= s.state ? "bg-gradient-to-r from-gold-deep to-gold" : "bg-border"
+                        )} />
+                      ))}
+                    </div>
+
+                    {/* stat chips */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[11px] text-muted-foreground">
+                      <span className="flex items-center gap-1.5"><Clock className="h-3 w-3 text-gold/70" /> {s.duration}</span>
+                      <span className="flex items-center gap-1.5"><Feather className="h-3 w-3 text-gold/70" /> +{s.linesAdded} lines</span>
+                      <span className="flex items-center gap-1.5 tabular-nums"><Music2 className="h-3 w-3 text-gold/70" /> {s.bars} bars</span>
+                      <span className="flex items-center gap-1.5"><Disc3 className="h-3 w-3 text-gold/70" /> {s.beat}</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {s.sections.map((sec) => (
+                        <span key={sec} className="text-[9px] uppercase tracking-[0.2em] px-1.5 py-0.5 rounded-md bg-gold/10 text-gold/90 border border-gold/15">
+                          {sec}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <div className="font-display text-lg mt-1">{s.title}</div>
-                <div className="text-sm text-muted-foreground mt-1 leading-relaxed">{s.note}</div>
               </div>
+
             </div>
           ))}
         </div>
@@ -618,74 +643,306 @@ function AmbientLayer({ mode, ambiance }: { mode: string; ambiance: string }) {
   );
 }
 
-function BoothReadyMilestone({ project, onClose }: { project: typeof projects[number]; onClose: () => void }) {
+type ProjectT = typeof projects[number];
+
+function HeroBeatPlayer({
+  playing, onToggle, fav, onFav, projects: projectList, activeProjectId, onAddToProject,
+}: {
+  playing: boolean;
+  onToggle: () => void;
+  fav: boolean;
+  onFav: () => void;
+  projects: ProjectT[];
+  activeProjectId: string;
+  onAddToProject: (p: ProjectT) => void;
+}) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
-      <div className="absolute inset-0 bg-onyx/85 backdrop-blur-xl" onClick={onClose} />
-      <div className="relative max-w-xl w-full glass-panel rounded-3xl p-10 text-center overflow-hidden animate-scale-in border border-gold/40">
-        <button onClick={onClose} className="absolute top-4 right-4 text-muted-foreground hover:text-gold">
-          <X className="h-5 w-5" />
-        </button>
+    <div className="relative rounded-2xl overflow-hidden border border-gold/25 glass-panel">
+      {/* moody backdrop */}
+      <div className="absolute inset-0 pointer-events-none opacity-60"
+        style={{
+          background:
+            "radial-gradient(ellipse at 10% 0%, rgba(201,168,76,0.18), transparent 55%), radial-gradient(ellipse at 90% 100%, rgba(125,90,200,0.12), transparent 55%)",
+        }}
+      />
+      <div className="relative p-6 md:p-7">
+        <div className="flex items-center justify-between gap-4 mb-5">
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-gold animate-pulse" />
+            <span className="text-[10px] uppercase tracking-[0.3em] text-gold/90">
+              {playing ? "Now Playing" : "On Deck"} · The Booth
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="gold-seal text-onyx text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+              <Shield className="h-2.5 w-2.5" /> {currentBeat.license}
+            </span>
+          </div>
+        </div>
 
-        {/* Aura */}
-        <div className="absolute inset-0 opacity-30 pointer-events-none"
-          style={{ background: "radial-gradient(circle at center, var(--gold), transparent 60%)" }} />
-        {/* Light rays */}
-        <div className="absolute inset-0 opacity-20 pointer-events-none"
-          style={{
-            background:
-              "conic-gradient(from 90deg at 50% 40%, transparent, rgba(201,168,76,0.6), transparent, rgba(201,168,76,0.4), transparent)",
-            animation: "spin-slow 14s linear infinite",
-          }}
-        />
-
-        <div className="relative">
-          <div className="text-[10px] uppercase tracking-[0.4em] text-gold mb-4">
-            A Moment to Mark
-          </div>
-          <div className="gold-seal h-28 w-28 rounded-full mx-auto flex items-center justify-center mb-5 shadow-[0_0_60px_-8px_var(--gold)]">
-            <Award className="h-14 w-14 text-onyx" strokeWidth={2.2} />
-          </div>
-          <h3 className="font-display text-5xl md:text-6xl text-gold-gradient leading-tight">
-            Booth Ready™
-          </h3>
-          <div className="hairline my-5 max-w-[200px] mx-auto" />
-          <div className="text-base text-foreground/90 mt-2">
-            <span className="font-display text-2xl">Midnight on the Strip</span>
-          </div>
-          <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground mt-1">
-            from {project.title} · {project.type}
-          </div>
-
-          <div className="grid grid-cols-3 gap-3 mt-7 text-left">
-            {[
-              { label: "Cadence", v: "Locked" },
-              { label: "Hook",    v: "Sealed" },
-              { label: "Bars",    v: "32 / 32" },
-            ].map((s) => (
-              <div key={s.label} className="rounded-xl bg-onyx-elev/70 border border-gold/15 p-3">
-                <div className="text-[9px] uppercase tracking-[0.25em] text-muted-foreground">{s.label}</div>
-                <div className="text-sm text-gold flex items-center gap-1 mt-1">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> {s.v}
-                </div>
+        <div className="flex flex-wrap items-center gap-5">
+          {/* Rotating disc / cover */}
+          <div className="relative shrink-0">
+            <div className={cn(
+              "h-24 w-24 md:h-28 md:w-28 rounded-full overflow-hidden border border-gold/40 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)] relative",
+              playing && "[animation:spin-slow_8s_linear_infinite]"
+            )}
+              style={{
+                background: "radial-gradient(circle at 30% 30%, #2a1a08, #0a0a0a 70%)",
+              }}
+            >
+              <div className="absolute inset-3 rounded-full border border-gold/20" />
+              <div className="absolute inset-6 rounded-full border border-gold/15" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="gold-seal h-6 w-6 rounded-full" />
               </div>
+            </div>
+            <button
+              onClick={onToggle}
+              className="absolute -bottom-1 -right-1 gold-seal h-10 w-10 rounded-full flex items-center justify-center text-onyx shadow-[0_10px_30px_-8px_var(--gold)]"
+            >
+              {playing ? <Pause className="h-5 w-5" fill="currentColor" /> : <Play className="h-5 w-5 ml-0.5" fill="currentColor" />}
+            </button>
+          </div>
+
+          {/* Meta */}
+          <div className="flex-1 min-w-[240px]">
+            <div className="font-display text-3xl md:text-4xl leading-tight">
+              <span className="text-gold-gradient">{currentBeat.title}</span>
+            </div>
+            <div className="text-sm text-muted-foreground mt-1">
+              produced by <span className="text-foreground/90">{currentBeat.producer}</span> · {currentBeat.mood}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
+              <Stat label="BPM" value={currentBeat.bpm.toString()} />
+              <Stat label="Key" value={currentBeat.key} />
+              <Stat label="Length" value={currentBeat.duration} />
+              <Stat label="Tag" value={currentBeat.tag} mono />
+            </div>
+          </div>
+
+          {/* Right actions */}
+          <div className="flex flex-col gap-2 shrink-0">
+            <button onClick={onFav} className={cn(
+              "p-2.5 rounded-xl border transition-all",
+              fav ? "border-gold/50 bg-gold/10 text-gold" : "border-border text-muted-foreground hover:text-gold hover:border-gold/30"
+            )} title="Favorite">
+              <Heart className={cn("h-4 w-4", fav && "fill-gold")} />
+            </button>
+            <button className="p-2.5 rounded-xl border border-border text-muted-foreground hover:text-gold hover:border-gold/30" title="Loop">
+              <Repeat className="h-4 w-4" />
+            </button>
+            <button className="p-2.5 rounded-xl border border-border text-muted-foreground hover:text-gold hover:border-gold/30" title="Volume">
+              <Volume2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Waveform */}
+        <div className="mt-6 px-1">
+          <div className="flex items-end gap-[3px] h-16">
+            {Array.from({ length: 96 }).map((_, i) => {
+              const base = 25 + Math.abs(Math.sin(i * 0.32) * 55) + Math.abs(Math.cos(i * 0.11) * 18);
+              const progressIdx = 32; // ~ 1:18 of 3:42
+              const played = i <= progressIdx;
+              return (
+                <span
+                  key={i}
+                  className={cn(
+                    "flex-1 rounded-full transition-colors",
+                    played ? "bg-gradient-to-t from-gold-deep to-gold" : "bg-gold/15"
+                  )}
+                  style={{
+                    height: `${Math.min(100, base)}%`,
+                    animation: playing && played ? `vu-pulse ${0.7 + (i % 7) * 0.12}s ease-in-out infinite` : "none",
+                    transformOrigin: "bottom",
+                    animationDelay: `${(i % 9) * 0.05}s`,
+                  }}
+                />
+              );
+            })}
+          </div>
+          <div className="flex items-center justify-between mt-2 text-[11px] text-muted-foreground tabular-nums">
+            <span>{currentBeat.position}</span>
+            <div className="flex items-center gap-3">
+              <button className="hover:text-gold"><SkipBack className="h-4 w-4" /></button>
+              <button className="hover:text-gold"><SkipForward className="h-4 w-4" /></button>
+            </div>
+            <span>{currentBeat.duration}</span>
+          </div>
+        </div>
+
+        {/* Quick add to project */}
+        <div className="hairline my-5" />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            Quick Add To Project
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {projectList.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => onAddToProject(p)}
+                className={cn(
+                  "group flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border transition-all",
+                  activeProjectId === p.id
+                    ? "border-gold/60 bg-gold/10"
+                    : "border-border hover:border-gold/40 hover:bg-onyx-elev"
+                )}
+                title={`Add to ${p.title}`}
+              >
+                <span className="h-6 w-6 rounded-full overflow-hidden relative shrink-0">
+                  <span className="absolute inset-0" style={{ background: p.art }} />
+                </span>
+                <span className="text-xs text-foreground/90 max-w-[110px] truncate">{p.title}</span>
+                <Plus className="h-3 w-3 text-gold" />
+              </button>
             ))}
-          </div>
-
-          <div className="flex flex-wrap gap-2 justify-center mt-7">
-            <button className="gold-seal text-onyx px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2">
-              Send to Engineer <ArrowUpRight className="h-4 w-4" />
-            </button>
-            <button className="px-5 py-2.5 rounded-xl text-sm border border-gold/40 text-gold hover:bg-gold/10">
-              Save Snapshot
-            </button>
-          </div>
-
-          <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground mt-6">
-            Certified in RapWriter.ai · The Prep Studio™
           </div>
         </div>
       </div>
     </div>
   );
 }
+
+function Stat({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-[9px] uppercase tracking-[0.25em] text-muted-foreground">{label}</span>
+      <span className={cn("text-sm text-foreground/95 mt-0.5", mono && "font-mono text-xs text-gold")}>{value}</span>
+    </div>
+  );
+}
+
+function BoothReadyMilestone({ project, onClose }: { project: typeof projects[number]; onClose: () => void }) {
+  const stats = [
+    { label: "Bars",     v: "32 / 32" },
+    { label: "Hook",     v: "Sealed" },
+    { label: "Cadence",  v: "Locked" },
+    { label: "Sessions", v: "7" },
+    { label: "Hours",    v: "9h 42m" },
+    { label: "Coach Score", v: "94 / 100" },
+  ];
+
+  const exports = [
+    { icon: Mail,     label: "Send to Engineer",   primary: true },
+    { icon: FileText, label: "Export Lyric Sheet PDF" },
+    { icon: Music,    label: "Export Reference MP3" },
+    { icon: Copy,     label: "Copy Lyrics" },
+    { icon: Share2,   label: "Share Snapshot" },
+    { icon: Download, label: "Download Stems Folder" },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
+      <div className="absolute inset-0 bg-onyx/90 backdrop-blur-xl" onClick={onClose} />
+
+      <div className="relative max-w-3xl w-full my-8 rounded-3xl overflow-hidden border border-gold/40 animate-scale-in"
+        style={{ background: "linear-gradient(180deg, #14100a 0%, #0a0806 100%)" }}
+      >
+        <button onClick={onClose} className="absolute top-4 right-4 z-20 text-muted-foreground hover:text-gold p-2 rounded-full hover:bg-onyx-elev">
+          <X className="h-5 w-5" />
+        </button>
+
+        {/* CINEMATIC HEADER */}
+        <div className="relative px-10 pt-14 pb-10 text-center overflow-hidden">
+          {/* Aura */}
+          <div className="absolute inset-0 opacity-40 pointer-events-none"
+            style={{ background: "radial-gradient(circle at center top, var(--gold), transparent 55%)" }} />
+          {/* Light rays */}
+          <div className="absolute inset-0 opacity-25 pointer-events-none"
+            style={{
+              background:
+                "conic-gradient(from 90deg at 50% 30%, transparent, rgba(201,168,76,0.7), transparent, rgba(201,168,76,0.5), transparent, rgba(201,168,76,0.6), transparent)",
+              animation: "spin-slow 18s linear infinite",
+            }}
+          />
+          {/* Grain */}
+          <div className="absolute inset-0 opacity-[0.06] mix-blend-overlay pointer-events-none"
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
+            }}
+          />
+
+          <div className="relative">
+            <div className="text-[10px] uppercase tracking-[0.5em] text-gold mb-5">
+              A Moment to Mark
+            </div>
+
+            {/* Artwork + seal */}
+            <div className="relative mx-auto mb-6 w-fit">
+              <div className="h-36 w-36 rounded-2xl overflow-hidden border border-gold/40 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] relative">
+                <ProjectArtwork project={project} />
+              </div>
+              <div className="gold-seal h-16 w-16 rounded-full absolute -bottom-4 -right-4 flex items-center justify-center shadow-[0_0_40px_-6px_var(--gold)] border-2 border-onyx">
+                <Award className="h-8 w-8 text-onyx" strokeWidth={2.4} />
+              </div>
+            </div>
+
+            <h3 className="font-display text-5xl md:text-6xl text-gold-gradient leading-[1.05]">
+              Booth Ready™
+            </h3>
+            <div className="hairline my-5 max-w-[220px] mx-auto" />
+            <div className="font-display text-2xl md:text-3xl text-foreground/95">
+              Midnight on the Strip
+            </div>
+            <div className="text-[11px] uppercase tracking-[0.35em] text-muted-foreground mt-2">
+              from {project.title} · {project.type}
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.3em] text-gold/70 mt-3">
+              Certificate № RW-{Math.floor(Math.random() * 9000) + 1000} · {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            </div>
+          </div>
+        </div>
+
+        {/* STATS */}
+        <div className="relative px-8 md:px-10 pb-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {stats.map((s) => (
+              <div key={s.label} className="rounded-xl bg-onyx-elev/80 border border-gold/15 p-4">
+                <div className="text-[9px] uppercase tracking-[0.3em] text-muted-foreground">{s.label}</div>
+                <div className="text-base text-gold flex items-center gap-1.5 mt-1 font-display">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> {s.v}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* EXPORTS */}
+        <div className="relative px-8 md:px-10 py-6">
+          <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3">
+            Export & Send
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {exports.map((e) => {
+              const Icon = e.icon;
+              return (
+                <button
+                  key={e.label}
+                  className={cn(
+                    "flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm transition-all border text-left",
+                    e.primary
+                      ? "gold-seal text-onyx font-semibold border-transparent hover:scale-[1.02]"
+                      : "bg-onyx-elev/60 border-border text-foreground/90 hover:border-gold/40 hover:bg-gold/5"
+                  )}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{e.label}</span>
+                  {e.primary && <ArrowUpRight className="h-4 w-4 ml-auto shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="relative text-center text-[10px] uppercase tracking-[0.35em] text-muted-foreground pb-7">
+          Certified in RapWriter.ai · The Prep Studio™
+        </div>
+      </div>
+    </div>
+  );
+}
+
