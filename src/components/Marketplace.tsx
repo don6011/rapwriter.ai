@@ -573,6 +573,15 @@ export default function Marketplace() {
     navigate({ to: "/" });
   };
 
+  // Top 4 by boothReadyScore — the Booth Ready™ Beats shelf
+  const boothReadyBeats = [...beats].sort((a, b) => b.boothReadyScore - a.boothReadyScore).slice(0, 4);
+  const totalWritingNow = beats.reduce((s, b) => s + b.writingNow, 0);
+
+  // For Start With A Beat™ — surface a recommended starter
+  const starter = boothReadyBeats[0];
+
+  const beatById = (id: string) => beats.find(b => b.id === id);
+
   return (
     <div className="min-h-screen w-full text-foreground relative">
       <MarketHeader purchases={purchases} />
@@ -585,6 +594,61 @@ export default function Marketplace() {
           onBuyPack={() => handleBuyPack(featuredPack)}
           onPreview={() => togglePlay(trending[0].id)}
         />
+
+        {/* START WITH A BEAT™ — discovery CTA */}
+        <StartWithABeatCTA
+          beat={starter}
+          totalWritingNow={totalWritingNow}
+          onStart={() => handleWriteToBeat(starter)}
+          onPreview={() => togglePlay(starter.id)}
+        />
+
+        {/* BOOTH READY BEATS™ — above Trending */}
+        <section>
+          <SectionHeader
+            icon={Trophy}
+            eyebrow="Highest Finish Rates · This Week"
+            title="Booth Ready Beats™"
+            action="See All"
+          />
+          <p className="text-xs md:text-sm text-muted-foreground -mt-3 mb-5 max-w-2xl">
+            Beats with the highest <span className="text-gold">Booth Ready Score™</span>, Song Completion Rate™, and Tracks Finished™. The beats other rappers actually finish songs on.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {boothReadyBeats.map(b => (
+              <TrendingBeatCard
+                key={b.id}
+                beat={b}
+                playing={playingId === b.id}
+                onPreview={() => togglePlay(b.id)}
+                onBuy={() => handleBuyBeat(b)}
+                onWrite={() => handleWriteToBeat(b)}
+                variant="booth"
+              />
+            ))}
+          </div>
+        </section>
+
+        {/* RECENTLY WRITTEN TO — live writing activity */}
+        <RecentlyWrittenTo
+          beatById={beatById}
+          onWrite={(id) => { const b = beatById(id); if (b) handleWriteToBeat(b); }}
+        />
+
+        {/* EMOTIONAL TAG CHIPS */}
+        <section>
+          <SectionHeader icon={Heart} eyebrow="Write From The Feeling" title="What Are You Writing About?" />
+          <div className="flex flex-wrap gap-2">
+            {emotionalTagList.map(tag => (
+              <button
+                key={tag}
+                className="px-4 py-2.5 rounded-full border border-gold/25 bg-gold/5 hover:bg-gold/15 hover:border-gold/50 text-sm text-gold/90 transition-all"
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        </section>
 
         {/* TRENDING */}
         <section>
@@ -619,13 +683,6 @@ export default function Marketplace() {
               <CollectionTile key={r.id} art={r.art} glyph={r.glyph} name={r.name} sub={`${r.count} beats`} />
             ))}
           </div>
-          <div className="mt-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-            {regions.map(r => (
-              <div key={`${r.id}-sig`} className="text-[10px] text-muted-foreground px-1 leading-snug">
-                {r.signature}
-              </div>
-            ))}
-          </div>
         </section>
 
         {/* MOODS */}
@@ -638,11 +695,19 @@ export default function Marketplace() {
           </div>
         </section>
 
-        {/* VERIFIED PRODUCERS */}
+        {/* PRODUCER STOREFRONTS™ — expanded */}
         <section>
-          <SectionHeader icon={BadgeCheck} eyebrow="The House Roster" title="Verified Producers™" action="View Roster" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {producers.map(p => <ProducerStorefrontCard key={p.id} producer={p} />)}
+          <SectionHeader icon={BadgeCheck} eyebrow="The House Roster" title="Producer Storefronts™" action="View Roster" />
+          <div className="space-y-6">
+            {producers.map(p => (
+              <ProducerStorefront
+                key={p.id}
+                producer={p}
+                onPreview={togglePlay}
+                onWrite={handleWriteToBeat}
+                playingId={playingId}
+              />
+            ))}
           </div>
         </section>
 
@@ -673,38 +738,311 @@ export default function Marketplace() {
   );
 }
 
-function ProducerStorefrontCard({ producer }: { producer: Producer }) {
-  const producerBeats = beats.filter(b => b.producerId === producer.id);
+// ============================================================
+// Start With A Beat™ — primary discovery CTA
+// ============================================================
+function StartWithABeatCTA({
+  beat, totalWritingNow, onStart, onPreview,
+}: { beat: Beat; totalWritingNow: number; onStart: () => void; onPreview: () => void }) {
   return (
-    <article className="glass-panel rounded-2xl overflow-hidden group">
-      <div className="relative h-24" style={{ background: producer.banner }}>
-        <div className="absolute inset-0 bg-gradient-to-t from-onyx-elev to-transparent" />
-        <div className="absolute inset-0 mix-blend-overlay opacity-20"
-             style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(255,255,255,0.1) 0 1px, transparent 1px 8px)" }} />
+    <section className="relative rounded-3xl overflow-hidden border border-gold/30 shadow-[0_30px_80px_-40px_rgba(201,168,76,0.5)]">
+      <div className="absolute inset-0" style={{ background: beat.art }} />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_30%,rgba(201,168,76,0.25),transparent_60%)]" />
+      <div className="absolute inset-0 bg-gradient-to-r from-onyx via-onyx/85 to-onyx/40" />
+      <div className="absolute inset-0 mix-blend-overlay opacity-20"
+           style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 1px, transparent 1px 8px)" }} />
+
+      <div className="relative px-6 md:px-10 py-8 md:py-12 grid md:grid-cols-[1fr_auto] gap-8 items-center">
+        <div className="max-w-2xl">
+          <div className="flex items-center gap-2 mb-4">
+            <Compass className="h-3.5 w-3.5 text-gold" />
+            <span className="text-[10px] uppercase tracking-[0.4em] text-gold/90">Discovery Mode</span>
+          </div>
+          <h2 className="font-display text-4xl md:text-6xl leading-[0.95] text-gold-gradient">
+            Start With A Beat™
+          </h2>
+          <p className="text-foreground/85 text-sm md:text-base mt-4 leading-relaxed max-w-xl">
+            Don't pick a license. Pick a feeling. RapWriter loads a beat into Ghost Studio™ and starts a fresh writing session — no purchase needed to write. License when you're ready to take it to the booth.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3 mt-6">
+            <button
+              onClick={onStart}
+              className="px-6 py-3.5 rounded-xl gold-seal text-onyx font-semibold flex items-center gap-2 shadow-[0_15px_40px_-12px_rgba(201,168,76,0.8)] hover:scale-[1.02] transition-transform"
+            >
+              <PenLine className="h-4 w-4" /> Start With A Beat™
+            </button>
+            <button
+              onClick={onPreview}
+              className="px-4 py-3 rounded-xl border border-gold/40 text-gold hover:bg-gold/10 text-sm flex items-center gap-2"
+            >
+              <Play className="h-3.5 w-3.5" /> Preview "{beat.title}"
+            </button>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-gold opacity-75 animate-ping" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-gold" />
+              </span>
+              <span className="tabular-nums text-foreground/90 font-medium">{totalWritingNow}</span>
+              rappers writing right now
+            </div>
+          </div>
+        </div>
+
+        {/* Starter beat preview */}
+        <div className="glass-panel rounded-2xl p-4 w-full md:w-[300px] shrink-0">
+          <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3">
+            Recommended Start
+          </div>
+          <div className="aspect-square rounded-xl overflow-hidden border border-gold/30 mb-3">
+            <ArtTile art={beat.art} glyph={beat.glyph} className="w-full h-full" />
+          </div>
+          <div className="font-display text-lg leading-tight">{beat.title}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">{beat.producer} · {beat.bpm} BPM · {beat.key}</div>
+          <div className="grid grid-cols-3 gap-1.5 mt-3">
+            <BoothMetric label="Booth Ready" value={`${beat.boothReadyScore}`} suffix="/100" highlight />
+            <BoothMetric label="Complete" value={`${beat.completionRate}%`} />
+            <BoothMetric label="Finished" value={fmt(beat.tracksFinished)} />
+          </div>
+        </div>
       </div>
-      <div className="px-4 pb-4 -mt-10 relative">
-        <div
-          className="h-16 w-16 rounded-2xl border-2 border-gold/40 flex items-center justify-center shadow-xl"
-          style={{ background: producer.avatar }}
-        >
-          <span className="font-display text-xl text-gold-gradient">{producer.glyph}</span>
+    </section>
+  );
+}
+
+// ============================================================
+// Recently Written To — live activity ticker
+// ============================================================
+function RecentlyWrittenTo({
+  beatById, onWrite,
+}: { beatById: (id: string) => Beat | undefined; onWrite: (id: string) => void }) {
+  return (
+    <section>
+      <SectionHeader
+        icon={Activity}
+        eyebrow="Live · Across The Studio"
+        title="Recently Written To"
+        action="See All Activity"
+      />
+      <div className="glass-panel rounded-2xl divide-y divide-border/60 overflow-hidden">
+        {recentlyWrittenTo.map(act => {
+          const beat = beatById(act.beatId);
+          if (!beat) return null;
+          const isBooth = act.action === "hit Booth Ready™";
+          return (
+            <div key={act.id} className="flex items-center gap-3 md:gap-4 px-4 md:px-5 py-3 hover:bg-onyx-elev/40 transition-colors">
+              {/* Artist */}
+              <div
+                className="h-10 w-10 rounded-full border border-gold/30 shrink-0 flex items-center justify-center"
+                style={{ background: act.artistColor }}
+              >
+                <span className="font-display text-sm text-gold-gradient">{act.artistGlyph}</span>
+              </div>
+
+              {/* Action */}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm truncate">
+                  <span className="text-foreground/90 font-medium">{act.artistHandle}</span>
+                  <span className="text-muted-foreground"> {isBooth ? "" : "just "}</span>
+                  {isBooth ? (
+                    <span className="inline-flex items-center gap-1 text-gold font-semibold">
+                      <Trophy className="h-3 w-3" /> hit Booth Ready™
+                    </span>
+                  ) : (
+                    <span className="text-foreground/80">{act.action}</span>
+                  )}
+                  <span className="text-muted-foreground"> on </span>
+                  <span className="text-gold">{beat.title}</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5 uppercase tracking-wider">
+                  {act.minutesAgo}m ago · {beat.producer} · {beat.bpm} BPM · {beat.key}
+                </div>
+              </div>
+
+              {/* Mini art */}
+              <div className="h-10 w-10 rounded-md overflow-hidden hidden sm:block shrink-0">
+                <ArtTile art={beat.art} glyph={beat.glyph} className="w-full h-full" />
+              </div>
+
+              {/* Write CTA */}
+              <button
+                onClick={() => onWrite(act.beatId)}
+                className="h-9 px-3 rounded-lg gold-seal text-onyx text-xs font-semibold flex items-center gap-1.5 shrink-0"
+              >
+                <PenLine className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Write To This Beat™</span>
+                <span className="sm:hidden">Write</span>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
+// Producer Storefront™ — full panel
+// ============================================================
+function ProducerStorefront({
+  producer, onPreview, onWrite, playingId,
+}: {
+  producer: Producer;
+  onPreview: (id: string) => void;
+  onWrite: (b: Beat) => void;
+  playingId: string | null;
+}) {
+  const extras = producerExtras[producer.id];
+  const producerBeats = beats.filter(b => b.producerId === producer.id);
+  const bestSellers = extras
+    ? extras.bestSellerIds.map(id => beats.find(b => b.id === id)).filter((b): b is Beat => !!b)
+    : producerBeats.slice(0, 3);
+  const finishedTotal = producerBeats.reduce((s, b) => s + b.tracksFinished, 0);
+
+  return (
+    <article className="glass-panel rounded-3xl overflow-hidden border border-border">
+      {/* Hero banner */}
+      <div className="relative h-40 md:h-48" style={{ background: producer.banner }}>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(201,168,76,0.18),transparent_60%)]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-onyx-elev via-onyx-elev/60 to-transparent" />
+        <div className="absolute inset-0 mix-blend-overlay opacity-20"
+             style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0 1px, transparent 1px 8px)" }} />
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-[0.3em] text-gold/90 flex items-center gap-1">
+            <Mic2 className="h-3 w-3" /> Producer Storefront™
+          </span>
         </div>
-        <div className="mt-3 flex items-center gap-2 flex-wrap">
-          <div className="font-display text-lg leading-none">{producer.name}</div>
-          {producer.verified && <VerifiedBadge />}
+      </div>
+
+      <div className="px-5 md:px-7 pb-6 -mt-14 relative grid lg:grid-cols-[300px_1fr] gap-6">
+        {/* LEFT — Identity & social proof */}
+        <div>
+          <div
+            className="h-24 w-24 rounded-2xl border-2 border-gold/40 flex items-center justify-center shadow-xl"
+            style={{ background: producer.avatar }}
+          >
+            <span className="font-display text-3xl text-gold-gradient">{producer.glyph}</span>
+          </div>
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <div className="font-display text-2xl leading-none">{producer.name}</div>
+            {producer.verified && <VerifiedBadge />}
+          </div>
+          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+            <MapPin className="h-3 w-3" /> {producer.city} · {producer.handle}
+          </div>
+
+          {extras && (
+            <div className="text-sm text-foreground/80 italic mt-3 leading-snug">
+              "{extras.tagline}"
+            </div>
+          )}
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-3 mt-5">
+            <Stat label="Beats Sold" value={fmt(producer.sales)} />
+            <Stat label="Tracks Finished" value={fmt(finishedTotal)} />
+            <Stat label="Rating" value={`${producer.rating}★`} />
+          </div>
+
+          {/* Social proof */}
+          {extras && (
+            <div className="mt-5 space-y-2 text-xs">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Instagram className="h-3.5 w-3.5 text-gold" />
+                <span>{extras.social.instagram}</span>
+                <span className="h-1 w-1 rounded-full bg-gold/40" />
+                <Youtube className="h-3.5 w-3.5 text-gold" />
+                <span>{fmt(extras.social.youtubeSubs)} subs</span>
+              </div>
+              <div className="rounded-lg border border-gold/20 bg-gold/5 p-3">
+                <Quote className="h-3.5 w-3.5 text-gold mb-1.5" />
+                <div className="text-sm text-foreground/85 italic leading-snug">
+                  "{extras.social.pressQuote}"
+                </div>
+                <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground mt-2">
+                  — {extras.social.pressSource}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CTAs */}
+          <div className="flex flex-wrap items-center gap-2 mt-5">
+            <button className="px-4 py-2 rounded-lg gold-seal text-onyx text-xs font-semibold flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5" /> Follow
+            </button>
+            <button className="px-4 py-2 rounded-lg border border-gold/30 text-gold hover:bg-gold/10 text-xs flex items-center gap-1.5">
+              Visit Storefront <ArrowUpRight className="h-3 w-3" />
+            </button>
+          </div>
         </div>
-        <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
-          <MapPin className="h-3 w-3" /> {producer.city}
+
+        {/* RIGHT — Story, collections, best sellers */}
+        <div className="space-y-5 lg:pt-14">
+          {extras && (
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.3em] text-gold/80 mb-2">Producer Story</div>
+              <p className="text-sm md:text-[15px] text-foreground/85 leading-relaxed">
+                {extras.story}
+              </p>
+            </div>
+          )}
+
+          {extras && (
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.3em] text-gold/80 mb-2">Collections</div>
+              <div className="flex flex-wrap gap-2">
+                {extras.collections.map(c => (
+                  <button
+                    key={c.id}
+                    className="text-left rounded-xl border border-border bg-onyx-elev/40 hover:border-gold/40 px-3 py-2 transition-colors"
+                  >
+                    <div className="font-display text-sm leading-none">{c.name}</div>
+                    <div className="text-[10px] text-muted-foreground mt-1">{c.vibe} · {c.count} beats</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.3em] text-gold/80 mb-2 flex items-center gap-1.5">
+              <CheckCircle2 className="h-3 w-3" /> Best Sellers
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {bestSellers.map(b => (
+                <div key={b.id} className="rounded-xl border border-border bg-onyx-elev/40 p-3 flex flex-col gap-2 hover:border-gold/30 transition-colors">
+                  <div className="aspect-square rounded-lg overflow-hidden relative">
+                    <ArtTile art={b.art} glyph={b.glyph} className="absolute inset-0" />
+                    <button
+                      onClick={() => onPreview(b.id)}
+                      className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 hover:opacity-100 transition-opacity"
+                    >
+                      <span className="h-10 w-10 rounded-full gold-seal text-onyx flex items-center justify-center">
+                        {playingId === b.id ? <Pause className="h-4 w-4" fill="currentColor" /> : <Play className="h-4 w-4 ml-0.5" fill="currentColor" />}
+                      </span>
+                    </button>
+                  </div>
+                  <div className="font-display text-sm leading-tight truncate">{b.title}</div>
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <Trophy className="h-3 w-3 text-gold" />
+                    <span className="text-gold/90 font-medium">{b.boothReadyScore}/100</span>
+                    <span>·</span>
+                    <span>{fmt(b.tracksFinished)} finished</span>
+                  </div>
+                  <button
+                    onClick={() => onWrite(b)}
+                    className="mt-1 w-full py-2 rounded-lg gold-seal text-onyx text-[11px] font-semibold flex items-center justify-center gap-1.5"
+                  >
+                    <PenLine className="h-3 w-3" /> Write To This Beat™
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-3 mt-3 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-          <span className="flex items-center gap-1"><Music2 className="h-3 w-3 text-gold" /> {producerBeats.length} beats</span>
-          <span className="flex items-center gap-1"><Star className="h-3 w-3 text-gold" /> {producer.rating}</span>
-          <span className="flex items-center gap-1"><Users className="h-3 w-3 text-gold" /> {fmt(producer.followers)}</span>
-        </div>
-        <button className="mt-4 w-full py-2 rounded-lg border border-gold/30 text-gold text-xs hover:bg-gold/10 flex items-center justify-center gap-1.5">
-          Visit Storefront <ArrowUpRight className="h-3 w-3" />
-        </button>
       </div>
     </article>
   );
 }
+
