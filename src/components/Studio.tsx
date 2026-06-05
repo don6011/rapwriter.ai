@@ -1071,3 +1071,134 @@ function BoothReadyMilestone({ project, onClose }: { project: typeof projects[nu
   );
 }
 
+
+// ============================================================
+// License Badge — state machine surface
+// ============================================================
+function LicenseBadge({
+  state, label, onRequest,
+}: {
+  state: "licensed" | "unlicensed" | "prompting" | "purchasing";
+  label: string;
+  onRequest: () => void;
+}) {
+  if (state === "licensed") {
+    return (
+      <span className="gold-seal text-onyx text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+        <CheckCircle2 className="h-2.5 w-2.5" /> {label}
+      </span>
+    );
+  }
+  if (state === "purchasing") {
+    return (
+      <span className="border border-gold/40 bg-gold/10 text-gold text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-full bg-gold animate-pulse" />
+        Clearing License…
+      </span>
+    );
+  }
+  if (state === "prompting") {
+    return (
+      <span className="border border-gold/40 bg-gold/10 text-gold text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+        <Shield className="h-2.5 w-2.5" /> Awaiting License
+      </span>
+    );
+  }
+  // unlicensed
+  return (
+    <button
+      onClick={onRequest}
+      className="border border-destructive/50 bg-destructive/15 text-destructive-foreground text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 hover:bg-destructive/25 transition-colors"
+      title="License Required"
+    >
+      <Shield className="h-2.5 w-2.5" /> License Required · Tap to Clear
+    </button>
+  );
+}
+
+// ============================================================
+// License Dialog — choose a tier
+// ============================================================
+function LicenseDialog({
+  open, beat, state, onConfirm, onClose,
+}: {
+  open: boolean;
+  beat: typeof currentBeat;
+  state: "licensed" | "unlicensed" | "prompting" | "purchasing";
+  onConfirm: (tier: { license: License; price: number }) => void;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 animate-fade-in">
+      <div className="absolute inset-0 bg-onyx/85 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative glass-panel rounded-2xl w-full max-w-lg p-6 animate-scale-in border border-gold/30">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 h-8 w-8 rounded-full border border-border text-muted-foreground hover:text-gold flex items-center justify-center"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+
+        <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-gold/90 mb-3">
+          <Shield className="h-3 w-3" /> Clear This Beat
+        </div>
+
+        <h2 className="font-display text-2xl">
+          <span className="text-gold-gradient">{beat.title}</span>
+        </h2>
+        <div className="text-sm text-muted-foreground mt-1">
+          by {beat.producer} · {beat.bpm} BPM · {beat.key}
+        </div>
+
+        <div className="mt-5 text-xs text-foreground/80 leading-relaxed">
+          Writing is free in The Prep Studio™. To export, send to engineer, or mark
+          <span className="text-gold"> Booth Ready™</span>, this beat must be licensed.
+        </div>
+
+        <div className="mt-5 space-y-2">
+          {beat.prices.map((tier) => (
+            <button
+              key={tier.license}
+              disabled={state === "purchasing"}
+              onClick={() => onConfirm(tier)}
+              className="w-full group flex items-center justify-between p-4 rounded-xl border border-border hover:border-gold/50 hover:bg-gold/5 transition-all text-left disabled:opacity-60"
+            >
+              <div>
+                <div className="font-display text-base flex items-center gap-2">
+                  {tier.license}
+                  {tier.license === "Exclusive" && (
+                    <span className="text-[9px] uppercase tracking-[0.25em] gold-seal text-onyx px-1.5 py-0.5 rounded-full font-semibold">
+                      Recommended
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  {tier.license === "Lease" && "Streaming + distribution rights"}
+                  {tier.license === "Premium Lease" && "Stems + commercial rights"}
+                  {tier.license === "Exclusive" && "Full ownership · pulled from market"}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-display text-2xl text-gold-gradient">${tier.price}</span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-gold transition-colors" />
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {state === "purchasing" && (
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gold">
+            <span className="h-2 w-2 rounded-full bg-gold animate-pulse" />
+            Clearing license · syncing Beat Locker™…
+          </div>
+        )}
+
+        <div className="hairline my-5" />
+        <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground text-center">
+          Instant sync · Beat Locker · My Licenses · Recent Beats
+        </div>
+      </div>
+    </div>
+  );
+}
