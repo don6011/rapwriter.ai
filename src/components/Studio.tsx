@@ -293,6 +293,7 @@ export default function Studio() {
 
           {/* HERO BEAT PLAYER */}
           <HeroBeatPlayer
+            beat={beat}
             playing={playing}
             onToggle={() => setPlaying(!playing)}
             fav={fav}
