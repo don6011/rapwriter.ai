@@ -183,8 +183,24 @@ export default function Studio() {
                 </button>
               );
             })}
+            <Link
+              to="/marketplace"
+              className="ml-2 px-3 py-2 rounded-lg border border-gold/30 text-gold hover:bg-gold/10 transition-all text-xs uppercase tracking-[0.2em] flex items-center gap-1.5"
+              title="Marketplace"
+            >
+              <Store className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">Marketplace</span>
+            </Link>
           </div>
         </div>
+        {handoffNotice && (
+          <div className="px-6 pb-3 -mt-1 animate-fade-in">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gold/30 bg-gold/8 text-xs">
+              <BadgeCheck className="h-3.5 w-3.5 text-gold shrink-0" />
+              <span className="text-foreground/90">{handoffNotice}</span>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main 3-column studio */}
