@@ -678,8 +678,9 @@ function AmbientLayer({ mode, ambiance }: { mode: string; ambiance: string }) {
 type ProjectT = typeof projects[number];
 
 function HeroBeatPlayer({
-  playing, onToggle, fav, onFav, projects: projectList, activeProjectId, onAddToProject,
+  beat, playing, onToggle, fav, onFav, projects: projectList, activeProjectId, onAddToProject,
 }: {
+  beat: typeof currentBeat;
   playing: boolean;
   onToggle: () => void;
   fav: boolean;
