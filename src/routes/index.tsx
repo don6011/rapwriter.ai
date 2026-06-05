@@ -1,29 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
+import Studio from "@/components/Studio";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Your App" },
-      { name: "description", content: "Replace this with a one-sentence description of your app." },
-      { property: "og:title", content: "Your App" },
-      { property: "og:description", content: "Replace this with a one-sentence description of your app." },
+      { title: "RapWriter.ai — Sharpen Your Pen" },
+      { name: "description", content: "The Prep Studio™. A premium digital environment where artists go from idea to Booth Ready™." },
+      { property: "og:title", content: "RapWriter.ai — The Prep Studio™" },
+      { property: "og:description", content: "Go from idea to Booth Ready™. Not an AI lyric generator — a luxury prep studio for artists." },
+    ],
+    links: [
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" },
     ],
   }),
-  component: Index,
+  component: Studio,
 });
-
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
-}
