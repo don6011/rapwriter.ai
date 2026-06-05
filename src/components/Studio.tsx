@@ -793,11 +793,17 @@ function HeroBeatPlayer({
             </span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="gold-seal text-onyx text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
-              <Shield className="h-2.5 w-2.5" /> {beat.license}
-            </span>
+            <LicenseBadge state={licenseState} label={licenseLabel} onRequest={onRequestLicense} />
           </div>
         </div>
+
+        {licenseFlash && (
+          <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg border border-gold/40 bg-gold/8 text-xs animate-fade-in">
+            <CheckCircle2 className="h-3.5 w-3.5 text-gold shrink-0" />
+            <span className="text-foreground/90">{licenseFlash}</span>
+          </div>
+        )}
+
 
         <div className="flex flex-wrap items-center gap-5">
           {/* Rotating disc / cover */}
