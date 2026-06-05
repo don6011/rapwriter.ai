@@ -151,6 +151,8 @@ export const beats: Beat[] = [
     art: "linear-gradient(160deg, #0a0a1a 0%, #1a1438 50%, #c9a84c 130%)", glyph: "SV",
     prices: [{ license: "Lease", price: 49 }, { license: "Premium Lease", price: 149 }, { license: "Exclusive", price: 899 }],
     plays: 184230, tag: "RW-0421",
+    boothReadyScore: 94, completionRate: 71, tracksFinished: 1284, writingNow: 47,
+    emotionalTags: ["Pain", "Late Night Drive", "Heartbreak", "Storytelling"],
   },
   {
     id: "cathedral-88",
@@ -161,6 +163,8 @@ export const beats: Beat[] = [
     art: "linear-gradient(200deg, #2d0a1f 0%, #5c1840 50%, #d4842a 110%)", glyph: "C8",
     prices: [{ license: "Lease", price: 59 }, { license: "Exclusive", price: 1200 }],
     plays: 96420, tag: "RW-0388",
+    boothReadyScore: 91, completionRate: 68, tracksFinished: 842, writingNow: 22,
+    emotionalTags: ["Pain", "Victory", "Motivation", "Storytelling"],
   },
   {
     id: "lowlight",
@@ -171,6 +175,8 @@ export const beats: Beat[] = [
     art: "linear-gradient(180deg, #051a1a 0%, #0d3838 50%, #5cbdb9 130%)", glyph: "LL",
     prices: [{ license: "Lease", price: 49 }, { license: "Exclusive", price: 850 }],
     plays: 73910, tag: "RW-0402",
+    boothReadyScore: 88, completionRate: 64, tracksFinished: 612, writingNow: 18,
+    emotionalTags: ["Heartbreak", "Late Night Drive", "Love"],
   },
   {
     id: "trunk-rattle",
@@ -181,6 +187,8 @@ export const beats: Beat[] = [
     art: "linear-gradient(135deg, #1a0f08 0%, #3d2410 50%, #d4842a 130%)", glyph: "TR",
     prices: [{ license: "Lease", price: 49 }, { license: "Exclusive", price: 999 }],
     plays: 245100, tag: "RW-0455",
+    boothReadyScore: 96, completionRate: 78, tracksFinished: 2104, writingNow: 86,
+    emotionalTags: ["Street", "Hustle", "Victory"],
   },
   {
     id: "gold-grill",
@@ -191,6 +199,8 @@ export const beats: Beat[] = [
     art: "linear-gradient(135deg, #0a0604 0%, #2a1810 50%, #e8b84a 130%)", glyph: "GG",
     prices: [{ license: "Lease", price: 59 }, { license: "Exclusive", price: 1500 }],
     plays: 312700, tag: "RW-0461",
+    boothReadyScore: 92, completionRate: 74, tracksFinished: 1872, writingNow: 64,
+    emotionalTags: ["Strip Club", "Club", "Victory", "Hustle"],
   },
   {
     id: "back-porch",
@@ -201,6 +211,8 @@ export const beats: Beat[] = [
     art: "linear-gradient(160deg, #1a0512 0%, #3d0f2a 50%, #e8b84a 130%)", glyph: "BP",
     prices: [{ license: "Lease", price: 49 }, { license: "Exclusive", price: 950 }],
     plays: 54200, tag: "RW-0377",
+    boothReadyScore: 86, completionRate: 62, tracksFinished: 438, writingNow: 11,
+    emotionalTags: ["Motivation", "Storytelling", "Soul"],
   },
   {
     id: "dusty-loop",
@@ -211,6 +223,8 @@ export const beats: Beat[] = [
     art: "linear-gradient(180deg, #020c0c 0%, #0a2424 50%, #5cbdb9 130%)", glyph: "D7",
     prices: [{ license: "Lease", price: 39 }, { license: "Exclusive", price: 700 }],
     plays: 41800, tag: "RW-0339",
+    boothReadyScore: 84, completionRate: 59, tracksFinished: 326, writingNow: 9,
+    emotionalTags: ["Heartbreak", "Late Night Drive", "Storytelling"],
   },
   {
     id: "neon-strip",
@@ -221,8 +235,11 @@ export const beats: Beat[] = [
     art: "linear-gradient(135deg, #050510 0%, #1a0f2e 50%, #c9a84c 130%)", glyph: "NS",
     prices: [{ license: "Lease", price: 59 }, { license: "Exclusive", price: 1100 }],
     plays: 128400, tag: "RW-0444",
+    boothReadyScore: 90, completionRate: 69, tracksFinished: 974, writingNow: 38,
+    emotionalTags: ["Strip Club", "Late Night Drive", "Club", "Hustle"],
   },
 ];
+
 
 // ---- BEAT PACKS ---------------------------------------------------------
 
