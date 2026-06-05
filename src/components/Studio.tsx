@@ -780,7 +780,7 @@ function HeroBeatPlayer({
             Quick Add To Project
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {projects.map((p) => (
+            {projectList.map((p) => (
               <button
                 key={p.id}
                 onClick={() => onAddToProject(p)}
