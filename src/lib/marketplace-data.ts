@@ -3,6 +3,11 @@
 
 export type License = "Lease" | "Premium Lease" | "Exclusive" | "Stems + Exclusive";
 
+export type EmotionalTag =
+  | "Pain" | "Victory" | "Motivation" | "Heartbreak"
+  | "Late Night Drive" | "Strip Club" | "Storytelling"
+  | "Hustle" | "Love" | "Soul" | "Street" | "Club";
+
 export type Beat = {
   id: string;
   title: string;
@@ -20,7 +25,14 @@ export type Beat = {
   prices: { license: License; price: number }[];
   plays: number;
   tag?: string;         // RW tag
+  // ---- Booth Ready metrics ---------------------------------------------
+  boothReadyScore: number;     // 0-100 — how often songs written to this beat reach Booth Ready™
+  completionRate: number;      // 0-100 — % of sessions that finish a full song
+  tracksFinished: number;      // raw count of finished tracks
+  writingNow: number;          // active rappers writing in the last hour
+  emotionalTags: EmotionalTag[];
 };
+
 
 export type Producer = {
   id: string;
