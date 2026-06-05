@@ -650,9 +650,9 @@ function HeroBeatPlayer({
   onToggle: () => void;
   fav: boolean;
   onFav: () => void;
-  projects: typeof import("./Studio").default extends never ? never : Array<{ id: string; type: string; title: string; tracks: number; art: string; glyph: string }>;
+  projects: typeof projects;
   activeProjectId: string;
-  onAddToProject: (p: { id: string; type: string; title: string; tracks: number; art: string; glyph: string }) => void;
+  onAddToProject: (p: typeof projects[number]) => void;
 }) {
   return (
     <div className="relative rounded-2xl overflow-hidden border border-gold/25 glass-panel">
