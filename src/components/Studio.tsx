@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
+import { consumePendingBeat } from "@/lib/marketplace-data";
 import {
   Disc3, Music2, Mic2, FolderOpen, Sparkles, Award, Play, Pause,
   Heart, Volume2, Repeat, Wand2, Flame, Feather, MessageSquareQuote,
   ChevronRight, Plus, Headphones, Clock, Moon, Lightbulb, EyeOff,
   Coffee, CloudRain, Wind, Camera, ArrowUpRight, Disc, CheckCircle2, X,
   SkipBack, SkipForward, Shield, Share2, Download, FileText,
-  Mail, Copy, Music
+  Mail, Copy, Music, Store, BadgeCheck
 } from "lucide-react";
 
 const lockerItems = [
