@@ -361,3 +361,111 @@ export function isBeatLicensed(beatId: string): boolean {
 export function getBeatLicense(beatId: string): PurchasedBeat | null {
   return getPurchases().find(p => p.beatId === beatId) ?? null;
 }
+
+// ---- Producer storefront extras + recent activity ----------------------
+
+export type ProducerExtras = {
+  tagline: string;
+  story: string;
+  bestSellerIds: string[];
+  collections: { id: string; name: string; vibe: string; count: number }[];
+  social: { instagram: string; youtubeSubs: number; pressQuote: string; pressSource: string };
+};
+
+export const producerExtras: Record<string, ProducerExtras> = {
+  nightowl: {
+    tagline: "After-midnight pens. Neon on wet pavement.",
+    story:
+      "Started flipping soul samples in a Memphis basement at 14. Eight years later his beats have moved more silver chains than the city's pawn shops. NightOwl produces for the hour everyone else is asleep.",
+    bestSellerIds: ["smoke-velvet", "neon-strip", "lowlight"],
+    collections: [
+      { id: "no-late",  name: "Late Sessions",   vibe: "Slow, smoke-thick, organ-led",    count: 14 },
+      { id: "no-neon",  name: "Neon Strip",      vibe: "After-midnight cruise music",     count: 11 },
+      { id: "no-pain",  name: "Pen Therapy",     vibe: "For when the room gets quiet",    count:  9 },
+    ],
+    social: {
+      instagram: "@nightowl808",
+      youtubeSubs: 142000,
+      pressQuote: "The most cinematic pen in Memphis right now.",
+      pressSource: "Pigeons & Planes",
+    },
+  },
+  "808baron": {
+    tagline: "Subs that move stadiums.",
+    story:
+      "808 Baron engineered low-end for three Atlanta charters before going solo. His drums are studied in Houston, copied in Chicago, and shaken in every trunk from Decatur to Dubai.",
+    bestSellerIds: ["trunk-rattle", "gold-grill"],
+    collections: [
+      { id: "8b-trap",   name: "Trap Cathedral",   vibe: "Stadium 808s. Hi-hat science.",  count: 18 },
+      { id: "8b-flex",   name: "Flex Hour",        vibe: "Club anthems. Chains optional.", count: 12 },
+      { id: "8b-street", name: "Street Code",      vibe: "Gritty, mean, undeniable.",      count: 10 },
+    ],
+    social: {
+      instagram: "@808baron",
+      youtubeSubs: 268000,
+      pressQuote: "If a stadium shakes in 2026, Baron probably mixed the 808.",
+      pressSource: "Complex",
+    },
+  },
+  sundayhouse: {
+    tagline: "Pen church. Pulpit meets pavement.",
+    story:
+      "Raised on Houston choir stands and Mannie Fresh tapes. Sunday House's chops sound like a stained-glass window cracked open over a low-rider. Pain, praise, and patience — same chord.",
+    bestSellerIds: ["cathedral-88", "back-porch"],
+    collections: [
+      { id: "sh-gospel", name: "Street Gospel",    vibe: "Soul-soaked, gospel-touched",    count: 16 },
+      { id: "sh-soul",   name: "Sunday Soul",      vibe: "Warm chords, slow strings",      count: 13 },
+    ],
+    social: {
+      instagram: "@sundayhouse",
+      youtubeSubs: 81000,
+      pressQuote: "The most spiritual catalog on the platform.",
+      pressSource: "DJBooth",
+    },
+  },
+  vinylvictor: {
+    tagline: "Crate-dug loops. Dusty drums. Lo-fi with weight.",
+    story:
+      "Victor digs Detroit basements every Saturday morning. What comes back is jazz dust, off-grid drums, and chops that breathe. Beats that feel like a memory you're not sure is yours.",
+    bestSellerIds: ["dusty-loop"],
+    collections: [
+      { id: "vv-dust", name: "Crate No. 7",   vibe: "Lo-fi, nostalgic, off-grid",  count:  9 },
+      { id: "vv-jazz", name: "Jazz Cellar",   vibe: "Smoke-room jazz chops",       count:  7 },
+    ],
+    social: {
+      instagram: "@vinylvictor",
+      youtubeSubs: 36000,
+      pressQuote: "Detroit's quietest, dustiest, most dangerous catalog.",
+      pressSource: "Passion of the Weiss",
+    },
+  },
+};
+
+// ---- Recently Written To activity feed ----------------------------------
+
+export type WriteActivity = {
+  id: string;
+  artistHandle: string;
+  artistGlyph: string;       // 1-2 char monogram
+  artistColor: string;       // gradient
+  beatId: string;
+  action: "started" | "hit Booth Ready™" | "finished a hook" | "wrote verse 2" | "locked a bridge";
+  minutesAgo: number;
+};
+
+export const recentlyWrittenTo: WriteActivity[] = [
+  { id: "a1", artistHandle: "@kingsoutheast", artistGlyph: "KS", artistColor: "linear-gradient(135deg,#1a0512,#c9a84c)", beatId: "smoke-velvet", action: "hit Booth Ready™",  minutesAgo:  4 },
+  { id: "a2", artistHandle: "@yvnnglex",      artistGlyph: "YL", artistColor: "linear-gradient(135deg,#1a0f08,#d4842a)", beatId: "trunk-rattle",  action: "wrote verse 2",      minutesAgo:  7 },
+  { id: "a3", artistHandle: "@maritheprince", artistGlyph: "MP", artistColor: "linear-gradient(135deg,#2d0a1f,#e8b84a)", beatId: "cathedral-88",  action: "finished a hook",    minutesAgo: 11 },
+  { id: "a4", artistHandle: "@nightcrowne",   artistGlyph: "NC", artistColor: "linear-gradient(135deg,#050510,#5cbdb9)", beatId: "lowlight",      action: "started",            minutesAgo: 13 },
+  { id: "a5", artistHandle: "@808selene",     artistGlyph: "8S", artistColor: "linear-gradient(135deg,#0a0604,#e8b84a)", beatId: "gold-grill",    action: "locked a bridge",    minutesAgo: 18 },
+  { id: "a6", artistHandle: "@dustyverse",    artistGlyph: "DV", artistColor: "linear-gradient(135deg,#020c0c,#5cbdb9)", beatId: "dusty-loop",    action: "started",            minutesAgo: 22 },
+  { id: "a7", artistHandle: "@neonpastor",    artistGlyph: "NP", artistColor: "linear-gradient(135deg,#050510,#c9a84c)", beatId: "neon-strip",    action: "hit Booth Ready™",   minutesAgo: 27 },
+  { id: "a8", artistHandle: "@bayoubaron",    artistGlyph: "BB", artistColor: "linear-gradient(135deg,#1a0512,#d4842a)", beatId: "back-porch",    action: "wrote verse 2",      minutesAgo: 34 },
+];
+
+// All emotional tags surfaced as filter chips
+export const emotionalTagList = [
+  "Pain", "Victory", "Motivation", "Heartbreak",
+  "Late Night Drive", "Strip Club", "Storytelling",
+] as const;
