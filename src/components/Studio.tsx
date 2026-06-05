@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import { consumePendingBeat } from "@/lib/marketplace-data";
+import { consumePendingBeat, type License } from "@/lib/marketplace-data";
+import { useLicensing } from "@/hooks/use-licensing";
 import {
   Disc3, Music2, Mic2, FolderOpen, Sparkles, Award, Play, Pause,
   Heart, Volume2, Repeat, Wand2, Flame, Feather, MessageSquareQuote,
