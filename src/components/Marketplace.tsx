@@ -9,7 +9,7 @@ import {
 import {
   beats, producers, beatPacks, regions, moods,
   type Beat, type Producer, type BeatPack,
-  setPendingBeat, addPurchase, getPurchases,
+  setPendingBeat, addPurchase, getPurchases, purchaseBeat, LICENSE_EVENT,
 } from "@/lib/marketplace-data";
 
 // ============================================================
