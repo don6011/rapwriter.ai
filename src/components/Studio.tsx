@@ -708,7 +708,7 @@ function HeroBeatPlayer({
           </div>
           <div className="flex items-center gap-1.5">
             <span className="gold-seal text-onyx text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
-              <Shield className="h-2.5 w-2.5" /> {currentBeat.license}
+              <Shield className="h-2.5 w-2.5" /> {beat.license}
             </span>
           </div>
         </div>
@@ -741,17 +741,17 @@ function HeroBeatPlayer({
           {/* Meta */}
           <div className="flex-1 min-w-[240px]">
             <div className="font-display text-3xl md:text-4xl leading-tight">
-              <span className="text-gold-gradient">{currentBeat.title}</span>
+              <span className="text-gold-gradient">{beat.title}</span>
             </div>
             <div className="text-sm text-muted-foreground mt-1">
-              produced by <span className="text-foreground/90">{currentBeat.producer}</span> · {currentBeat.mood}
+              produced by <span className="text-foreground/90">{beat.producer}</span> · {beat.mood}
             </div>
 
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3">
-              <Stat label="BPM" value={currentBeat.bpm.toString()} />
-              <Stat label="Key" value={currentBeat.key} />
-              <Stat label="Length" value={currentBeat.duration} />
-              <Stat label="Tag" value={currentBeat.tag} mono />
+              <Stat label="BPM" value={beat.bpm.toString()} />
+              <Stat label="Key" value={beat.key} />
+              <Stat label="Length" value={beat.duration} />
+              <Stat label="Tag" value={beat.tag} mono />
             </div>
           </div>
 
@@ -797,12 +797,12 @@ function HeroBeatPlayer({
             })}
           </div>
           <div className="flex items-center justify-between mt-2 text-[11px] text-muted-foreground tabular-nums">
-            <span>{currentBeat.position}</span>
+            <span>{beat.position}</span>
             <div className="flex items-center gap-3">
               <button className="hover:text-gold"><SkipBack className="h-4 w-4" /></button>
               <button className="hover:text-gold"><SkipForward className="h-4 w-4" /></button>
             </div>
-            <span>{currentBeat.duration}</span>
+            <span>{beat.duration}</span>
           </div>
         </div>
 
