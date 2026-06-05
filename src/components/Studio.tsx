@@ -366,12 +366,22 @@ export default function Studio() {
           <HeroBeatPlayer
             beat={beat}
             playing={playing}
-            onToggle={() => setPlaying(!playing)}
+            onToggle={() => {
+              if (!licensed && licenseState !== "licensed") {
+                requestLicense();
+                return;
+              }
+              setPlaying(!playing);
+            }}
             fav={fav}
             onFav={() => setFav(!fav)}
             projects={projects}
             activeProjectId={activeProject.id}
             onAddToProject={(p) => setActiveProject(p)}
+            licenseState={licenseState}
+            licenseLabel={license ? `${license.license} · Cleared` : beat.license}
+            onRequestLicense={requestLicense}
+            licenseFlash={licenseFlash}
           />
 
 
