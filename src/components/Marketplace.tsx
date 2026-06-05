@@ -302,16 +302,33 @@ function SectionHeader({ icon: Icon, eyebrow, title, action }: {
 // Trending Beat Card
 // ============================================================
 function TrendingBeatCard({
-  beat, playing, onPreview, onBuy, onWrite,
+  beat, playing, onPreview, onBuy, onWrite, variant = "default",
 }: {
   beat: Beat; playing: boolean;
   onPreview: () => void; onBuy: () => void; onWrite: () => void;
+  variant?: "default" | "booth";
 }) {
   const minLicense = beat.prices[0];
+  const isBooth = variant === "booth";
   return (
-    <article className="group glass-panel rounded-2xl overflow-hidden flex flex-col hover:border-gold/30 transition-colors">
+    <article className={cn(
+      "group glass-panel rounded-2xl overflow-hidden flex flex-col transition-all",
+      isBooth
+        ? "border-gold/40 shadow-[0_20px_60px_-30px_rgba(201,168,76,0.5)] hover:border-gold/60"
+        : "hover:border-gold/30"
+    )}>
       <div className="relative aspect-square">
         <ArtTile art={beat.art} glyph={beat.glyph} className="absolute inset-0" />
+        {isBooth && (
+          <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full gold-seal text-onyx px-2 py-1 text-[10px] font-semibold shadow-lg">
+            <Trophy className="h-3 w-3" /> Booth Ready™
+          </div>
+        )}
+        {!isBooth && (
+          <button className="absolute top-3 right-3 h-8 w-8 rounded-full bg-onyx/70 backdrop-blur flex items-center justify-center text-muted-foreground hover:text-gold">
+            <Heart className="h-3.5 w-3.5" />
+          </button>
+        )}
         <button
           onClick={onPreview}
           className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors"
@@ -329,9 +346,16 @@ function TrendingBeatCard({
             {beat.region}
           </span>
         </div>
-        <button className="absolute top-3 right-3 h-8 w-8 rounded-full bg-onyx/70 backdrop-blur flex items-center justify-center text-muted-foreground hover:text-gold">
-          <Heart className="h-3.5 w-3.5" />
-        </button>
+        {beat.writingNow > 0 && (
+          <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-onyx/85 backdrop-blur border border-gold/20 px-2 py-1 text-[10px] text-foreground/90">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-gold opacity-75 animate-ping" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-gold" />
+            </span>
+            <span className="tabular-nums font-medium">{beat.writingNow}</span>
+            <span className="text-muted-foreground">writing now</span>
+          </div>
+        )}
       </div>
 
       <div className="p-4 flex flex-col flex-1 gap-3">
@@ -348,26 +372,44 @@ function TrendingBeatCard({
 
         <Waveform id={beat.id} playing={playing} progress={playing ? 0.35 : 0} />
 
+        {/* Booth Ready metrics row */}
+        <div className="grid grid-cols-3 gap-2">
+          <BoothMetric label="Booth Ready" value={`${beat.boothReadyScore}`} suffix="/100" highlight />
+          <BoothMetric label="Completion" value={`${beat.completionRate}%`} />
+          <BoothMetric label="Finished" value={fmt(beat.tracksFinished)} />
+        </div>
+
         <div className="flex items-center flex-wrap gap-1.5 text-[10px]">
           <Meta label={`${beat.bpm} BPM`} />
           <Meta label={beat.key} />
-          {beat.tags.map(t => <Meta key={t} label={t} accent />)}
         </div>
 
-        <div className="text-[11px] text-muted-foreground flex items-center justify-between">
-          <span className="truncate">{beat.mood}</span>
-          <span className="flex items-center gap-1 shrink-0">
-            <Headphones className="h-3 w-3" /> {fmt(beat.plays)}
-          </span>
+        {/* Emotional tags */}
+        <div className="flex items-center flex-wrap gap-1.5">
+          {beat.emotionalTags.slice(0, 4).map(t => (
+            <span key={t} className="px-2 py-0.5 rounded-full border border-gold/25 bg-gold/5 text-[10px] text-gold/90 tracking-wide">
+              {t}
+            </span>
+          ))}
         </div>
 
         <div className="hairline" />
 
+        {/* PRIMARY CTA: Write To This Beat */}
+        <button
+          onClick={onWrite}
+          className="w-full h-11 rounded-xl gold-seal text-onyx flex items-center justify-center gap-2 text-sm font-semibold shadow-[0_10px_30px_-12px_rgba(201,168,76,0.7)] hover:scale-[1.01] transition-transform"
+        >
+          <PenLine className="h-4 w-4" /> Write To This Beat™
+        </button>
+
         <div className="flex items-center justify-between gap-2">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">From</div>
-            <div className="font-display text-xl text-gold-gradient leading-none">${minLicense.price}</div>
-            <div className="text-[10px] text-muted-foreground mt-0.5">{minLicense.license}</div>
+            <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">License from</div>
+            <div className="flex items-baseline gap-1.5">
+              <div className="font-display text-lg text-gold-gradient leading-none">${minLicense.price}</div>
+              <div className="text-[10px] text-muted-foreground">{minLicense.license}</div>
+            </div>
           </div>
           <div className="flex items-center gap-1.5">
             <button
@@ -379,17 +421,10 @@ function TrendingBeatCard({
             </button>
             <button
               onClick={onBuy}
-              title="Buy License"
-              className="h-9 px-3 rounded-lg border border-gold/40 text-gold hover:bg-gold/10 flex items-center gap-1.5 text-xs"
+              title="Buy License Now"
+              className="h-9 px-3 rounded-lg border border-gold/30 text-gold/90 hover:bg-gold/10 flex items-center gap-1.5 text-xs"
             >
               <ShoppingCart className="h-3.5 w-3.5" /> Buy
-            </button>
-            <button
-              onClick={onWrite}
-              title="Write To This Beat — opens Ghost Studio™"
-              className="h-9 px-3 rounded-lg gold-seal text-onyx flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <PenLine className="h-3.5 w-3.5" /> Write
             </button>
           </div>
         </div>
@@ -397,6 +432,22 @@ function TrendingBeatCard({
     </article>
   );
 }
+
+function BoothMetric({ label, value, suffix, highlight }: { label: string; value: string; suffix?: string; highlight?: boolean }) {
+  return (
+    <div className={cn(
+      "rounded-lg px-2 py-1.5 border text-center",
+      highlight ? "border-gold/30 bg-gold/5" : "border-border bg-onyx-elev/40"
+    )}>
+      <div className="flex items-baseline justify-center gap-0.5">
+        <span className={cn("font-display text-base leading-none", highlight ? "text-gold-gradient" : "text-foreground")}>{value}</span>
+        {suffix && <span className="text-[9px] text-muted-foreground">{suffix}</span>}
+      </div>
+      <div className="text-[8px] uppercase tracking-[0.18em] text-muted-foreground mt-1">{label}</div>
+    </div>
+  );
+}
+
 
 function Meta({ label, accent }: { label: string; accent?: boolean }) {
   return (
