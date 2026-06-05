@@ -104,6 +104,35 @@ export default function Studio() {
   const [fav, setFav] = useState(true);
   const [activeProject, setActiveProject] = useState(projects[0]);
   const [boothModalOpen, setBoothModalOpen] = useState(false);
+  const [loadedBeat, setLoadedBeat] = useState<typeof currentBeat | null>(null);
+  const [handoffNotice, setHandoffNotice] = useState<string | null>(null);
+
+  // Marketplace → Ghost Studio handoff
+  useEffect(() => {
+    const b = consumePendingBeat();
+    if (b) {
+      setLoadedBeat({
+        title: b.title,
+        producer: b.producer,
+        bpm: b.bpm,
+        key: b.key,
+        mood: b.mood,
+        duration: b.duration,
+        position: "0:00",
+        license: `${b.prices[0].license} · Loaded from Marketplace`,
+        tag: b.tag ?? "RW-MKT",
+      });
+      setSongState(0);
+      setActiveSection(0);
+      setPlaying(true);
+      setHandoffNotice(`New session started · writing to "${b.title}" by ${b.producer}`);
+      const t = setTimeout(() => setHandoffNotice(null), 4500);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
+  const beat = loadedBeat ?? currentBeat;
+
 
   return (
     <div className="min-h-screen w-full text-foreground relative">
