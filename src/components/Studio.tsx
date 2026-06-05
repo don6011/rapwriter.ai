@@ -119,6 +119,7 @@ export default function Studio() {
     const b = consumePendingBeat();
     if (b) {
       setLoadedBeat({
+        id: b.id,
         title: b.title,
         producer: b.producer,
         bpm: b.bpm,
@@ -128,6 +129,7 @@ export default function Studio() {
         position: "0:00",
         license: `${b.prices[0].license} · Loaded from Marketplace`,
         tag: b.tag ?? "RW-MKT",
+        prices: b.prices,
       });
       setSongState(0);
       setActiveSection(0);
