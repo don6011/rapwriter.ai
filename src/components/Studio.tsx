@@ -1129,6 +1129,22 @@ function HeroBeatPlayer({
           </div>
         </div>
 
+        {/* Extra meta row — genre · region · mood tags */}
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <span className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">Genre</span>
+          <span className="text-xs text-foreground/90">{beat.genre}</span>
+          <span className="mx-2 h-3 w-px bg-border" />
+          <span className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">Region</span>
+          <span className="text-xs text-foreground/90">{beat.region}</span>
+          <span className="mx-2 h-3 w-px bg-border" />
+          {beat.tags.map((t) => (
+            <span key={t} className="text-[10px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full border border-gold/25 bg-gold/5 text-gold/90">
+              {t}
+            </span>
+          ))}
+        </div>
+
+
         {/* Waveform */}
         <div className="mt-6 px-1">
           <div className="flex items-end gap-[3px] h-16">
