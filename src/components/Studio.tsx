@@ -101,6 +101,9 @@ const currentBeat = {
   bpm: 84,
   key: "F# Minor",
   mood: "Late-Night · Sultry",
+  genre: "Trap Soul",
+  region: "Atlanta · Southside",
+  tags: ["Late Night Drive", "Heartbreak", "Storytelling"],
   duration: "3:42",
   position: "1:18",
   license: "Exclusive · Cleared",
@@ -111,6 +114,7 @@ const currentBeat = {
     { license: "Exclusive", price: 899 },
   ] as { license: License; price: number }[],
 };
+
 
 
 
