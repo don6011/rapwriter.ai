@@ -125,6 +125,82 @@ export default function Studio() {
   const [boothModalOpen, setBoothModalOpen] = useState(false);
   const [loadedBeat, setLoadedBeat] = useState<typeof currentBeat | null>(null);
   const [handoffNotice, setHandoffNotice] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  // -------- Draft / Autosave --------
+  const [sectionContent, setSectionContent] = useState<Record<string, string>>(SEED_CONTENT);
+  const [lastSaved, setLastSaved] = useState<number | null>(null);
+  const [savingFlash, setSavingFlash] = useState(false);
+  const draftKey = `rapwriter:draft:${activeProject.id}`;
+
+  // Load draft when project switches
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { sections: Record<string, string>; savedAt: number };
+        setSectionContent({ ...SEED_CONTENT, ...parsed.sections });
+        setLastSaved(parsed.savedAt);
+      } else {
+        setSectionContent(SEED_CONTENT);
+        setLastSaved(null);
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject.id]);
+
+  // Debounced autosave
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const savedAt = Date.now();
+      localStorage.setItem(draftKey, JSON.stringify({ sections: sectionContent, savedAt }));
+      setLastSaved(savedAt);
+      setSavingFlash(true);
+      const t = setTimeout(() => setSavingFlash(false), 900);
+      return () => clearTimeout(t);
+    }, 600);
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  }, [sectionContent, draftKey]);
+
+  // -------- Live Completion % + Booth Ready Score™ --------
+  const { completionPct, boothScore, totalBars } = useMemo(() => {
+    let weightedDone = 0;
+    let weightedTotal = 0;
+    let bars = 0;
+    let hookLines = 0;
+    let densitySum = 0;
+    let densityCount = 0;
+    for (const s of SECTION_BLUEPRINT) {
+      const text = (sectionContent[s.name] ?? "").trim();
+      const lines = text ? text.split("\n").filter(l => l.trim().length > 0) : [];
+      const bar = lines.length;
+      bars += bar;
+      if (s.name === "Hook") hookLines = bar;
+      const done = Math.min(bar, s.target);
+      weightedDone += (done / s.target) * s.weight;
+      weightedTotal += s.weight;
+      const avgLen = lines.length ? lines.reduce((a, l) => a + l.length, 0) / lines.length : 0;
+      if (lines.length) { densitySum += Math.min(avgLen / 48, 1); densityCount++; }
+    }
+    const pct = Math.round((weightedDone / weightedTotal) * 100);
+    const density = densityCount ? densitySum / densityCount : 0;
+    const hookBonus = hookLines >= 4 ? 1 : hookLines / 4;
+    const score = Math.max(0, Math.min(100, Math.round(pct * 0.7 + density * 100 * 0.2 + hookBonus * 100 * 0.1)));
+    return { completionPct: pct, boothScore: score, totalBars: bars };
+  }, [sectionContent]);
+
+  // Auto-bump song state based on completion
+  useEffect(() => {
+    if (completionPct >= 95 && songState < 3) setSongState(3);
+    else if (completionPct >= 65 && songState < 2) setSongState(2);
+    else if (completionPct >= 20 && songState < 1) setSongState(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completionPct]);
+
 
   // Marketplace → Ghost Studio handoff
   useEffect(() => {
