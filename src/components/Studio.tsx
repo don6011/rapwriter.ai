@@ -1483,3 +1483,276 @@ function LicenseDialog({
     </div>
   );
 }
+
+// ============================================================
+// Song Mission™ — checklist + progress + Flow Mode entry
+// ============================================================
+function SongMission({
+  sectionContent, completionPct, onJumpTo, onFlowMode,
+}: {
+  sectionContent: Record<string, string>;
+  completionPct: number;
+  onJumpTo: (i: number) => void;
+  onFlowMode: () => void;
+}) {
+  const items = SECTION_BLUEPRINT.map((s, i) => {
+    const text = (sectionContent[s.name] ?? "").trim();
+    const bars = text ? text.split("\n").filter(l => l.trim()).length : 0;
+    const done = bars >= s.target;
+    const partial = bars > 0 && !done;
+    return { ...s, i, bars, done, partial };
+  });
+  const remaining = items.filter(i => !i.done).length;
+
+  return (
+    <div className="glass-panel rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-4 gap-3">
+        <div className="flex items-center gap-2">
+          <Flame className="h-4 w-4 text-gold" />
+          <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            Song Mission™
+          </span>
+        </div>
+        <button
+          onClick={onFlowMode}
+          className="text-[10px] uppercase tracking-[0.25em] text-gold border border-gold/30 hover:bg-gold/10 px-2.5 py-1 rounded-full flex items-center gap-1.5"
+        >
+          <EyeOff className="h-3 w-3" /> Writer Flow Mode™
+        </button>
+      </div>
+
+      <div className="flex items-baseline justify-between mb-2">
+        <div className="font-display text-2xl">
+          <span className="text-gold-gradient">{completionPct}%</span>
+          <span className="text-sm text-muted-foreground ml-2">complete</span>
+        </div>
+        <div className="text-[11px] text-muted-foreground">
+          {remaining === 0 ? "Song sealed" : `${remaining} section${remaining > 1 ? "s" : ""} to Booth Ready™`}
+        </div>
+      </div>
+
+      <div className="h-2 w-full rounded-full bg-onyx-elev overflow-hidden mb-5">
+        <div
+          className="h-full bg-gradient-to-r from-gold-deep to-gold transition-all duration-500"
+          style={{ width: `${completionPct}%` }}
+        />
+      </div>
+
+      <ul className="space-y-1.5">
+        {items.map((it) => (
+          <li key={it.name}>
+            <button
+              onClick={() => onJumpTo(it.i)}
+              className={cn(
+                "w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg border text-left transition-all",
+                it.done
+                  ? "border-gold/30 bg-gold/8 text-foreground"
+                  : it.partial
+                  ? "border-gold/15 bg-onyx-elev/50 hover:border-gold/30"
+                  : "border-border bg-onyx/40 text-muted-foreground hover:text-foreground hover:border-gold/20",
+              )}
+            >
+              <span className="flex items-center gap-2.5">
+                <span className={cn(
+                  "h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0",
+                  it.done ? "border-gold bg-gold" : it.partial ? "border-gold/60 bg-gold/20" : "border-muted-foreground/40 bg-transparent",
+                )}>
+                  {it.done && <CheckCircle2 className="h-3 w-3 text-onyx" />}
+                </span>
+                <span className="text-sm">{it.name}</span>
+              </span>
+              <span className="text-[10px] tabular-nums text-muted-foreground">
+                {it.bars}/{it.target} bars
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ============================================================
+// Producer Notes™ — real-feeling scoring + targeted suggestions
+// ============================================================
+function ProducerNotesPanel({
+  sectionContent, completionPct, boothScore,
+}: {
+  sectionContent: Record<string, string>;
+  completionPct: number;
+  boothScore: number;
+}) {
+  const hook = (sectionContent["Hook"] ?? "").trim();
+  const v1 = (sectionContent["Verse 1"] ?? "").trim();
+  const v2 = (sectionContent["Verse 2"] ?? "").trim();
+
+  const linesOf = (t: string) => t ? t.split("\n").filter(l => l.trim()).length : 0;
+  const avgLen = (t: string) => {
+    const ls = t.split("\n").filter(l => l.trim());
+    if (!ls.length) return 0;
+    return ls.reduce((a, l) => a + l.length, 0) / ls.length;
+  };
+
+  const hookStrength = Math.min(100, Math.round(linesOf(hook) / 8 * 70 + (avgLen(hook) / 48) * 30));
+  const verseStrength = Math.min(100, Math.round(((linesOf(v1) + linesOf(v2)) / 32) * 65 + (avgLen(v1 + "\n" + v2) / 48) * 35));
+  const commercial = Math.min(100, Math.round(hookStrength * 0.55 + boothScore * 0.35 + completionPct * 0.1));
+  const cadence = Math.min(100, Math.round(boothScore * 0.65 + verseStrength * 0.35));
+
+  const suggestions = [
+    linesOf(hook) < 4 && "Hook needs another 2 bars — stretch the central image.",
+    linesOf(hook) >= 4 && avgLen(hook) < 32 && "Hook lines run short — add interior rhyme to thicken the punchline.",
+    linesOf(v2) < linesOf(v1) - 4 && "Verse 2 energy drops vs. Verse 1 — match the bar count or escalate the imagery.",
+    !v1.includes(",") && linesOf(v1) > 0 && "Add one personal story detail in Verse 1 — listeners lock in on specifics.",
+    completionPct > 70 && !sectionContent["Outro"]?.trim() && "Land a stronger closing bar in the Outro — echo the hook one last time.",
+  ].filter(Boolean) as string[];
+
+  return (
+    <div className="glass-panel rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <MessageSquareQuote className="h-4 w-4 text-gold" />
+        <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+          Producer Notes™
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground mb-4">
+        Honest feedback from the other side of the glass.
+      </p>
+
+      <div className="space-y-3">
+        <ScoreBar label="Hook Strength" value={hookStrength} />
+        <ScoreBar label="Verse Strength" value={verseStrength} />
+        <ScoreBar label="Commercial Potential" value={commercial} />
+        <ScoreBar label="Cadence Match" value={cadence} />
+      </div>
+
+      <div className="hairline my-5" />
+
+      <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground mb-2">
+        Notes from the producer
+      </div>
+      <ul className="space-y-2">
+        {(suggestions.length ? suggestions : ["Pen is moving. Keep the pocket tight on the next pass."]).map((s, i) => (
+          <li key={i} className="flex items-start gap-2 text-sm text-foreground/90 leading-relaxed">
+            <span className="mt-1.5 h-1 w-1 rounded-full bg-gold shrink-0" />
+            <span>{s}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ScoreBar({ label, value }: { label: string; value: number }) {
+  const tier = value >= 85 ? "text-gold" : value >= 65 ? "text-foreground" : "text-muted-foreground";
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[11px] text-muted-foreground">{label}</span>
+        <span className={cn("text-xs font-display tabular-nums", tier)}>{value}<span className="text-muted-foreground text-[10px]">/100</span></span>
+      </div>
+      <div className="h-1.5 rounded-full bg-onyx-elev overflow-hidden">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-gold-deep to-gold transition-all duration-500"
+          style={{ width: `${value}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Booth Ready Engine™ — 5-axis radar of song fitness
+// ============================================================
+function BoothReadyEngine({
+  sectionContent, completionPct, boothScore, onCertify,
+}: {
+  sectionContent: Record<string, string>;
+  completionPct: number;
+  boothScore: number;
+  onCertify: () => void;
+}) {
+  const total = SECTION_BLUEPRINT.reduce((sum, s) => {
+    const bars = (sectionContent[s.name] ?? "").split("\n").filter(l => l.trim()).length;
+    return sum + Math.min(bars, s.target);
+  }, 0);
+  const targetTotal = SECTION_BLUEPRINT.reduce((s, x) => s + x.target, 0);
+
+  const structure = Math.round((SECTION_BLUEPRINT.filter(s => (sectionContent[s.name] ?? "").trim()).length / SECTION_BLUEPRINT.length) * 100);
+  const cadence = Math.min(100, Math.round(boothScore * 0.7 + 25));
+  const completion = completionPct;
+  const originality = Math.min(100, Math.round((total / Math.max(1, targetTotal)) * 60 + boothScore * 0.4));
+  const replay = Math.min(100, Math.round((sectionContent["Hook"] ?? "").length / 220 * 100));
+  const overall = Math.round((structure + cadence + completion + originality + replay) / 5);
+  const certified = overall >= 90;
+
+  const axes = [
+    { label: "Structure", value: structure },
+    { label: "Cadence", value: cadence },
+    { label: "Completion", value: completion },
+    { label: "Originality", value: originality },
+    { label: "Replay Value", value: replay },
+  ];
+
+  return (
+    <div className="glass-panel rounded-2xl p-5 relative overflow-hidden">
+      <div className="absolute inset-0 opacity-30 pointer-events-none"
+        style={{ background: "radial-gradient(circle at 50% 0%, var(--gold), transparent 55%)" }} />
+      <div className="relative">
+        <div className="flex items-center gap-2 mb-3">
+          <Award className="h-4 w-4 text-gold" />
+          <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            Booth Ready Engine™
+          </span>
+        </div>
+
+        <div className="flex items-end justify-between mb-4">
+          <div>
+            <div className="font-display text-5xl text-gold-gradient leading-none">{overall}</div>
+            <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground mt-1">Overall · /100</div>
+          </div>
+          {certified ? (
+            <div className="gold-seal text-onyx text-[10px] uppercase tracking-[0.2em] px-2.5 py-1 rounded-full font-semibold flex items-center gap-1 animate-scale-in">
+              <BadgeCheck className="h-3 w-3" /> Booth Ready™
+            </div>
+          ) : (
+            <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+              {90 - overall} from certified
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2.5">
+          {axes.map((a) => (
+            <div key={a.label}>
+              <div className="flex items-center justify-between text-[11px] mb-1">
+                <span className="text-muted-foreground">{a.label}</span>
+                <span className="tabular-nums text-foreground/90">{a.value}</span>
+              </div>
+              <div className="h-1 rounded-full bg-onyx-elev overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-gold-deep to-gold"
+                  style={{ width: `${a.value}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={onCertify}
+          disabled={!certified}
+          className={cn(
+            "mt-5 w-full px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all",
+            certified
+              ? "gold-seal text-onyx hover:scale-[1.02]"
+              : "border border-border text-muted-foreground cursor-not-allowed",
+          )}
+        >
+          <Award className="h-4 w-4" />
+          {certified ? "Certify Booth Ready™" : "Locked — keep writing"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
