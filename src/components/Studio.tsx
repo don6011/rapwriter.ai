@@ -883,7 +883,7 @@ function SnapshotHistory() {
         <div className="flex items-center gap-2">
           <Camera className="h-4 w-4 text-gold" />
           <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Studio Snapshots™
+            Writing Session Timeline™
           </span>
         </div>
         <button className="text-xs text-muted-foreground hover:text-gold flex items-center gap-1">
