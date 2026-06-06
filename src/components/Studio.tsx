@@ -37,14 +37,8 @@ const SEED_CONTENT: Record<string, string> = {
   "Outro":   "",
 };
 
-const penCoachActions = [
-  { icon: Wand2, label: "Improve Bar" },
-  { icon: Sparkles, label: "Improve Hook" },
-  { icon: Flame, label: "Add Emotion" },
-  { icon: MessageSquareQuote, label: "More Commercial" },
-  { icon: Feather, label: "More Southern" },
-  { icon: Headphones, label: "Suggest Adlibs" },
-];
+// Producer Notes™ replaces the old Pen Coach action grid — see ProducerNotesPanel
+
 
 // Three studio environments
 const modes = [
