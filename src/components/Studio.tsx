@@ -20,13 +20,22 @@ const lockerItems = [
   { icon: Award, label: "Booth Ready", count: 9, certified: true },
 ];
 
-const sections = [
-  { name: "Hook", lines: ["Diamonds dancin' on my neck, midnight on the strip,", "Engine purrin' soft and low, gold up on the grip —"] },
-  { name: "Verse 1", lines: ["Started from the back porch, momma prayin' loud,", "Now they call my name in rooms I wasn't 'llowed,", "Every bar a brick, built this house from doubt,", "Pen game heavy, that's the only way I move about."] },
-  { name: "Verse 2", lines: [""] },
-  { name: "Bridge", lines: [""] },
-  { name: "Outro", lines: [""] },
-];
+// Song section blueprint — order matters; target bars used for Completion %
+const SECTION_BLUEPRINT = [
+  { name: "Hook",    target: 8,  weight: 1.5 },
+  { name: "Verse 1", target: 16, weight: 1.2 },
+  { name: "Verse 2", target: 16, weight: 1.2 },
+  { name: "Bridge",  target: 8,  weight: 0.8 },
+  { name: "Outro",   target: 4,  weight: 0.6 },
+] as const;
+
+const SEED_CONTENT: Record<string, string> = {
+  "Hook":    "Diamonds dancin' on my neck, midnight on the strip,\nEngine purrin' soft and low, gold up on the grip —",
+  "Verse 1": "Started from the back porch, momma prayin' loud,\nNow they call my name in rooms I wasn't 'llowed,\nEvery bar a brick, built this house from doubt,\nPen game heavy, that's the only way I move about.",
+  "Verse 2": "",
+  "Bridge":  "",
+  "Outro":   "",
+};
 
 const penCoachActions = [
   { icon: Wand2, label: "Improve Bar" },
@@ -37,10 +46,11 @@ const penCoachActions = [
   { icon: Headphones, label: "Suggest Adlibs" },
 ];
 
+// Three studio environments
 const modes = [
-  { id: "midnight", label: "Midnight Session", icon: Moon },
-  { id: "producer", label: "Producer Room", icon: Lightbulb },
-  { id: "ghost", label: "Ghost Studio", icon: EyeOff },
+  { id: "midnight", label: "Midnight Session™", icon: Moon,     blurb: "After-hours pen. Low light. Smoke-thick." },
+  { id: "booth",    label: "Booth Mode™",       icon: Mic,      blurb: "Performance lens. Cadence-first. Mic warm." },
+  { id: "writers",  label: "Writer's Room™",    icon: BookOpen, blurb: "Daylight focus. Clean page. Collab energy." },
 ];
 
 const ambiance = [
