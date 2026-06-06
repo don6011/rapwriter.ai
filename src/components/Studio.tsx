@@ -448,27 +448,29 @@ export default function Studio() {
             </div>
           </div>
 
-          {/* HERO BEAT PLAYER */}
-          <HeroBeatPlayer
-            beat={beat}
-            playing={playing}
-            onToggle={() => {
-              if (!licensed && licenseState !== "licensed") {
-                requestLicense();
-                return;
-              }
-              setPlaying(!playing);
-            }}
-            fav={fav}
-            onFav={() => setFav(!fav)}
-            projects={projects}
-            activeProjectId={activeProject.id}
-            onAddToProject={(p) => setActiveProject(p)}
-            licenseState={licenseState}
-            licenseLabel={license ? `${license.license} · Cleared` : beat.license}
-            onRequestLicense={requestLicense}
-            licenseFlash={licenseFlash}
-          />
+          {/* HERO BEAT PLAYER — pinned just under the brand bar */}
+          <div className="sticky top-[88px] z-20">
+            <HeroBeatPlayer
+              beat={beat}
+              playing={playing}
+              onToggle={() => {
+                if (!licensed && licenseState !== "licensed") {
+                  requestLicense();
+                  return;
+                }
+                setPlaying(!playing);
+              }}
+              fav={fav}
+              onFav={() => setFav(!fav)}
+              projects={projects}
+              activeProjectId={activeProject.id}
+              onAddToProject={(p) => setActiveProject(p)}
+              licenseState={licenseState}
+              licenseLabel={license ? `${license.license} · Cleared` : beat.license}
+              onRequestLicense={requestLicense}
+              licenseFlash={licenseFlash}
+            />
+          </div>
 
 
           {/* Section tabs + writing pad */}
