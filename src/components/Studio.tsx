@@ -985,11 +985,11 @@ function SnapshotHistory() {
 }
 
 function AmbientLayer({ mode, ambiance }: { mode: string; ambiance: string }) {
-  const modeTint = mode === "producer"
-    ? "radial-gradient(ellipse at 50% 0%, rgba(232, 180, 74, 0.10), transparent 55%)"
-    : mode === "ghost"
-    ? "radial-gradient(ellipse at 50% 100%, rgba(180, 200, 220, 0.04), transparent 60%)"
-    : "radial-gradient(ellipse at 20% 0%, rgba(201, 168, 76, 0.06), transparent 50%), radial-gradient(ellipse at 80% 100%, rgba(125, 90, 200, 0.05), transparent 55%)";
+  const modeTint = mode === "booth"
+    ? "radial-gradient(ellipse at 50% 0%, rgba(232, 180, 74, 0.14), transparent 55%), radial-gradient(ellipse at 50% 100%, rgba(232,180,74,0.06), transparent 60%)"
+    : mode === "writers"
+    ? "radial-gradient(ellipse at 50% 0%, rgba(220, 220, 235, 0.06), transparent 65%)"
+    : "radial-gradient(ellipse at 20% 0%, rgba(201, 168, 76, 0.07), transparent 50%), radial-gradient(ellipse at 80% 100%, rgba(125, 90, 200, 0.06), transparent 55%)";
 
   return (
     <>
