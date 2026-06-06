@@ -686,11 +686,161 @@ export default function Studio() {
         onConfirm={confirmLicense}
         onClose={() => licenseState !== "purchasing" && setLicenseState(licensed ? "licensed" : "unlicensed")}
       />
+
+      {/* FULL SCREEN WRITING MODE */}
+      {fullscreen && (
+        <FullScreenWriter
+          beat={beat}
+          sectionContent={sectionContent}
+          onChange={(name, val) => setSectionContent(prev => ({ ...prev, [name]: val }))}
+          activeIndex={activeSection}
+          setActiveIndex={setActiveSection}
+          completionPct={completionPct}
+          boothScore={boothScore}
+          savingFlash={savingFlash}
+          lastSaved={lastSaved}
+          onClose={() => setFullscreen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ---------- Helpers ---------- */
+
+function formatAgo(ts: number) {
+  const diff = Math.max(0, Date.now() - ts);
+  if (diff < 5_000) return "just now";
+  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  return new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function MetricTile({ label, value, suffix, highlight, gold }: {
+  label: string; value: string; suffix?: string; highlight?: boolean; gold?: boolean;
+}) {
+  return (
+    <div className={cn(
+      "rounded-xl border px-3 py-2.5",
+      gold ? "border-gold/40 bg-gold/8"
+        : highlight ? "border-gold/25 bg-gold/5"
+        : "border-border bg-onyx-elev/60"
+    )}>
+      <div className="text-[9px] uppercase tracking-[0.25em] text-muted-foreground">{label}</div>
+      <div className="flex items-baseline gap-1 mt-1">
+        <span className={cn(
+          "font-display text-2xl leading-none",
+          gold || highlight ? "text-gold-gradient" : "text-foreground"
+        )}>{value}</span>
+        {suffix && <span className="text-[10px] text-muted-foreground">{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function FullScreenWriter({
+  beat, sectionContent, onChange, activeIndex, setActiveIndex,
+  completionPct, boothScore, savingFlash, lastSaved, onClose,
+}: {
+  beat: typeof currentBeat;
+  sectionContent: Record<string, string>;
+  onChange: (name: string, val: string) => void;
+  activeIndex: number;
+  setActiveIndex: (i: number) => void;
+  completionPct: number;
+  boothScore: number;
+  savingFlash: boolean;
+  lastSaved: number | null;
+  onClose: () => void;
+}) {
+  const section = SECTION_BLUEPRINT[activeIndex];
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-[70] bg-onyx animate-fade-in">
+      <div className="absolute inset-0 opacity-40 pointer-events-none"
+        style={{ background: "radial-gradient(ellipse at 50% -10%, rgba(201,168,76,0.18), transparent 60%)" }} />
+      <div className="absolute inset-0 opacity-[0.05] mix-blend-overlay pointer-events-none"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
+        }} />
+
+      <div className="relative h-full flex flex-col max-w-3xl mx-auto px-6 py-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] uppercase tracking-[0.35em] text-gold/80 flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-gold animate-pulse" />
+            Writing to <span className="text-foreground/90">{beat.title}</span>
+            <span className="text-muted-foreground"> · {beat.bpm} BPM · {beat.key}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-1.5">
+              <Save className={cn("h-3 w-3", savingFlash ? "text-gold animate-pulse" : "text-gold/60")} />
+              {savingFlash ? "Saving…" : lastSaved ? `Saved ${formatAgo(lastSaved)}` : "Draft"}
+            </span>
+            <button
+              onClick={onClose}
+              title="Exit Full Screen (Esc)"
+              className="p-2 rounded-lg border border-border text-muted-foreground hover:text-gold hover:border-gold/40"
+            >
+              <Minimize2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Section tabs */}
+        <div className="flex items-center gap-1 mt-6 overflow-x-auto">
+          {SECTION_BLUEPRINT.map((s, i) => {
+            const text = (sectionContent[s.name] ?? "").trim();
+            const bars = text ? text.split("\n").filter(l => l.trim()).length : 0;
+            return (
+              <button
+                key={s.name}
+                onClick={() => setActiveIndex(i)}
+                className={cn(
+                  "px-4 py-2 rounded-t-lg text-sm transition-all whitespace-nowrap border-b-2 flex items-center gap-2",
+                  activeIndex === i
+                    ? "text-gold border-gold bg-gold/5"
+                    : "text-muted-foreground border-transparent hover:text-foreground"
+                )}
+              >
+                {s.name}
+                <span className="text-[9px] tabular-nums text-muted-foreground/80">{bars}/{s.target}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Editor */}
+        <div className="flex-1 flex flex-col min-h-0 mt-6">
+          <div className="text-[10px] uppercase tracking-[0.3em] text-gold/70 mb-4">{section.name}</div>
+          <textarea
+            autoFocus
+            value={sectionContent[section.name] ?? ""}
+            onChange={(e) => onChange(section.name, e.target.value)}
+            placeholder="The page is yours…"
+            className="flex-1 w-full bg-transparent resize-none font-display text-2xl md:text-3xl leading-[1.7] text-foreground/95 outline-none placeholder:text-muted-foreground/40"
+          />
+        </div>
+
+        {/* Footer metrics */}
+        <div className="border-t border-border pt-4 mt-4 grid grid-cols-3 gap-3">
+          <MetricTile label="Song Completion" value={`${completionPct}%`} highlight />
+          <MetricTile label="Booth Ready Score™" value={`${boothScore}`} suffix="/100" gold />
+          <MetricTile label="Section Bars" value={String((sectionContent[section.name] ?? "").split("\n").filter(l => l.trim()).length)} />
+        </div>
+      </div>
     </div>
   );
 }
 
 /* ---------- Subcomponents ---------- */
+
+
 
 function ProjectArtwork({ project }: { project: typeof projects[number] }) {
   return (
