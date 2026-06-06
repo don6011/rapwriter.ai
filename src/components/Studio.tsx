@@ -480,6 +480,15 @@ export default function Studio() {
             />
           </div>
 
+          {/* SONG MISSION — directly beneath the beat */}
+          <SongMission
+            sectionContent={sectionContent}
+            completionPct={completionPct}
+            onJumpTo={(i) => setActiveSection(i)}
+            onFlowMode={() => setFullscreen(true)}
+          />
+
+
 
           {/* Section tabs + writing pad */}
           <div className="glass-panel rounded-2xl overflow-hidden">
