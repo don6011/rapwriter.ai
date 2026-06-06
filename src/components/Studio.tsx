@@ -474,73 +474,110 @@ export default function Studio() {
           {/* Section tabs + writing pad */}
           <div className="glass-panel rounded-2xl overflow-hidden">
             <div className="flex items-center gap-1 px-4 pt-4 overflow-x-auto">
-              {sections.map((s, i) => (
+              {SECTION_BLUEPRINT.map((s, i) => {
+                const content = (sectionContent[s.name] ?? "").trim();
+                const bars = content ? content.split("\n").filter(l => l.trim()).length : 0;
+                const full = bars >= s.target;
+                return (
+                  <button
+                    key={s.name}
+                    onClick={() => setActiveSection(i)}
+                    className={cn(
+                      "px-4 py-2 rounded-t-lg text-sm transition-all whitespace-nowrap border-b-2 flex items-center gap-2",
+                      activeSection === i
+                        ? "text-gold border-gold bg-gold/5"
+                        : "text-muted-foreground border-transparent hover:text-foreground"
+                    )}
+                  >
+                    <span>{s.name}</span>
+                    <span className={cn(
+                      "text-[9px] tabular-nums px-1.5 rounded-full",
+                      full ? "gold-seal text-onyx font-semibold" : "bg-onyx-elev text-muted-foreground"
+                    )}>{bars}/{s.target}</span>
+                  </button>
+                );
+              })}
+              <div className="ml-auto flex items-center gap-1">
+                <span className="hidden md:flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-muted-foreground px-2">
+                  <Save className={cn("h-3 w-3", savingFlash ? "text-gold animate-pulse" : "text-gold/60")} />
+                  {savingFlash ? "Saving…" : lastSaved ? `Saved ${formatAgo(lastSaved)}` : "Draft"}
+                </span>
                 <button
-                  key={s.name}
-                  onClick={() => setActiveSection(i)}
-                  className={cn(
-                    "px-4 py-2 rounded-t-lg text-sm transition-all whitespace-nowrap border-b-2",
-                    activeSection === i
-                      ? "text-gold border-gold bg-gold/5"
-                      : "text-muted-foreground border-transparent hover:text-foreground"
-                  )}
+                  onClick={() => setFullscreen(true)}
+                  title="Full Screen Writing"
+                  className="p-2 rounded-lg text-muted-foreground hover:text-gold hover:bg-gold/5"
                 >
-                  {s.name}
+                  <Maximize2 className="h-4 w-4" />
                 </button>
-              ))}
-              <button className="ml-auto p-2 text-muted-foreground hover:text-gold">
-                <Plus className="h-4 w-4" />
-              </button>
+              </div>
             </div>
 
             <div className="px-8 py-10 md:px-12 md:py-14 min-h-[420px] bg-gradient-to-b from-transparent to-onyx/40">
-              <div className="text-[10px] uppercase tracking-[0.3em] text-gold/70 mb-6">
-                {sections[activeSection].name}
+              <div className="flex items-center justify-between mb-6">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-gold/70">
+                  {SECTION_BLUEPRINT[activeSection].name}
+                </div>
+                <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                  Target {SECTION_BLUEPRINT[activeSection].target} bars
+                </div>
               </div>
-              <div
-                className="font-display text-2xl md:text-[28px] leading-[1.7] text-foreground/95 outline-none whitespace-pre-wrap"
-                contentEditable
-                suppressContentEditableWarning
-              >
-                {sections[activeSection].lines.join("\n") || "Tap to start writing…"}
-              </div>
+              <textarea
+                value={sectionContent[SECTION_BLUEPRINT[activeSection].name] ?? ""}
+                onChange={(e) => setSectionContent(prev => ({
+                  ...prev,
+                  [SECTION_BLUEPRINT[activeSection].name]: e.target.value,
+                }))}
+                placeholder="Tap to start writing…"
+                rows={10}
+                className="w-full bg-transparent resize-none font-display text-2xl md:text-[28px] leading-[1.7] text-foreground/95 outline-none placeholder:text-muted-foreground/50"
+              />
             </div>
 
             {/* Progress tracker */}
-            <div className="border-t border-border px-5 py-4 bg-onyx/60">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-                  Song Status
-                </div>
-                <button
-                  onClick={() => setBoothModalOpen(true)}
-                  className="text-[10px] uppercase tracking-[0.25em] text-gold hover:underline flex items-center gap-1"
-                >
-                  Preview Booth Ready™ <ArrowUpRight className="h-3 w-3" />
-                </button>
+            <div className="border-t border-border px-5 py-4 bg-onyx/60 space-y-4">
+              {/* Live metrics row */}
+              <div className="grid grid-cols-3 gap-3">
+                <MetricTile label="Song Completion" value={`${completionPct}%`} highlight />
+                <MetricTile label="Booth Ready Score™" value={`${boothScore}`} suffix="/100" gold />
+                <MetricTile label="Total Bars" value={`${totalBars}`} />
               </div>
-              <div className="flex items-center gap-2">
-                {states.map((s, i) => (
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                    Song Status
+                  </div>
                   <button
-                    key={s}
-                    onClick={() => { setSongState(i); if (i === 3) setBoothModalOpen(true); }}
-                    className="flex-1 group"
+                    onClick={() => setBoothModalOpen(true)}
+                    className="text-[10px] uppercase tracking-[0.25em] text-gold hover:underline flex items-center gap-1"
                   >
-                    <div className={cn(
-                      "h-1.5 rounded-full transition-all",
-                      i <= songState ? "bg-gradient-to-r from-gold-deep to-gold" : "bg-border"
-                    )} />
-                    <div className={cn(
-                      "text-[10px] uppercase tracking-[0.2em] mt-2 transition-colors",
-                      i === songState ? "text-gold" : "text-muted-foreground"
-                    )}>
-                      {s}{i === 3 && "™"}
-                    </div>
+                    Preview Booth Ready™ <ArrowUpRight className="h-3 w-3" />
                   </button>
-                ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  {states.map((s, i) => (
+                    <button
+                      key={s}
+                      onClick={() => { setSongState(i); if (i === 3) setBoothModalOpen(true); }}
+                      className="flex-1 group"
+                    >
+                      <div className={cn(
+                        "h-1.5 rounded-full transition-all",
+                        i <= songState ? "bg-gradient-to-r from-gold-deep to-gold" : "bg-border"
+                      )} />
+                      <div className={cn(
+                        "text-[10px] uppercase tracking-[0.2em] mt-2 transition-colors",
+                        i === songState ? "text-gold" : "text-muted-foreground"
+                      )}>
+                        {s}{i === 3 && "™"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
+
 
           {/* STUDIO SNAPSHOT HISTORY */}
           <SnapshotHistory />
