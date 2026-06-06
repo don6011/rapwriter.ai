@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { consumePendingBeat, type License } from "@/lib/marketplace-data";
@@ -9,7 +9,7 @@ import {
   ChevronRight, Plus, Headphones, Clock, Moon, Lightbulb, EyeOff,
   Coffee, CloudRain, Wind, Camera, ArrowUpRight, Disc, CheckCircle2, X,
   SkipBack, SkipForward, Shield, Share2, Download, FileText,
-  Mail, Copy, Music, Store, BadgeCheck
+  Mail, Copy, Music, Store, BadgeCheck, Maximize2, Minimize2, Save, Mic, BookOpen
 } from "lucide-react";
 
 const lockerItems = [
@@ -20,13 +20,22 @@ const lockerItems = [
   { icon: Award, label: "Booth Ready", count: 9, certified: true },
 ];
 
-const sections = [
-  { name: "Hook", lines: ["Diamonds dancin' on my neck, midnight on the strip,", "Engine purrin' soft and low, gold up on the grip —"] },
-  { name: "Verse 1", lines: ["Started from the back porch, momma prayin' loud,", "Now they call my name in rooms I wasn't 'llowed,", "Every bar a brick, built this house from doubt,", "Pen game heavy, that's the only way I move about."] },
-  { name: "Verse 2", lines: [""] },
-  { name: "Bridge", lines: [""] },
-  { name: "Outro", lines: [""] },
-];
+// Song section blueprint — order matters; target bars used for Completion %
+const SECTION_BLUEPRINT = [
+  { name: "Hook",    target: 8,  weight: 1.5 },
+  { name: "Verse 1", target: 16, weight: 1.2 },
+  { name: "Verse 2", target: 16, weight: 1.2 },
+  { name: "Bridge",  target: 8,  weight: 0.8 },
+  { name: "Outro",   target: 4,  weight: 0.6 },
+] as const;
+
+const SEED_CONTENT: Record<string, string> = {
+  "Hook":    "Diamonds dancin' on my neck, midnight on the strip,\nEngine purrin' soft and low, gold up on the grip —",
+  "Verse 1": "Started from the back porch, momma prayin' loud,\nNow they call my name in rooms I wasn't 'llowed,\nEvery bar a brick, built this house from doubt,\nPen game heavy, that's the only way I move about.",
+  "Verse 2": "",
+  "Bridge":  "",
+  "Outro":   "",
+};
 
 const penCoachActions = [
   { icon: Wand2, label: "Improve Bar" },
@@ -37,10 +46,11 @@ const penCoachActions = [
   { icon: Headphones, label: "Suggest Adlibs" },
 ];
 
+// Three studio environments
 const modes = [
-  { id: "midnight", label: "Midnight Session", icon: Moon },
-  { id: "producer", label: "Producer Room", icon: Lightbulb },
-  { id: "ghost", label: "Ghost Studio", icon: EyeOff },
+  { id: "midnight", label: "Midnight Session™", icon: Moon,     blurb: "After-hours pen. Low light. Smoke-thick." },
+  { id: "booth",    label: "Booth Mode™",       icon: Mic,      blurb: "Performance lens. Cadence-first. Mic warm." },
+  { id: "writers",  label: "Writer's Room™",    icon: BookOpen, blurb: "Daylight focus. Clean page. Collab energy." },
 ];
 
 const ambiance = [
@@ -115,6 +125,82 @@ export default function Studio() {
   const [boothModalOpen, setBoothModalOpen] = useState(false);
   const [loadedBeat, setLoadedBeat] = useState<typeof currentBeat | null>(null);
   const [handoffNotice, setHandoffNotice] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  // -------- Draft / Autosave --------
+  const [sectionContent, setSectionContent] = useState<Record<string, string>>(SEED_CONTENT);
+  const [lastSaved, setLastSaved] = useState<number | null>(null);
+  const [savingFlash, setSavingFlash] = useState(false);
+  const draftKey = `rapwriter:draft:${activeProject.id}`;
+
+  // Load draft when project switches
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { sections: Record<string, string>; savedAt: number };
+        setSectionContent({ ...SEED_CONTENT, ...parsed.sections });
+        setLastSaved(parsed.savedAt);
+      } else {
+        setSectionContent(SEED_CONTENT);
+        setLastSaved(null);
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject.id]);
+
+  // Debounced autosave
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const savedAt = Date.now();
+      localStorage.setItem(draftKey, JSON.stringify({ sections: sectionContent, savedAt }));
+      setLastSaved(savedAt);
+      setSavingFlash(true);
+      const t = setTimeout(() => setSavingFlash(false), 900);
+      return () => clearTimeout(t);
+    }, 600);
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  }, [sectionContent, draftKey]);
+
+  // -------- Live Completion % + Booth Ready Score™ --------
+  const { completionPct, boothScore, totalBars } = useMemo(() => {
+    let weightedDone = 0;
+    let weightedTotal = 0;
+    let bars = 0;
+    let hookLines = 0;
+    let densitySum = 0;
+    let densityCount = 0;
+    for (const s of SECTION_BLUEPRINT) {
+      const text = (sectionContent[s.name] ?? "").trim();
+      const lines = text ? text.split("\n").filter(l => l.trim().length > 0) : [];
+      const bar = lines.length;
+      bars += bar;
+      if (s.name === "Hook") hookLines = bar;
+      const done = Math.min(bar, s.target);
+      weightedDone += (done / s.target) * s.weight;
+      weightedTotal += s.weight;
+      const avgLen = lines.length ? lines.reduce((a, l) => a + l.length, 0) / lines.length : 0;
+      if (lines.length) { densitySum += Math.min(avgLen / 48, 1); densityCount++; }
+    }
+    const pct = Math.round((weightedDone / weightedTotal) * 100);
+    const density = densityCount ? densitySum / densityCount : 0;
+    const hookBonus = hookLines >= 4 ? 1 : hookLines / 4;
+    const score = Math.max(0, Math.min(100, Math.round(pct * 0.7 + density * 100 * 0.2 + hookBonus * 100 * 0.1)));
+    return { completionPct: pct, boothScore: score, totalBars: bars };
+  }, [sectionContent]);
+
+  // Auto-bump song state based on completion
+  useEffect(() => {
+    if (completionPct >= 95 && songState < 3) setSongState(3);
+    else if (completionPct >= 65 && songState < 2) setSongState(2);
+    else if (completionPct >= 20 && songState < 1) setSongState(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completionPct]);
+
 
   // Marketplace → Ghost Studio handoff
   useEffect(() => {
@@ -362,99 +448,138 @@ export default function Studio() {
             </div>
           </div>
 
-          {/* HERO BEAT PLAYER */}
-          <HeroBeatPlayer
-            beat={beat}
-            playing={playing}
-            onToggle={() => {
-              if (!licensed && licenseState !== "licensed") {
-                requestLicense();
-                return;
-              }
-              setPlaying(!playing);
-            }}
-            fav={fav}
-            onFav={() => setFav(!fav)}
-            projects={projects}
-            activeProjectId={activeProject.id}
-            onAddToProject={(p) => setActiveProject(p)}
-            licenseState={licenseState}
-            licenseLabel={license ? `${license.license} · Cleared` : beat.license}
-            onRequestLicense={requestLicense}
-            licenseFlash={licenseFlash}
-          />
+          {/* HERO BEAT PLAYER — pinned just under the brand bar */}
+          <div className="sticky top-[88px] z-20">
+            <HeroBeatPlayer
+              beat={beat}
+              playing={playing}
+              onToggle={() => {
+                if (!licensed && licenseState !== "licensed") {
+                  requestLicense();
+                  return;
+                }
+                setPlaying(!playing);
+              }}
+              fav={fav}
+              onFav={() => setFav(!fav)}
+              projects={projects}
+              activeProjectId={activeProject.id}
+              onAddToProject={(p) => setActiveProject(p)}
+              licenseState={licenseState}
+              licenseLabel={license ? `${license.license} · Cleared` : beat.license}
+              onRequestLicense={requestLicense}
+              licenseFlash={licenseFlash}
+            />
+          </div>
 
 
           {/* Section tabs + writing pad */}
           <div className="glass-panel rounded-2xl overflow-hidden">
             <div className="flex items-center gap-1 px-4 pt-4 overflow-x-auto">
-              {sections.map((s, i) => (
+              {SECTION_BLUEPRINT.map((s, i) => {
+                const content = (sectionContent[s.name] ?? "").trim();
+                const bars = content ? content.split("\n").filter(l => l.trim()).length : 0;
+                const full = bars >= s.target;
+                return (
+                  <button
+                    key={s.name}
+                    onClick={() => setActiveSection(i)}
+                    className={cn(
+                      "px-4 py-2 rounded-t-lg text-sm transition-all whitespace-nowrap border-b-2 flex items-center gap-2",
+                      activeSection === i
+                        ? "text-gold border-gold bg-gold/5"
+                        : "text-muted-foreground border-transparent hover:text-foreground"
+                    )}
+                  >
+                    <span>{s.name}</span>
+                    <span className={cn(
+                      "text-[9px] tabular-nums px-1.5 rounded-full",
+                      full ? "gold-seal text-onyx font-semibold" : "bg-onyx-elev text-muted-foreground"
+                    )}>{bars}/{s.target}</span>
+                  </button>
+                );
+              })}
+              <div className="ml-auto flex items-center gap-1">
+                <span className="hidden md:flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-muted-foreground px-2">
+                  <Save className={cn("h-3 w-3", savingFlash ? "text-gold animate-pulse" : "text-gold/60")} />
+                  {savingFlash ? "Saving…" : lastSaved ? `Saved ${formatAgo(lastSaved)}` : "Draft"}
+                </span>
                 <button
-                  key={s.name}
-                  onClick={() => setActiveSection(i)}
-                  className={cn(
-                    "px-4 py-2 rounded-t-lg text-sm transition-all whitespace-nowrap border-b-2",
-                    activeSection === i
-                      ? "text-gold border-gold bg-gold/5"
-                      : "text-muted-foreground border-transparent hover:text-foreground"
-                  )}
+                  onClick={() => setFullscreen(true)}
+                  title="Full Screen Writing"
+                  className="p-2 rounded-lg text-muted-foreground hover:text-gold hover:bg-gold/5"
                 >
-                  {s.name}
+                  <Maximize2 className="h-4 w-4" />
                 </button>
-              ))}
-              <button className="ml-auto p-2 text-muted-foreground hover:text-gold">
-                <Plus className="h-4 w-4" />
-              </button>
+              </div>
             </div>
 
             <div className="px-8 py-10 md:px-12 md:py-14 min-h-[420px] bg-gradient-to-b from-transparent to-onyx/40">
-              <div className="text-[10px] uppercase tracking-[0.3em] text-gold/70 mb-6">
-                {sections[activeSection].name}
+              <div className="flex items-center justify-between mb-6">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-gold/70">
+                  {SECTION_BLUEPRINT[activeSection].name}
+                </div>
+                <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                  Target {SECTION_BLUEPRINT[activeSection].target} bars
+                </div>
               </div>
-              <div
-                className="font-display text-2xl md:text-[28px] leading-[1.7] text-foreground/95 outline-none whitespace-pre-wrap"
-                contentEditable
-                suppressContentEditableWarning
-              >
-                {sections[activeSection].lines.join("\n") || "Tap to start writing…"}
-              </div>
+              <textarea
+                value={sectionContent[SECTION_BLUEPRINT[activeSection].name] ?? ""}
+                onChange={(e) => setSectionContent(prev => ({
+                  ...prev,
+                  [SECTION_BLUEPRINT[activeSection].name]: e.target.value,
+                }))}
+                placeholder="Tap to start writing…"
+                rows={10}
+                className="w-full bg-transparent resize-none font-display text-2xl md:text-[28px] leading-[1.7] text-foreground/95 outline-none placeholder:text-muted-foreground/50"
+              />
             </div>
 
             {/* Progress tracker */}
-            <div className="border-t border-border px-5 py-4 bg-onyx/60">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-                  Song Status
-                </div>
-                <button
-                  onClick={() => setBoothModalOpen(true)}
-                  className="text-[10px] uppercase tracking-[0.25em] text-gold hover:underline flex items-center gap-1"
-                >
-                  Preview Booth Ready™ <ArrowUpRight className="h-3 w-3" />
-                </button>
+            <div className="border-t border-border px-5 py-4 bg-onyx/60 space-y-4">
+              {/* Live metrics row */}
+              <div className="grid grid-cols-3 gap-3">
+                <MetricTile label="Song Completion" value={`${completionPct}%`} highlight />
+                <MetricTile label="Booth Ready Score™" value={`${boothScore}`} suffix="/100" gold />
+                <MetricTile label="Total Bars" value={`${totalBars}`} />
               </div>
-              <div className="flex items-center gap-2">
-                {states.map((s, i) => (
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                    Song Status
+                  </div>
                   <button
-                    key={s}
-                    onClick={() => { setSongState(i); if (i === 3) setBoothModalOpen(true); }}
-                    className="flex-1 group"
+                    onClick={() => setBoothModalOpen(true)}
+                    className="text-[10px] uppercase tracking-[0.25em] text-gold hover:underline flex items-center gap-1"
                   >
-                    <div className={cn(
-                      "h-1.5 rounded-full transition-all",
-                      i <= songState ? "bg-gradient-to-r from-gold-deep to-gold" : "bg-border"
-                    )} />
-                    <div className={cn(
-                      "text-[10px] uppercase tracking-[0.2em] mt-2 transition-colors",
-                      i === songState ? "text-gold" : "text-muted-foreground"
-                    )}>
-                      {s}{i === 3 && "™"}
-                    </div>
+                    Preview Booth Ready™ <ArrowUpRight className="h-3 w-3" />
                   </button>
-                ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  {states.map((s, i) => (
+                    <button
+                      key={s}
+                      onClick={() => { setSongState(i); if (i === 3) setBoothModalOpen(true); }}
+                      className="flex-1 group"
+                    >
+                      <div className={cn(
+                        "h-1.5 rounded-full transition-all",
+                        i <= songState ? "bg-gradient-to-r from-gold-deep to-gold" : "bg-border"
+                      )} />
+                      <div className={cn(
+                        "text-[10px] uppercase tracking-[0.2em] mt-2 transition-colors",
+                        i === songState ? "text-gold" : "text-muted-foreground"
+                      )}>
+                        {s}{i === 3 && "™"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
+
 
           {/* STUDIO SNAPSHOT HISTORY */}
           <SnapshotHistory />
@@ -561,11 +686,161 @@ export default function Studio() {
         onConfirm={confirmLicense}
         onClose={() => licenseState !== "purchasing" && setLicenseState(licensed ? "licensed" : "unlicensed")}
       />
+
+      {/* FULL SCREEN WRITING MODE */}
+      {fullscreen && (
+        <FullScreenWriter
+          beat={beat}
+          sectionContent={sectionContent}
+          onChange={(name, val) => setSectionContent(prev => ({ ...prev, [name]: val }))}
+          activeIndex={activeSection}
+          setActiveIndex={setActiveSection}
+          completionPct={completionPct}
+          boothScore={boothScore}
+          savingFlash={savingFlash}
+          lastSaved={lastSaved}
+          onClose={() => setFullscreen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ---------- Helpers ---------- */
+
+function formatAgo(ts: number) {
+  const diff = Math.max(0, Date.now() - ts);
+  if (diff < 5_000) return "just now";
+  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  return new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function MetricTile({ label, value, suffix, highlight, gold }: {
+  label: string; value: string; suffix?: string; highlight?: boolean; gold?: boolean;
+}) {
+  return (
+    <div className={cn(
+      "rounded-xl border px-3 py-2.5",
+      gold ? "border-gold/40 bg-gold/8"
+        : highlight ? "border-gold/25 bg-gold/5"
+        : "border-border bg-onyx-elev/60"
+    )}>
+      <div className="text-[9px] uppercase tracking-[0.25em] text-muted-foreground">{label}</div>
+      <div className="flex items-baseline gap-1 mt-1">
+        <span className={cn(
+          "font-display text-2xl leading-none",
+          gold || highlight ? "text-gold-gradient" : "text-foreground"
+        )}>{value}</span>
+        {suffix && <span className="text-[10px] text-muted-foreground">{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function FullScreenWriter({
+  beat, sectionContent, onChange, activeIndex, setActiveIndex,
+  completionPct, boothScore, savingFlash, lastSaved, onClose,
+}: {
+  beat: typeof currentBeat;
+  sectionContent: Record<string, string>;
+  onChange: (name: string, val: string) => void;
+  activeIndex: number;
+  setActiveIndex: (i: number) => void;
+  completionPct: number;
+  boothScore: number;
+  savingFlash: boolean;
+  lastSaved: number | null;
+  onClose: () => void;
+}) {
+  const section = SECTION_BLUEPRINT[activeIndex];
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-[70] bg-onyx animate-fade-in">
+      <div className="absolute inset-0 opacity-40 pointer-events-none"
+        style={{ background: "radial-gradient(ellipse at 50% -10%, rgba(201,168,76,0.18), transparent 60%)" }} />
+      <div className="absolute inset-0 opacity-[0.05] mix-blend-overlay pointer-events-none"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
+        }} />
+
+      <div className="relative h-full flex flex-col max-w-3xl mx-auto px-6 py-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] uppercase tracking-[0.35em] text-gold/80 flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-gold animate-pulse" />
+            Writing to <span className="text-foreground/90">{beat.title}</span>
+            <span className="text-muted-foreground"> · {beat.bpm} BPM · {beat.key}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-1.5">
+              <Save className={cn("h-3 w-3", savingFlash ? "text-gold animate-pulse" : "text-gold/60")} />
+              {savingFlash ? "Saving…" : lastSaved ? `Saved ${formatAgo(lastSaved)}` : "Draft"}
+            </span>
+            <button
+              onClick={onClose}
+              title="Exit Full Screen (Esc)"
+              className="p-2 rounded-lg border border-border text-muted-foreground hover:text-gold hover:border-gold/40"
+            >
+              <Minimize2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Section tabs */}
+        <div className="flex items-center gap-1 mt-6 overflow-x-auto">
+          {SECTION_BLUEPRINT.map((s, i) => {
+            const text = (sectionContent[s.name] ?? "").trim();
+            const bars = text ? text.split("\n").filter(l => l.trim()).length : 0;
+            return (
+              <button
+                key={s.name}
+                onClick={() => setActiveIndex(i)}
+                className={cn(
+                  "px-4 py-2 rounded-t-lg text-sm transition-all whitespace-nowrap border-b-2 flex items-center gap-2",
+                  activeIndex === i
+                    ? "text-gold border-gold bg-gold/5"
+                    : "text-muted-foreground border-transparent hover:text-foreground"
+                )}
+              >
+                {s.name}
+                <span className="text-[9px] tabular-nums text-muted-foreground/80">{bars}/{s.target}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Editor */}
+        <div className="flex-1 flex flex-col min-h-0 mt-6">
+          <div className="text-[10px] uppercase tracking-[0.3em] text-gold/70 mb-4">{section.name}</div>
+          <textarea
+            autoFocus
+            value={sectionContent[section.name] ?? ""}
+            onChange={(e) => onChange(section.name, e.target.value)}
+            placeholder="The page is yours…"
+            className="flex-1 w-full bg-transparent resize-none font-display text-2xl md:text-3xl leading-[1.7] text-foreground/95 outline-none placeholder:text-muted-foreground/40"
+          />
+        </div>
+
+        {/* Footer metrics */}
+        <div className="border-t border-border pt-4 mt-4 grid grid-cols-3 gap-3">
+          <MetricTile label="Song Completion" value={`${completionPct}%`} highlight />
+          <MetricTile label="Booth Ready Score™" value={`${boothScore}`} suffix="/100" gold />
+          <MetricTile label="Section Bars" value={String((sectionContent[section.name] ?? "").split("\n").filter(l => l.trim()).length)} />
+        </div>
+      </div>
     </div>
   );
 }
 
 /* ---------- Subcomponents ---------- */
+
+
 
 function ProjectArtwork({ project }: { project: typeof projects[number] }) {
   return (
@@ -710,11 +985,11 @@ function SnapshotHistory() {
 }
 
 function AmbientLayer({ mode, ambiance }: { mode: string; ambiance: string }) {
-  const modeTint = mode === "producer"
-    ? "radial-gradient(ellipse at 50% 0%, rgba(232, 180, 74, 0.10), transparent 55%)"
-    : mode === "ghost"
-    ? "radial-gradient(ellipse at 50% 100%, rgba(180, 200, 220, 0.04), transparent 60%)"
-    : "radial-gradient(ellipse at 20% 0%, rgba(201, 168, 76, 0.06), transparent 50%), radial-gradient(ellipse at 80% 100%, rgba(125, 90, 200, 0.05), transparent 55%)";
+  const modeTint = mode === "booth"
+    ? "radial-gradient(ellipse at 50% 0%, rgba(232, 180, 74, 0.14), transparent 55%), radial-gradient(ellipse at 50% 100%, rgba(232,180,74,0.06), transparent 60%)"
+    : mode === "writers"
+    ? "radial-gradient(ellipse at 50% 0%, rgba(220, 220, 235, 0.06), transparent 65%)"
+    : "radial-gradient(ellipse at 20% 0%, rgba(201, 168, 76, 0.07), transparent 50%), radial-gradient(ellipse at 80% 100%, rgba(125, 90, 200, 0.06), transparent 55%)";
 
   return (
     <>
