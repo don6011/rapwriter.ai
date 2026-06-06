@@ -604,51 +604,21 @@ export default function Studio() {
 
         {/* RIGHT SIDEBAR */}
         <aside className="col-span-12 xl:col-span-3 space-y-4">
-          {/* Pen Coach */}
-          <div className="glass-panel rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-1">
-              <Sparkles className="h-4 w-4 text-gold" />
-              <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                Pen Coach™
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground mb-5">
-              Your assistant. The pen stays in <span className="text-foreground">your</span> hand.
-            </p>
+          {/* Producer Notes™ — replaces generic Pen Coach actions */}
+          <ProducerNotesPanel
+            sectionContent={sectionContent}
+            completionPct={completionPct}
+            boothScore={boothScore}
+          />
 
-            <div className="grid grid-cols-2 gap-2">
-              {penCoachActions.map((a) => {
-                const Icon = a.icon;
-                return (
-                  <button
-                    key={a.label}
-                    className="group flex flex-col items-start gap-2 p-3 rounded-xl bg-onyx-elev border border-border hover:border-gold/40 hover:bg-gold/5 transition-all text-left"
-                  >
-                    <Icon className="h-4 w-4 text-gold" />
-                    <span className="text-xs leading-tight text-foreground/90 group-hover:text-foreground">
-                      {a.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+          {/* Booth Ready Engine™ */}
+          <BoothReadyEngine
+            sectionContent={sectionContent}
+            completionPct={completionPct}
+            boothScore={boothScore}
+            onCertify={() => setBoothModalOpen(true)}
+          />
 
-            <div className="hairline my-5" />
-
-            <div className="space-y-3">
-              <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-                Coach Suggestion
-              </div>
-              <div className="text-sm text-foreground/90 italic leading-relaxed border-l-2 border-gold/60 pl-3">
-                "Diamonds dancin'" lands soft — try a harder consonant to match the
-                beat's 808. Consider <span className="text-gold not-italic">"flashin'"</span> or
-                <span className="text-gold not-italic"> "bangin'"</span>.
-              </div>
-              <button className="text-xs text-gold flex items-center gap-1 hover:gap-2 transition-all">
-                Apply suggestion <ChevronRight className="h-3 w-3" />
-              </button>
-            </div>
-          </div>
 
           {/* Ambiance panel */}
           <div className="glass-panel rounded-2xl p-5">
