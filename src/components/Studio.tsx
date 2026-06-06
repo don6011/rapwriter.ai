@@ -217,12 +217,16 @@ export default function Studio() {
         bpm: b.bpm,
         key: b.key,
         mood: b.mood,
+        genre: (b as { genre?: string }).genre ?? "Trap",
+        region: (b as { region?: string }).region ?? "—",
+        tags: (b as { emotionalTags?: string[] }).emotionalTags ?? [b.mood],
         duration: b.duration,
         position: "0:00",
         license: `${b.prices[0].license} · Loaded from Marketplace`,
         tag: b.tag ?? "RW-MKT",
         prices: b.prices,
       });
+
       setSongState(0);
       setActiveSection(0);
       setPlaying(true);
