@@ -548,10 +548,6 @@ export default function Marketplace() {
 
   useEffect(() => { setPurchases(getPurchases().length); }, []);
 
-  const trending = beats.slice(0, 8);
-  const featured = producers[0];
-  const featuredPack = beatPacks[1];
-
   const togglePlay = (id: string) => setPlayingId(prev => (prev === id ? null : id));
 
   const handleBuyBeat = (b: Beat) => {
@@ -573,13 +569,7 @@ export default function Marketplace() {
     navigate({ to: "/" });
   };
 
-  // Top 4 by boothReadyScore — the Booth Ready™ Beats shelf
-  const boothReadyBeats = [...beats].sort((a, b) => b.boothReadyScore - a.boothReadyScore).slice(0, 4);
   const totalWritingNow = beats.reduce((s, b) => s + b.writingNow, 0);
-
-  // For Start With A Beat™ — surface a recommended starter
-  const starter = boothReadyBeats[0];
-
   const beatById = (id: string) => beats.find(b => b.id === id);
 
   return (
