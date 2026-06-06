@@ -586,130 +586,36 @@ export default function Marketplace() {
     <div className="min-h-screen w-full text-foreground relative">
       <MarketHeader purchases={purchases} />
 
-      <div className="px-4 md:px-6 lg:px-10 py-6 md:py-8 space-y-12 max-w-[1600px] mx-auto">
-        {/* HERO */}
-        <FeaturedProducerHero
-          producer={featured}
-          featuredPack={featuredPack}
-          onBuyPack={() => handleBuyPack(featuredPack)}
-          onPreview={() => togglePlay(trending[0].id)}
-        />
-
-        {/* START WITH A BEAT™ — discovery CTA */}
-        <StartWithABeatCTA
-          beat={starter}
+      <div className="px-4 md:px-6 lg:px-10 py-6 md:py-8 space-y-14 max-w-[1600px] mx-auto">
+        {/* SECTION 1 — START WITH A BEAT™ (Mood Hero) */}
+        <StartWithABeatHero
+          allBeats={beats}
           totalWritingNow={totalWritingNow}
-          onStart={() => handleWriteToBeat(starter)}
-          onPreview={() => togglePlay(starter.id)}
+          onStartWriting={(b) => handleWriteToBeat(b)}
+          onPreview={(id) => togglePlay(id)}
+          playingId={playingId}
         />
 
-        {/* BOOTH READY BEATS™ — above Trending */}
-        <section>
-          <SectionHeader
-            icon={Trophy}
-            eyebrow="Highest Finish Rates · This Week"
-            title="Booth Ready Beats™"
-            action="See All"
-          />
-          <p className="text-xs md:text-sm text-muted-foreground -mt-3 mb-5 max-w-2xl">
-            Beats with the highest <span className="text-gold">Booth Ready Score™</span>, Song Completion Rate™, and Tracks Finished™. The beats other rappers actually finish songs on.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {boothReadyBeats.map(b => (
-              <TrendingBeatCard
-                key={b.id}
-                beat={b}
-                playing={playingId === b.id}
-                onPreview={() => togglePlay(b.id)}
-                onBuy={() => handleBuyBeat(b)}
-                onWrite={() => handleWriteToBeat(b)}
-                variant="booth"
-              />
-            ))}
-          </div>
-        </section>
-
-        {/* RECENTLY WRITTEN TO — live writing activity */}
-        <RecentlyWrittenTo
+        {/* SECTION 2 — TRENDING IN THE STUDIO™ (merged) */}
+        <TrendingInTheStudio
           beatById={beatById}
-          onWrite={(id) => { const b = beatById(id); if (b) handleWriteToBeat(b); }}
+          playingId={playingId}
+          onPreview={togglePlay}
+          onBuy={handleBuyBeat}
+          onWrite={handleWriteToBeat}
         />
 
-        {/* EMOTIONAL TAG CHIPS */}
-        <section>
-          <SectionHeader icon={Heart} eyebrow="Write From The Feeling" title="What Are You Writing About?" />
-          <div className="flex flex-wrap gap-2">
-            {emotionalTagList.map(tag => (
-              <button
-                key={tag}
-                className="px-4 py-2.5 rounded-full border border-gold/25 bg-gold/5 hover:bg-gold/15 hover:border-gold/50 text-sm text-gold/90 transition-all"
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
-        </section>
+        {/* SECTION 3 — MARKETPLACE (tabbed) */}
+        <MarketplaceTabs
+          playingId={playingId}
+          onPreview={togglePlay}
+          onBuy={handleBuyBeat}
+          onBuyPack={handleBuyPack}
+          onWrite={handleWriteToBeat}
+        />
 
-        {/* TRENDING */}
-        <section>
-          <SectionHeader icon={TrendingUp} eyebrow="What's Moving" title="Trending Beats" action="See All" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {trending.map(b => (
-              <TrendingBeatCard
-                key={b.id}
-                beat={b}
-                playing={playingId === b.id}
-                onPreview={() => togglePlay(b.id)}
-                onBuy={() => handleBuyBeat(b)}
-                onWrite={() => handleWriteToBeat(b)}
-              />
-            ))}
-          </div>
-        </section>
-
-        {/* BEAT PACKS */}
-        <section>
-          <SectionHeader icon={Disc3} eyebrow="Curated Collections" title="Beat Packs" action="Browse All" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {beatPacks.map(p => <PackCard key={p.id} pack={p} onBuy={() => handleBuyPack(p)} />)}
-          </div>
-        </section>
-
-        {/* REGIONAL */}
-        <section>
-          <SectionHeader icon={MapPin} eyebrow="Sounds of the City" title="Regional Collections" />
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-            {regions.map(r => (
-              <CollectionTile key={r.id} art={r.art} glyph={r.glyph} name={r.name} sub={`${r.count} beats`} />
-            ))}
-          </div>
-        </section>
-
-        {/* MOODS */}
-        <section>
-          <SectionHeader icon={Flame} eyebrow="Write From The Feeling" title="Mood Collections" />
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-            {moods.map(m => (
-              <CollectionTile key={m.id} art={m.art} glyph={m.glyph} name={m.name} sub={`${m.count} beats`} />
-            ))}
-          </div>
-        </section>
-
-        {/* PRODUCER STOREFRONTS™ — expanded */}
-        <section>
-          <SectionHeader icon={BadgeCheck} eyebrow="The House Roster" title="Producer Storefronts™" action="View Roster" />
-          <div className="space-y-6">
-            {producers.map(p => (
-              <ProducerStorefront
-                key={p.id}
-                producer={p}
-                onPreview={togglePlay}
-                onWrite={handleWriteToBeat}
-                playingId={playingId}
-              />
-            ))}
-          </div>
-        </section>
+        {/* SECTION 4 — PRODUCER NETWORK™ (horizontal carousel) */}
+        <ProducerNetwork />
 
         {/* Footer note */}
         <section className="glass-panel rounded-2xl p-5 md:p-7 flex flex-wrap items-center justify-between gap-4">
@@ -735,6 +641,380 @@ export default function Marketplace() {
 
       {toast && <PurchaseToast msg={toast} />}
     </div>
+  );
+}
+
+// ============================================================
+// SECTION 1 — Start With A Beat™ (mood-driven hero)
+// ============================================================
+const MOOD_CHIPS: { label: string; tag: string }[] = [
+  { label: "Pain", tag: "Pain" },
+  { label: "Victory", tag: "Victory" },
+  { label: "Street", tag: "Street" },
+  { label: "Love", tag: "Love" },
+  { label: "Club", tag: "Club" },
+  { label: "Hustle", tag: "Hustle" },
+  { label: "Storytelling", tag: "Storytelling" },
+];
+
+function StartWithABeatHero({
+  allBeats, totalWritingNow, onStartWriting, onPreview, playingId,
+}: {
+  allBeats: Beat[];
+  totalWritingNow: number;
+  onStartWriting: (b: Beat) => void;
+  onPreview: (id: string) => void;
+  playingId: string | null;
+}) {
+  const [mood, setMood] = useState<string>("Pain");
+
+  const recommended = useMemo(() => {
+    const filtered = allBeats.filter(b =>
+      b.emotionalTags.some(t => t === mood) || b.tags.includes(mood)
+    );
+    const pool = filtered.length ? filtered : allBeats;
+    return [...pool].sort((a, b) => b.boothReadyScore - a.boothReadyScore).slice(0, 3);
+  }, [mood, allBeats]);
+
+  const hero = recommended[0];
+
+  return (
+    <section className="relative rounded-3xl overflow-hidden border border-gold/30 shadow-[0_30px_80px_-40px_rgba(201,168,76,0.5)]">
+      <div className="absolute inset-0 transition-all duration-700" style={{ background: hero.art }} />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(201,168,76,0.28),transparent_60%)]" />
+      <div className="absolute inset-0 bg-gradient-to-r from-onyx via-onyx/85 to-onyx/30" />
+      <div className="absolute inset-0 mix-blend-overlay opacity-20"
+           style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 1px, transparent 1px 8px)" }} />
+
+      <div className="relative px-6 md:px-10 py-10 md:py-14 grid lg:grid-cols-[1fr_auto] gap-10 items-center">
+        <div className="max-w-2xl">
+          <div className="flex items-center gap-2 mb-5">
+            <Compass className="h-3.5 w-3.5 text-gold" />
+            <span className="text-[10px] uppercase tracking-[0.4em] text-gold/90">Start With A Beat™</span>
+          </div>
+          <h1 className="font-display text-4xl md:text-6xl leading-[0.95] text-gold-gradient">
+            What are you writing tonight?
+          </h1>
+          <p className="text-foreground/85 text-sm md:text-base mt-4 leading-relaxed max-w-xl">
+            Pick a feeling. We'll cue the right beat and open a fresh session in Ghost Studio™. No purchase needed to write — license when you take it to the booth.
+          </p>
+
+          {/* Mood chips */}
+          <div className="flex flex-wrap gap-2 mt-6">
+            {MOOD_CHIPS.map(c => {
+              const active = mood === c.tag;
+              return (
+                <button
+                  key={c.tag}
+                  onClick={() => setMood(c.tag)}
+                  className={cn(
+                    "px-4 py-2 rounded-full text-sm border transition-all",
+                    active
+                      ? "gold-seal text-onyx border-transparent font-semibold shadow-[0_8px_24px_-10px_rgba(201,168,76,0.7)]"
+                      : "border-gold/25 bg-gold/5 hover:bg-gold/15 hover:border-gold/50 text-gold/90"
+                  )}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* CTAs */}
+          <div className="flex flex-wrap items-center gap-3 mt-7">
+            <button
+              onClick={() => onStartWriting(hero)}
+              className="px-6 py-3.5 rounded-xl gold-seal text-onyx font-semibold flex items-center gap-2 shadow-[0_15px_40px_-12px_rgba(201,168,76,0.8)] hover:scale-[1.02] transition-transform"
+            >
+              <PenLine className="h-4 w-4" /> Start Writing™
+            </button>
+            <button
+              onClick={() => onPreview(hero.id)}
+              className="px-4 py-3 rounded-xl border border-gold/40 text-gold hover:bg-gold/10 text-sm flex items-center gap-2"
+            >
+              {playingId === hero.id ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+              Preview Beat
+            </button>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-gold opacity-75 animate-ping" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-gold" />
+              </span>
+              <span className="tabular-nums text-foreground/90 font-medium">{totalWritingNow}</span>
+              rappers writing right now
+            </div>
+          </div>
+        </div>
+
+        {/* Recommendation rail */}
+        <div className="glass-panel rounded-2xl p-4 w-full lg:w-[340px] shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+              Recommended for <span className="text-gold">{mood}</span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {recommended.map((b, i) => (
+              <button
+                key={b.id}
+                onClick={() => onStartWriting(b)}
+                className={cn(
+                  "w-full flex items-center gap-3 p-2 rounded-xl border text-left transition-all",
+                  i === 0
+                    ? "border-gold/40 bg-gold/5 hover:bg-gold/10"
+                    : "border-border hover:border-gold/30 hover:bg-onyx-elev/40"
+                )}
+              >
+                <div className="h-12 w-12 rounded-lg overflow-hidden shrink-0">
+                  <ArtTile art={b.art} glyph={b.glyph} className="w-full h-full" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-display text-sm leading-tight truncate">{b.title}</div>
+                  <div className="text-[10px] text-muted-foreground truncate">
+                    {b.producer} · {b.bpm} BPM · {b.key}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-display text-sm text-gold-gradient leading-none">{b.boothReadyScore}</div>
+                  <div className="text-[8px] uppercase tracking-[0.2em] text-muted-foreground mt-1">Booth</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
+// SECTION 2 — Trending In The Studio™ (merged shelf)
+// ============================================================
+function TrendingInTheStudio({
+  beatById, playingId, onPreview, onBuy, onWrite,
+}: {
+  beatById: (id: string) => Beat | undefined;
+  playingId: string | null;
+  onPreview: (id: string) => void;
+  onBuy: (b: Beat) => void;
+  onWrite: (b: Beat) => void;
+}) {
+  // Rank: blend Booth Ready Score + active writers (recently written to)
+  const ranked = useMemo(() => {
+    return [...beats]
+      .map(b => ({ b, score: b.boothReadyScore * 0.6 + b.writingNow * 0.8 + b.completionRate * 0.2 }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+      .map(x => x.b);
+  }, []);
+
+  // Live ticker headline from most recent activity
+  const tickerBeat = beatById(recentlyWrittenTo[0].beatId);
+
+  return (
+    <section>
+      <SectionHeader
+        icon={Flame}
+        eyebrow="Booth Ready · Recently Written To · Live"
+        title="Trending In The Studio™"
+        action="See All"
+      />
+      {tickerBeat && (
+        <div className="glass-panel rounded-xl px-4 py-2.5 mb-5 flex items-center gap-3 text-xs">
+          <span className="relative flex h-2 w-2 shrink-0">
+            <span className="absolute inline-flex h-full w-full rounded-full bg-gold opacity-75 animate-ping" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-gold" />
+          </span>
+          <span className="text-muted-foreground truncate">
+            <span className="text-foreground/90 font-medium">{recentlyWrittenTo[0].artistHandle}</span>
+            <span> just </span>
+            <span className="text-gold">{recentlyWrittenTo[0].action}</span>
+            <span> on </span>
+            <span className="text-gold">{tickerBeat.title}</span>
+            <span className="text-muted-foreground/70"> · {recentlyWrittenTo[0].minutesAgo}m ago</span>
+          </span>
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {ranked.map((b, i) => (
+          <TrendingBeatCard
+            key={b.id}
+            beat={b}
+            playing={playingId === b.id}
+            onPreview={() => onPreview(b.id)}
+            onBuy={() => onBuy(b)}
+            onWrite={() => onWrite(b)}
+            variant={i < 2 ? "booth" : "default"}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
+// SECTION 3 — Marketplace tabs
+// ============================================================
+type MarketTab = "beats" | "packs" | "producers" | "regions" | "moods";
+
+function MarketplaceTabs({
+  playingId, onPreview, onBuy, onBuyPack, onWrite,
+}: {
+  playingId: string | null;
+  onPreview: (id: string) => void;
+  onBuy: (b: Beat) => void;
+  onBuyPack: (p: BeatPack) => void;
+  onWrite: (b: Beat) => void;
+}) {
+  const [tab, setTab] = useState<MarketTab>("beats");
+
+  const tabs: { id: MarketTab; label: string; count: number }[] = [
+    { id: "beats",     label: "Beats",      count: beats.length },
+    { id: "packs",     label: "Beat Packs", count: beatPacks.length },
+    { id: "producers", label: "Producers",  count: producers.length },
+    { id: "regions",   label: "Regions",    count: regions.length },
+    { id: "moods",     label: "Moods",      count: moods.length },
+  ];
+
+  return (
+    <section>
+      <SectionHeader icon={Disc3} eyebrow="The Catalog" title="Marketplace" />
+
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 mb-6 overflow-x-auto pb-1 -mx-1 px-1">
+        {tabs.map(t => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "px-4 py-2 rounded-full text-xs uppercase tracking-[0.18em] whitespace-nowrap transition-all flex items-center gap-2",
+                active
+                  ? "gold-seal text-onyx font-semibold shadow-[0_8px_24px_-12px_rgba(201,168,76,0.7)]"
+                  : "border border-border text-muted-foreground hover:text-gold hover:border-gold/40"
+              )}
+            >
+              {t.label}
+              <span className={cn(
+                "text-[10px] px-1.5 py-0.5 rounded-full tabular-nums",
+                active ? "bg-onyx/30 text-onyx" : "bg-onyx-elev/60 text-muted-foreground"
+              )}>{t.count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "beats" && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {beats.map(b => (
+            <TrendingBeatCard
+              key={b.id}
+              beat={b}
+              playing={playingId === b.id}
+              onPreview={() => onPreview(b.id)}
+              onBuy={() => onBuy(b)}
+              onWrite={() => onWrite(b)}
+            />
+          ))}
+        </div>
+      )}
+
+      {tab === "packs" && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {beatPacks.map(p => <PackCard key={p.id} pack={p} onBuy={() => onBuyPack(p)} />)}
+        </div>
+      )}
+
+      {tab === "producers" && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {producers.map(p => <ProducerTeaseCard key={p.id} producer={p} />)}
+        </div>
+      )}
+
+      {tab === "regions" && (
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3">
+          {regions.map(r => (
+            <CollectionTile key={r.id} art={r.art} glyph={r.glyph} name={r.name} sub={`${r.count} beats`} />
+          ))}
+        </div>
+      )}
+
+      {tab === "moods" && (
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3">
+          {moods.map(m => (
+            <CollectionTile key={m.id} art={m.art} glyph={m.glyph} name={m.name} sub={`${m.count} beats`} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ============================================================
+// SECTION 4 — Producer Network™ (horizontal carousel of teases)
+// ============================================================
+function ProducerNetwork() {
+  return (
+    <section>
+      <SectionHeader
+        icon={BadgeCheck}
+        eyebrow="The House Roster"
+        title="Producer Network™"
+        action="View Roster"
+      />
+      <div className="-mx-4 md:-mx-6 lg:-mx-10 px-4 md:px-6 lg:px-10 overflow-x-auto scroll-smooth snap-x snap-mandatory">
+        <div className="flex gap-4 pb-3 min-w-min">
+          {producers.map(p => (
+            <div key={p.id} className="snap-start shrink-0 w-[280px] md:w-[320px]">
+              <ProducerTeaseCard producer={p} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ProducerTeaseCard({ producer }: { producer: Producer }) {
+  const extras = producerExtras[producer.id];
+  const signature = extras?.tagline ?? producer.bio;
+  const producerBeats = beats.filter(b => b.producerId === producer.id);
+  const finishedTotal = producerBeats.reduce((s, b) => s + b.tracksFinished, 0);
+  return (
+    <article className="glass-panel rounded-2xl overflow-hidden border border-border hover:border-gold/30 transition-all h-full flex flex-col">
+      <div className="relative h-24" style={{ background: producer.banner }}>
+        <div className="absolute inset-0 bg-gradient-to-t from-onyx/80 to-transparent" />
+        <div className="absolute inset-0 mix-blend-overlay opacity-25"
+             style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0 1px, transparent 1px 8px)" }} />
+      </div>
+      <div className="px-4 pb-4 -mt-8 flex flex-col flex-1 gap-3">
+        <div className="flex items-end gap-3">
+          <div
+            className="h-14 w-14 rounded-xl border-2 border-gold/40 shrink-0 flex items-center justify-center shadow-lg"
+            style={{ background: producer.avatar }}
+          >
+            <span className="font-display text-xl text-gold-gradient">{producer.glyph}</span>
+          </div>
+          <div className="min-w-0 pb-1">
+            <div className="flex items-center gap-1.5">
+              <div className="font-display text-base leading-none truncate">{producer.name}</div>
+              {producer.verified && <BadgeCheck className="h-3.5 w-3.5 text-gold shrink-0" />}
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-1 truncate">{producer.handle} · {producer.city}</div>
+          </div>
+        </div>
+        <p className="text-xs text-foreground/80 leading-relaxed line-clamp-2">{signature}</p>
+        <div className="grid grid-cols-3 gap-1.5">
+          <BoothMetric label="Followers" value={fmt(producer.followers)} />
+          <BoothMetric label="Beats Sold" value={fmt(producer.sales)} />
+          <BoothMetric label="Finished" value={fmt(finishedTotal)} highlight />
+        </div>
+        <button className="mt-auto w-full h-9 rounded-lg gold-seal text-onyx text-xs font-semibold flex items-center justify-center gap-1.5">
+          Visit Storefront™ <ArrowUpRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </article>
   );
 }
 
