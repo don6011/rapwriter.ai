@@ -199,6 +199,16 @@ export default function Studio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completionPct]);
 
+  // Auto-trigger Booth Ready™ achievement once per project
+  const certifiedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (boothScore >= 90 && !certifiedRef.current.has(activeProject.id)) {
+      certifiedRef.current.add(activeProject.id);
+      setBoothModalOpen(true);
+    }
+  }, [boothScore, activeProject.id]);
+
+
 
   // Marketplace → Ghost Studio handoff
   useEffect(() => {
@@ -655,9 +665,11 @@ export default function Studio() {
       {boothModalOpen && (
         <BoothReadyMilestone
           project={activeProject}
+          score={boothScore}
           onClose={() => setBoothModalOpen(false)}
         />
       )}
+
 
       {/* LICENSE DIALOG */}
       <LicenseDialog
@@ -1221,14 +1233,14 @@ function Stat({ label, value, mono }: { label: string; value: string; mono?: boo
   );
 }
 
-function BoothReadyMilestone({ project, onClose }: { project: typeof projects[number]; onClose: () => void }) {
+function BoothReadyMilestone({ project, score = 94, onClose }: { project: typeof projects[number]; score?: number; onClose: () => void }) {
   const stats = [
     { label: "Bars",     v: "32 / 32" },
     { label: "Hook",     v: "Sealed" },
     { label: "Cadence",  v: "Locked" },
     { label: "Sessions", v: "7" },
     { label: "Hours",    v: "9h 42m" },
-    { label: "Coach Score", v: "94 / 100" },
+    { label: "Coach Score", v: `${score} / 100` },
   ];
 
   const exports = [
@@ -1240,11 +1252,97 @@ function BoothReadyMilestone({ project, onClose }: { project: typeof projects[nu
     { icon: Download, label: "Download Stems Folder" },
   ];
 
+  // Staged achievement reveal: 0 = burst, 1 = badge stamp, 2 = certificate
+  const [stage, setStage] = useState(0);
+  useEffect(() => {
+    const t1 = setTimeout(() => setStage(1), 650);
+    const t2 = setTimeout(() => setStage(2), 1700);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  // Stable confetti particles (computed once)
+  const particles = useMemo(
+    () => Array.from({ length: 28 }, (_, i) => {
+      const angle = (i / 28) * Math.PI * 2;
+      const dist = 140 + Math.random() * 180;
+      return {
+        x: Math.cos(angle) * dist,
+        y: Math.sin(angle) * dist,
+        delay: Math.random() * 0.25,
+        size: 4 + Math.random() * 6,
+        hue: Math.random() > 0.5 ? "var(--gold)" : "var(--gold-soft)",
+      };
+    }),
+    []
+  );
+
+  const certNo = useMemo(() => Math.floor(Math.random() * 9000) + 1000, []);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
-      <div className="absolute inset-0 bg-onyx/90 backdrop-blur-xl" onClick={onClose} />
+      <div className="absolute inset-0 bg-onyx/95 backdrop-blur-xl" onClick={() => stage >= 2 && onClose()} />
 
-      <div className="relative max-w-3xl w-full my-8 rounded-3xl overflow-hidden border border-gold/40 animate-scale-in"
+      {/* ACHIEVEMENT BURST + BADGE STAMP — full-screen overlay during stages 0/1 */}
+      {stage < 2 && (
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-[60]">
+          {/* Radial flash */}
+          <div
+            className="absolute inset-0 animate-fade-in"
+            style={{ background: "radial-gradient(circle at 50% 50%, rgba(201,168,76,0.35), transparent 55%)" }}
+          />
+          {/* Confetti particles */}
+          {particles.map((p, i) => (
+            <span
+              key={i}
+              className="absolute block rounded-full"
+              style={{
+                width: p.size,
+                height: p.size,
+                background: p.hue,
+                boxShadow: `0 0 ${p.size * 2}px ${p.hue}`,
+                animation: `confetti-burst 1.4s cubic-bezier(0.16,0.84,0.3,1) ${p.delay}s both`,
+                ["--cx" as string]: `${p.x}px`,
+                ["--cy" as string]: `${p.y}px`,
+              }}
+            />
+          ))}
+          {/* Sparkle ring */}
+          <div
+            className="absolute h-72 w-72 rounded-full border border-gold/40"
+            style={{ animation: "achievement-ring 1.6s ease-out both" }}
+          />
+          <div
+            className="absolute h-72 w-72 rounded-full border border-gold/30"
+            style={{ animation: "achievement-ring 1.6s ease-out 0.2s both" }}
+          />
+
+          {/* Stamping gold badge */}
+          <div
+            className="relative"
+            style={{ animation: "badge-stamp 0.9s cubic-bezier(0.2,1.4,0.4,1) both" }}
+          >
+            <div className="gold-seal h-40 w-40 rounded-full flex items-center justify-center shadow-[0_0_100px_-10px_var(--gold)] border-2 border-onyx relative">
+              <Award className="h-20 w-20 text-onyx" strokeWidth={2.2} />
+              <Sparkles className="absolute -top-2 -right-2 h-7 w-7 text-onyx animate-pulse" />
+            </div>
+            <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 whitespace-nowrap text-center">
+              <div className="text-[10px] uppercase tracking-[0.5em] text-gold animate-fade-in" style={{ animationDelay: "0.6s", animationFillMode: "both" }}>
+                Achievement Unlocked
+              </div>
+              <div className="font-display text-3xl text-gold-gradient mt-1 animate-fade-in" style={{ animationDelay: "0.85s", animationFillMode: "both" }}>
+                Booth Ready™
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CERTIFICATION CONFIRMATION SCREEN — stage 2 */}
+      <div
+        className={cn(
+          "relative max-w-3xl w-full my-8 rounded-3xl overflow-hidden border border-gold/40 transition-all duration-700",
+          stage >= 2 ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+        )}
         style={{ background: "linear-gradient(180deg, #14100a 0%, #0a0806 100%)" }}
       >
         <button onClick={onClose} className="absolute top-4 right-4 z-20 text-muted-foreground hover:text-gold p-2 rounded-full hover:bg-onyx-elev">
@@ -1253,10 +1351,8 @@ function BoothReadyMilestone({ project, onClose }: { project: typeof projects[nu
 
         {/* CINEMATIC HEADER */}
         <div className="relative px-10 pt-14 pb-10 text-center overflow-hidden">
-          {/* Aura */}
           <div className="absolute inset-0 opacity-40 pointer-events-none"
             style={{ background: "radial-gradient(circle at center top, var(--gold), transparent 55%)" }} />
-          {/* Light rays */}
           <div className="absolute inset-0 opacity-25 pointer-events-none"
             style={{
               background:
@@ -1264,7 +1360,6 @@ function BoothReadyMilestone({ project, onClose }: { project: typeof projects[nu
               animation: "spin-slow 18s linear infinite",
             }}
           />
-          {/* Grain */}
           <div className="absolute inset-0 opacity-[0.06] mix-blend-overlay pointer-events-none"
             style={{
               backgroundImage:
@@ -1273,16 +1368,15 @@ function BoothReadyMilestone({ project, onClose }: { project: typeof projects[nu
           />
 
           <div className="relative">
-            <div className="text-[10px] uppercase tracking-[0.5em] text-gold mb-5">
-              A Moment to Mark
+            <div className="text-[10px] uppercase tracking-[0.5em] text-gold mb-5 flex items-center justify-center gap-2">
+              <Sparkles className="h-3 w-3" /> Certification Confirmed <Sparkles className="h-3 w-3" />
             </div>
 
-            {/* Artwork + seal */}
             <div className="relative mx-auto mb-6 w-fit">
               <div className="h-36 w-36 rounded-2xl overflow-hidden border border-gold/40 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] relative">
                 <ProjectArtwork project={project} />
               </div>
-              <div className="gold-seal h-16 w-16 rounded-full absolute -bottom-4 -right-4 flex items-center justify-center shadow-[0_0_40px_-6px_var(--gold)] border-2 border-onyx">
+              <div className="gold-seal h-16 w-16 rounded-full absolute -bottom-4 -right-4 flex items-center justify-center shadow-[0_0_40px_-6px_var(--gold)] border-2 border-onyx animate-scale-in">
                 <Award className="h-8 w-8 text-onyx" strokeWidth={2.4} />
               </div>
             </div>
@@ -1292,18 +1386,17 @@ function BoothReadyMilestone({ project, onClose }: { project: typeof projects[nu
             </h3>
             <div className="hairline my-5 max-w-[220px] mx-auto" />
             <div className="font-display text-2xl md:text-3xl text-foreground/95">
-              Midnight on the Strip
+              {project.title}
             </div>
             <div className="text-[11px] uppercase tracking-[0.35em] text-muted-foreground mt-2">
-              from {project.title} · {project.type}
+              {project.type} · Score {score}/100
             </div>
             <div className="text-[10px] uppercase tracking-[0.3em] text-gold/70 mt-3">
-              Certificate № RW-{Math.floor(Math.random() * 9000) + 1000} · {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              Certificate № RW-{certNo} · {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             </div>
           </div>
         </div>
 
-        {/* STATS */}
         <div className="relative px-8 md:px-10 pb-2">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {stats.map((s) => (
@@ -1317,7 +1410,6 @@ function BoothReadyMilestone({ project, onClose }: { project: typeof projects[nu
           </div>
         </div>
 
-        {/* EXPORTS */}
         <div className="relative px-8 md:px-10 py-6">
           <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3">
             Export & Send
@@ -1351,6 +1443,7 @@ function BoothReadyMilestone({ project, onClose }: { project: typeof projects[nu
     </div>
   );
 }
+
 
 
 // ============================================================
