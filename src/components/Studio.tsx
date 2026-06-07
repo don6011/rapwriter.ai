@@ -199,6 +199,16 @@ export default function Studio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completionPct]);
 
+  // Auto-trigger Booth Ready™ achievement once per project
+  const certifiedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (boothScore >= 90 && !certifiedRef.current.has(activeProject.id)) {
+      certifiedRef.current.add(activeProject.id);
+      setBoothModalOpen(true);
+    }
+  }, [boothScore, activeProject.id]);
+
+
 
   // Marketplace → Ghost Studio handoff
   useEffect(() => {
