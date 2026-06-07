@@ -665,9 +665,11 @@ export default function Studio() {
       {boothModalOpen && (
         <BoothReadyMilestone
           project={activeProject}
+          score={boothScore}
           onClose={() => setBoothModalOpen(false)}
         />
       )}
+
 
       {/* LICENSE DIALOG */}
       <LicenseDialog
