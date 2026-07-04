@@ -241,7 +241,7 @@ function ProducersRail() {
                 {p.name.charAt(0)}
               </div>
               <div className="mt-3 font-semibold text-sm truncate">{p.name}</div>
-              <div className="text-[11px] text-muted-foreground truncate">{p.location ?? "—"}</div>
+              <div className="text-[11px] text-muted-foreground truncate">{p.city ?? "—"}</div>
               <div className="mt-2 text-[11px] text-gold/80">Visit Storefront™ →</div>
             </Link>
           </RevealCard>
