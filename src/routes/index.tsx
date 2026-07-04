@@ -1,19 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
-import Studio from "@/components/Studio";
+import Landing from "@/components/landing/Landing";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "RapWriter.ai — Sharpen Your Pen" },
-      { name: "description", content: "The Prep Studio™. A premium digital environment where artists go from idea to Booth Ready™." },
+      { title: "RapWriter.ai — Go from idea to Booth Ready™" },
+      {
+        name: "description",
+        content:
+          "The luxury prep studio for rap artists. License beats, write to them, and certify your songs Booth Ready™ — all in one environment.",
+      },
       { property: "og:title", content: "RapWriter.ai — The Prep Studio™" },
-      { property: "og:description", content: "Go from idea to Booth Ready™. Not an AI lyric generator — a luxury prep studio for artists." },
+      {
+        property: "og:description",
+        content:
+          "Beats, writing, cadence coaching, and Booth Ready™ certification. One environment.",
+      },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap",
+      },
     ],
   }),
-  component: Studio,
+  component: Landing,
 });
