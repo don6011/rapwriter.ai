@@ -12,10 +12,10 @@ export const Route = createFileRoute("/auth")({
       { title: "Sign in · RapWriter.ai" },
       {
         name: "description",
-        content: "Sign in or create your RapWriter.ai account. Your drafts, licenses, and Booth Ready™ certificates in one place.",
+        content: "Sign in or create your RapWriter.ai account. Your drafts, licenses, and Booth Ready certificates in one place.",
       },
       { property: "og:title", content: "Sign in · RapWriter.ai" },
-      { property: "og:description", content: "Access Ghost Studio™ and your vault." },
+      { property: "og:description", content: "Access Ghost Studio and your vault." },
     ],
   }),
   component: AuthPage,
@@ -99,7 +99,7 @@ function AuthPage() {
             The pen is <span className="text-gold-gradient">warm</span>.
           </h1>
           <p className="mt-4 text-muted-foreground max-w-sm">
-            Sign in to access Ghost Studio™, your licensed beats, and your Booth Ready™ certificates.
+            Sign in to access Ghost Studio, your licensed beats, and your Booth Ready certificates.
           </p>
         </div>
         <div className="relative text-xs text-muted-foreground">

@@ -86,7 +86,7 @@ function ArtTile({ art, glyph, className, label }: { art: string; glyph: string;
 function VerifiedBadge({ size = "sm" }: { size?: "sm" | "md" }) {
   return (
     <span
-      title="Verified Producer™"
+      title="Verified Producer"
       className={cn(
         "inline-flex items-center gap-1 rounded-full gold-seal text-onyx font-semibold",
         size === "sm" ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]"
@@ -321,7 +321,7 @@ function TrendingBeatCard({
         <ArtTile art={beat.art} glyph={beat.glyph} className="absolute inset-0" />
         {isBooth && (
           <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full gold-seal text-onyx px-2 py-1 text-[10px] font-semibold shadow-lg">
-            <Trophy className="h-3 w-3" /> Booth Ready™
+            <Trophy className="h-3 w-3" /> Booth Ready
           </div>
         )}
         {!isBooth && (
@@ -400,7 +400,7 @@ function TrendingBeatCard({
           onClick={onWrite}
           className="w-full h-11 rounded-xl gold-seal text-onyx flex items-center justify-center gap-2 text-sm font-semibold shadow-[0_10px_30px_-12px_rgba(201,168,76,0.7)] hover:scale-[1.01] transition-transform"
         >
-          <PenLine className="h-4 w-4" /> Write To This Beat™
+          <PenLine className="h-4 w-4" /> Write To This Beat
         </button>
 
         <div className="flex items-center justify-between gap-2">
@@ -530,7 +530,7 @@ function PurchaseToast({ msg }: { msg: string }) {
         <Award className="h-4 w-4 text-gold" />
         <span className="text-sm">{msg}</span>
         <span className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-          → Beat Locker™
+          → Beat Locker
         </span>
       </div>
     </div>
@@ -577,7 +577,7 @@ export default function Marketplace() {
       <MarketHeader purchases={purchases} />
 
       <div className="px-4 md:px-6 lg:px-10 py-6 md:py-8 space-y-14 max-w-[1600px] mx-auto">
-        {/* SECTION 1 — START WITH A BEAT™ (Mood Hero) */}
+        {/* SECTION 1 — START WITH A BEAT (Mood Hero) */}
         <StartWithABeatHero
           allBeats={beats}
           totalWritingNow={totalWritingNow}
@@ -586,7 +586,7 @@ export default function Marketplace() {
           playingId={playingId}
         />
 
-        {/* SECTION 2 — TRENDING IN THE STUDIO™ (merged) */}
+        {/* SECTION 2 — TRENDING IN THE STUDIO (merged) */}
         <TrendingInTheStudio
           beatById={beatById}
           playingId={playingId}
@@ -604,7 +604,7 @@ export default function Marketplace() {
           onWrite={handleWriteToBeat}
         />
 
-        {/* SECTION 4 — PRODUCER NETWORK™ (horizontal carousel) */}
+        {/* SECTION 4 — PRODUCER NETWORK (horizontal carousel) */}
         <ProducerNetwork />
 
         {/* Footer note */}
@@ -614,7 +614,7 @@ export default function Marketplace() {
               <Sparkles className="h-4 w-4 text-onyx" />
             </div>
             <div>
-              <div className="font-display text-lg">Every license unlocks instantly inside The Locker™</div>
+              <div className="font-display text-lg">Every license unlocks instantly inside The Locker</div>
               <div className="text-xs text-muted-foreground mt-0.5">
                 Beat Locker · Project Selector · Recent Beats · My Licenses — synced the moment you buy.
               </div>
@@ -624,7 +624,7 @@ export default function Marketplace() {
             to="/"
             className="px-4 py-2.5 rounded-xl border border-gold/40 text-gold hover:bg-gold/10 text-sm flex items-center gap-2"
           >
-            Open Ghost Studio™ <ArrowUpRight className="h-3.5 w-3.5" />
+            Open Ghost Studio <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </section>
       </div>
@@ -635,7 +635,7 @@ export default function Marketplace() {
 }
 
 // ============================================================
-// SECTION 1 — Start With A Beat™ (mood-driven hero)
+// SECTION 1 — Start With A Beat (mood-driven hero)
 // ============================================================
 const MOOD_CHIPS: { label: string; tag: string }[] = [
   { label: "Pain", tag: "Pain" },
@@ -680,13 +680,13 @@ function StartWithABeatHero({
         <div className="max-w-2xl">
           <div className="flex items-center gap-2 mb-5">
             <Compass className="h-3.5 w-3.5 text-gold" />
-            <span className="text-[10px] uppercase tracking-[0.4em] text-gold/90">Start With A Beat™</span>
+            <span className="text-[10px] uppercase tracking-[0.4em] text-gold/90">Start With A Beat</span>
           </div>
           <h1 className="font-display text-4xl md:text-6xl leading-[0.95] text-gold-gradient">
             What are you writing tonight?
           </h1>
           <p className="text-foreground/85 text-sm md:text-base mt-4 leading-relaxed max-w-xl">
-            Pick a feeling. We'll cue the right beat and open a fresh session in Ghost Studio™. No purchase needed to write — license when you take it to the booth.
+            Pick a feeling. We'll cue the right beat and open a fresh session in Ghost Studio. No purchase needed to write — license when you take it to the booth.
           </p>
 
           {/* Mood chips */}
@@ -716,7 +716,7 @@ function StartWithABeatHero({
               onClick={() => onStartWriting(hero)}
               className="px-6 py-3.5 rounded-xl gold-seal text-onyx font-semibold flex items-center gap-2 shadow-[0_15px_40px_-12px_rgba(201,168,76,0.8)] hover:scale-[1.02] transition-transform"
             >
-              <PenLine className="h-4 w-4" /> Start Writing™
+              <PenLine className="h-4 w-4" /> Start Writing
             </button>
             <button
               onClick={() => onPreview(hero.id)}
@@ -778,7 +778,7 @@ function StartWithABeatHero({
 }
 
 // ============================================================
-// SECTION 2 — Trending In The Studio™ (merged shelf)
+// SECTION 2 — Trending In The Studio (merged shelf)
 // ============================================================
 function TrendingInTheStudio({
   beatById, playingId, onPreview, onBuy, onWrite,
@@ -806,7 +806,7 @@ function TrendingInTheStudio({
       <SectionHeader
         icon={Flame}
         eyebrow="Booth Ready · Recently Written To · Live"
-        title="Trending In The Studio™"
+        title="Trending In The Studio"
         action="See All"
       />
       {tickerBeat && (
@@ -942,7 +942,7 @@ function MarketplaceTabs({
 }
 
 // ============================================================
-// SECTION 4 — Producer Network™ (horizontal carousel of teases)
+// SECTION 4 — Producer Network (horizontal carousel of teases)
 // ============================================================
 function ProducerNetwork() {
   return (
@@ -950,7 +950,7 @@ function ProducerNetwork() {
       <SectionHeader
         icon={BadgeCheck}
         eyebrow="The House Roster"
-        title="Producer Network™"
+        title="Producer Network"
         action="View Roster"
       />
       <div className="-mx-4 md:-mx-6 lg:-mx-10 px-4 md:px-6 lg:px-10 overflow-x-auto scroll-smooth snap-x snap-mandatory">
@@ -1001,7 +1001,7 @@ function ProducerTeaseCard({ producer }: { producer: Producer }) {
           <BoothMetric label="Finished" value={fmt(finishedTotal)} highlight />
         </div>
         <button className="mt-auto w-full h-9 rounded-lg gold-seal text-onyx text-xs font-semibold flex items-center justify-center gap-1.5">
-          Visit Storefront™ <ArrowUpRight className="h-3.5 w-3.5" />
+          Visit Storefront <ArrowUpRight className="h-3.5 w-3.5" />
         </button>
       </div>
     </article>
@@ -1009,7 +1009,7 @@ function ProducerTeaseCard({ producer }: { producer: Producer }) {
 }
 
 // ============================================================
-// Start With A Beat™ — primary discovery CTA
+// Start With A Beat — primary discovery CTA
 // ============================================================
 function StartWithABeatCTA({
   beat, totalWritingNow, onStart, onPreview,
@@ -1029,10 +1029,10 @@ function StartWithABeatCTA({
             <span className="text-[10px] uppercase tracking-[0.4em] text-gold/90">Discovery Mode</span>
           </div>
           <h2 className="font-display text-4xl md:text-6xl leading-[0.95] text-gold-gradient">
-            Start With A Beat™
+            Start With A Beat
           </h2>
           <p className="text-foreground/85 text-sm md:text-base mt-4 leading-relaxed max-w-xl">
-            Don't pick a license. Pick a feeling. RapWriter loads a beat into Ghost Studio™ and starts a fresh writing session — no purchase needed to write. License when you're ready to take it to the booth.
+            Don't pick a license. Pick a feeling. RapWriter loads a beat into Ghost Studio and starts a fresh writing session — no purchase needed to write. License when you're ready to take it to the booth.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 mt-6">
@@ -1040,7 +1040,7 @@ function StartWithABeatCTA({
               onClick={onStart}
               className="px-6 py-3.5 rounded-xl gold-seal text-onyx font-semibold flex items-center gap-2 shadow-[0_15px_40px_-12px_rgba(201,168,76,0.8)] hover:scale-[1.02] transition-transform"
             >
-              <PenLine className="h-4 w-4" /> Start With A Beat™
+              <PenLine className="h-4 w-4" /> Start With A Beat
             </button>
             <button
               onClick={onPreview}
@@ -1098,7 +1098,7 @@ function RecentlyWrittenTo({
         {recentlyWrittenTo.map(act => {
           const beat = beatById(act.beatId);
           if (!beat) return null;
-          const isBooth = act.action === "hit Booth Ready™";
+          const isBooth = act.action === "hit Booth Ready";
           return (
             <div key={act.id} className="flex items-center gap-3 md:gap-4 px-4 md:px-5 py-3 hover:bg-onyx-elev/40 transition-colors">
               {/* Artist */}
@@ -1116,7 +1116,7 @@ function RecentlyWrittenTo({
                   <span className="text-muted-foreground"> {isBooth ? "" : "just "}</span>
                   {isBooth ? (
                     <span className="inline-flex items-center gap-1 text-gold font-semibold">
-                      <Trophy className="h-3 w-3" /> hit Booth Ready™
+                      <Trophy className="h-3 w-3" /> hit Booth Ready
                     </span>
                   ) : (
                     <span className="text-foreground/80">{act.action}</span>
@@ -1140,7 +1140,7 @@ function RecentlyWrittenTo({
                 className="h-9 px-3 rounded-lg gold-seal text-onyx text-xs font-semibold flex items-center gap-1.5 shrink-0"
               >
                 <PenLine className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Write To This Beat™</span>
+                <span className="hidden sm:inline">Write To This Beat</span>
                 <span className="sm:hidden">Write</span>
               </button>
             </div>
@@ -1152,7 +1152,7 @@ function RecentlyWrittenTo({
 }
 
 // ============================================================
-// Producer Storefront™ — full panel
+// Producer Storefront — full panel
 // ============================================================
 function ProducerStorefront({
   producer, onPreview, onWrite, playingId,
@@ -1179,7 +1179,7 @@ function ProducerStorefront({
              style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0 1px, transparent 1px 8px)" }} />
         <div className="absolute top-4 right-4 flex items-center gap-2">
           <span className="text-[10px] uppercase tracking-[0.3em] text-gold/90 flex items-center gap-1">
-            <Mic2 className="h-3 w-3" /> Producer Storefront™
+            <Mic2 className="h-3 w-3" /> Producer Storefront
           </span>
         </div>
       </div>
@@ -1304,7 +1304,7 @@ function ProducerStorefront({
                     onClick={() => onWrite(b)}
                     className="mt-1 w-full py-2 rounded-lg gold-seal text-onyx text-[11px] font-semibold flex items-center justify-center gap-1.5"
                   >
-                    <PenLine className="h-3 w-3" /> Write To This Beat™
+                    <PenLine className="h-3 w-3" /> Write To This Beat
                   </button>
                 </div>
               ))}

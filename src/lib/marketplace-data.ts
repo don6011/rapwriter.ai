@@ -26,7 +26,7 @@ export type Beat = {
   plays: number;
   tag?: string;         // RW tag
   // ---- Booth Ready metrics ---------------------------------------------
-  boothReadyScore: number;     // 0-100 — how often songs written to this beat reach Booth Ready™
+  boothReadyScore: number;     // 0-100 — how often songs written to this beat reach Booth Ready
   completionRate: number;      // 0-100 — % of sessions that finish a full song
   tracksFinished: number;      // raw count of finished tracks
   writingNow: number;          // active rappers writing in the last hour
@@ -449,18 +449,18 @@ export type WriteActivity = {
   artistGlyph: string;       // 1-2 char monogram
   artistColor: string;       // gradient
   beatId: string;
-  action: "started" | "hit Booth Ready™" | "finished a hook" | "wrote verse 2" | "locked a bridge";
+  action: "started" | "hit Booth Ready" | "finished a hook" | "wrote verse 2" | "locked a bridge";
   minutesAgo: number;
 };
 
 export const recentlyWrittenTo: WriteActivity[] = [
-  { id: "a1", artistHandle: "@kingsoutheast", artistGlyph: "KS", artistColor: "linear-gradient(135deg,#1a0512,#c9a84c)", beatId: "smoke-velvet", action: "hit Booth Ready™",  minutesAgo:  4 },
+  { id: "a1", artistHandle: "@kingsoutheast", artistGlyph: "KS", artistColor: "linear-gradient(135deg,#1a0512,#c9a84c)", beatId: "smoke-velvet", action: "hit Booth Ready",  minutesAgo:  4 },
   { id: "a2", artistHandle: "@yvnnglex",      artistGlyph: "YL", artistColor: "linear-gradient(135deg,#1a0f08,#d4842a)", beatId: "trunk-rattle",  action: "wrote verse 2",      minutesAgo:  7 },
   { id: "a3", artistHandle: "@maritheprince", artistGlyph: "MP", artistColor: "linear-gradient(135deg,#2d0a1f,#e8b84a)", beatId: "cathedral-88",  action: "finished a hook",    minutesAgo: 11 },
   { id: "a4", artistHandle: "@nightcrowne",   artistGlyph: "NC", artistColor: "linear-gradient(135deg,#050510,#5cbdb9)", beatId: "lowlight",      action: "started",            minutesAgo: 13 },
   { id: "a5", artistHandle: "@808selene",     artistGlyph: "8S", artistColor: "linear-gradient(135deg,#0a0604,#e8b84a)", beatId: "gold-grill",    action: "locked a bridge",    minutesAgo: 18 },
   { id: "a6", artistHandle: "@dustyverse",    artistGlyph: "DV", artistColor: "linear-gradient(135deg,#020c0c,#5cbdb9)", beatId: "dusty-loop",    action: "started",            minutesAgo: 22 },
-  { id: "a7", artistHandle: "@neonpastor",    artistGlyph: "NP", artistColor: "linear-gradient(135deg,#050510,#c9a84c)", beatId: "neon-strip",    action: "hit Booth Ready™",   minutesAgo: 27 },
+  { id: "a7", artistHandle: "@neonpastor",    artistGlyph: "NP", artistColor: "linear-gradient(135deg,#050510,#c9a84c)", beatId: "neon-strip",    action: "hit Booth Ready",   minutesAgo: 27 },
   { id: "a8", artistHandle: "@bayoubaron",    artistGlyph: "BB", artistColor: "linear-gradient(135deg,#1a0512,#d4842a)", beatId: "back-porch",    action: "wrote verse 2",      minutesAgo: 34 },
 ];
 
