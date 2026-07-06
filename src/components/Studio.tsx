@@ -11,6 +11,7 @@ import {
   SkipBack, SkipForward, Shield, Share2, Download, FileText,
   Mail, Copy, Music, Store, BadgeCheck, Maximize2, Minimize2, Save, Mic, BookOpen
 } from "lucide-react";
+import studioHero from "@/assets/studio-hero.jpg";
 
 const lockerItems = [
   { icon: Disc3, label: "Beat Locker", count: 24, accent: true },
@@ -856,33 +857,62 @@ function ProjectArtwork({ project }: { project: typeof projects[number] }) {
   );
 }
 
-function ResumeSessionCard({ project, onResume }: { project: typeof projects[number]; onResume: () => void }) {
+function ResumeSessionCard({ project: _project, onResume }: { project: typeof projects[number]; onResume: () => void }) {
+  const pct = 67;
   return (
-    <div className="relative rounded-2xl overflow-hidden border border-gold/20 glass-panel">
-      <div className="absolute inset-0 opacity-40 pointer-events-none"
-        style={{ background: `radial-gradient(circle at 80% 20%, var(--gold), transparent 55%)` }} />
-      <div className="relative flex flex-wrap items-center gap-5 p-5">
-        <div className="h-20 w-20 rounded-xl overflow-hidden border border-gold/40 shadow-[0_10px_40px_-12px_rgba(201,168,76,0.5)] shrink-0 relative">
-          <ProjectArtwork project={project} />
+    <div className="relative rounded-2xl overflow-hidden panel">
+      {/* Studio photograph */}
+      <div className="relative h-56 md:h-72 overflow-hidden">
+        <img
+          src={studioHero}
+          alt="Studio console at night"
+          width={1600}
+          height={912}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        {/* Bottom fade so the info strip reads clean */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/40 to-transparent" />
+        {/* Warm lamp bloom top-left */}
+        <div className="absolute inset-0 pointer-events-none"
+          style={{ background: "radial-gradient(ellipse at 10% 12%, rgba(255,176,32,0.18), transparent 55%)" }} />
+        {/* Session badge */}
+        <div className="absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-md bg-black/50 backdrop-blur-sm border border-border">
+          <span className="rec-dot h-1.5 w-1.5" />
+          <span className="label-hw text-[9px]">Session · Live</span>
         </div>
-        <div className="flex-1 min-w-[200px]">
-          <div className="text-[10px] uppercase tracking-[0.3em] text-gold/80 flex items-center gap-2">
-            <Clock className="h-3 w-3" />
-            <span>Continue Where You Left Off · 12 min ago</span>
+      </div>
+
+      {/* Info strip */}
+      <div className="relative px-5 pt-4 pb-5">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex-1 min-w-[220px]">
+            <div className="label-hw flex items-center gap-1.5">
+              <Clock className="h-3 w-3" /> Continue Where You Left Off
+            </div>
+            <div className="font-display text-2xl md:text-[26px] mt-1 tracking-tight">
+              Midnight on the Strip
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5 font-mono">
+              Verse 1 · 16 bars in · Last edited 12 min ago
+            </div>
           </div>
-          <div className="font-display text-2xl mt-1">
-            Midnight on the Strip
-          </div>
-          <div className="text-sm text-muted-foreground">
-            Verse 1 · 16 bars in · cadence approved by Pen Coach
+          <div className="flex items-center gap-3">
+            <div className="text-right hidden sm:block">
+              <div className="label-hw">Complete</div>
+              <div className="text-amber-led text-lg leading-none mt-0.5">{pct}%</div>
+            </div>
+            <button
+              onClick={onResume}
+              className="gold-seal px-5 py-2.5 rounded-md font-semibold text-sm flex items-center gap-2"
+            >
+              <Play className="h-4 w-4" fill="currentColor" /> Resume
+            </button>
           </div>
         </div>
-        <button
-          onClick={onResume}
-          className="gold-seal text-onyx px-5 py-3 rounded-xl font-semibold text-sm flex items-center gap-2 hover:scale-[1.02] active:scale-100 transition-transform"
-        >
-          <Play className="h-4 w-4" fill="currentColor" /> Resume Session
-        </button>
+        {/* Progress rail */}
+        <div className="mt-4 h-1 rounded-full bg-[#1a1a1d] overflow-hidden">
+          <div className="h-full rounded-full bg-[var(--amber)]" style={{ width: `${pct}%`, boxShadow: "0 0 8px rgba(255,176,32,0.5)" }} />
+        </div>
       </div>
     </div>
   );

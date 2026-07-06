@@ -9,6 +9,7 @@ import { SiteFooter } from "@/components/site/SiteFooter";
 import { useScrollReveal, useCountUp } from "@/hooks/use-scroll-reveal";
 import { cn } from "@/lib/utils";
 import { producers } from "@/lib/marketplace-data";
+import studioHero from "@/assets/studio-hero.jpg";
 
 export default function Landing() {
   return (
@@ -37,11 +38,17 @@ function Hero() {
   }, []);
 
   return (
-    <section className="relative pt-40 pb-28 px-5">
-      {/* atmospheric gradient */}
+    <section className="relative pt-40 pb-28 px-5 overflow-hidden">
+      {/* Cinematic studio photograph */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[560px] w-[900px] rounded-full blur-3xl opacity-[0.18] bg-[radial-gradient(circle_at_center,_var(--gold)_0%,_transparent_70%)]" />
-        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-onyx to-transparent" />
+        <img
+          src={studioHero}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-cover opacity-40"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0b]/70 via-[#0a0a0b]/85 to-[#0a0a0b]" />
+        <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 12% 10%, rgba(255,176,32,0.18), transparent 55%)" }} />
       </div>
 
       <div className="relative mx-auto max-w-4xl text-center">
