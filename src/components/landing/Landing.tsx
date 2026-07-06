@@ -47,11 +47,11 @@ function Hero() {
       <div className="relative mx-auto max-w-4xl text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-onyx-elev/60 backdrop-blur px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-gold animate-pulse" />
-          The Prep Studio™ · v1.5
+          The Prep Studio · v1.5
         </div>
 
         <h1 className="font-display mt-6 text-5xl sm:text-6xl md:text-7xl leading-[1.02] tracking-tight">
-          Go from idea to <span className="text-gold-gradient">Booth Ready™</span>.
+          Go from idea to <span className="text-gold-gradient">Booth Ready</span>.
         </h1>
         <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
           A luxury digital environment for rap artists. License the beat, write to it,
@@ -148,20 +148,20 @@ function ProductTour() {
     {
       icon: Music2,
       title: "License the beat",
-      body: "A curated record store. Booth Ready Beats™, mood collections, producer storefronts. Buy or preview.",
+      body: "A curated record store. Booth Ready Beats, mood collections, producer storefronts. Buy or preview.",
       accent: "Marketplace",
     },
     {
       icon: Mic,
       title: "Write inside the room",
-      body: "Ghost Studio™ pins the beat, autosaves your drafts, and coaches your cadence in real time.",
-      accent: "Ghost Studio™",
+      body: "Ghost Studio pins the beat, autosaves your drafts, and coaches your cadence in real time.",
+      accent: "Ghost Studio",
     },
     {
       icon: Award,
-      title: "Certify Booth Ready™",
+      title: "Certify Booth Ready",
       body: "Score of 90+ on Structure, Cadence, Completion, Originality & Replay unlocks the gold seal.",
-      accent: "Booth Ready™",
+      accent: "Booth Ready",
     },
   ];
   return (
@@ -229,7 +229,7 @@ function Stat({
 function ProducersRail() {
   const featured = producers.slice(0, 6);
   return (
-    <Section eyebrow="Producer Network™" title="Beats from the people shaping the sound.">
+    <Section eyebrow="Producer Network" title="Beats from the people shaping the sound.">
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {featured.map((p, i) => (
           <RevealCard key={p.id} delay={i * 40}>
@@ -242,7 +242,7 @@ function ProducersRail() {
               </div>
               <div className="mt-3 font-semibold text-sm truncate">{p.name}</div>
               <div className="text-[11px] text-muted-foreground truncate">{p.city ?? "—"}</div>
-              <div className="mt-2 text-[11px] text-gold/80">Visit Storefront™ →</div>
+              <div className="mt-2 text-[11px] text-gold/80">Visit Storefront →</div>
             </Link>
           </RevealCard>
         ))}
@@ -263,7 +263,7 @@ function Testimonials() {
       a: "Lex Duro · Houston",
     },
     {
-      q: "Booth Ready™ is the accountability I didn't know I needed. Gold seal or you rewrite. Simple.",
+      q: "Booth Ready is the accountability I didn't know I needed. Gold seal or you rewrite. Simple.",
       a: "Ma$e Lucid · Brooklyn",
     },
   ];
@@ -302,7 +302,7 @@ function PricingTease() {
       name: "Writer",
       price: "$14",
       note: "Per month",
-      features: ["Unlimited drafts", "Full autosave", "Booth Ready™ score", "5 licensed beats"],
+      features: ["Unlimited drafts", "Full autosave", "Booth Ready score", "5 licensed beats"],
       cta: "Enter Studio",
       to: "/studio",
       highlight: true,
@@ -378,7 +378,7 @@ function FAQ() {
       a: "Yes. Every beat license from the Marketplace is yours. Terms are attached to each beat and stored in your Locker.",
     },
     {
-      q: "What is Booth Ready™?",
+      q: "What is Booth Ready?",
       a: "A 5-axis quality score across Structure, Cadence, Completion, Originality and Replay Value. 90+ certifies the song.",
     },
     {
@@ -387,7 +387,7 @@ function FAQ() {
     },
     {
       q: "Can producers upload beats?",
-      a: "Producer Storefronts™ are open. Talk to us if you want early access.",
+      a: "Producer Storefronts are open. Talk to us if you want early access.",
     },
     {
       q: "Do you have a mobile app?",
@@ -431,7 +431,7 @@ function CTA() {
           Your next song is <span className="text-gold-gradient">one session</span> away.
         </h2>
         <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-          Enter the Prep Studio™. Pick a beat. Finish the song. Walk out Booth Ready™.
+          Enter the Prep Studio. Pick a beat. Finish the song. Walk out Booth Ready.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link

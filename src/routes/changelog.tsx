@@ -7,7 +7,7 @@ export const Route = createFileRoute("/changelog")({
   head: () => ({
     meta: [
       { title: "Changelog · RapWriter.ai" },
-      { name: "description", content: "What we shipped. The Prep Studio™ is under active development — this is where you can see it." },
+      { name: "description", content: "What we shipped. The Prep Studio is under active development — this is where you can see it." },
       { property: "og:title", content: "RapWriter.ai — Changelog" },
       { property: "og:description", content: "Shipped updates from the RapWriter.ai team." },
     ],
@@ -19,25 +19,25 @@ const entries = [
   {
     date: "Jul 04, 2026",
     tag: "Ghost Studio",
-    title: "Booth Ready™ Achievement System",
+    title: "Booth Ready Achievement System",
     body: "Automatic cinematic celebration when a project's quality score crosses 90. Gold badge stamp, staged certificate reveal, and a shareable certification number.",
   },
   {
     date: "Jun 22, 2026",
     tag: "Ghost Studio",
     title: "Ghost Studio V1.5 — Director's Cut",
-    body: "Producer Notes™, Song Mission™ checklist, Writing Session Timeline™, and a redesigned Now Playing surface. The studio finally feels like a studio.",
+    body: "Producer Notes, Song Mission checklist, Writing Session Timeline, and a redesigned Now Playing surface. The studio finally feels like a studio.",
   },
   {
     date: "Jun 08, 2026",
     tag: "Marketplace",
-    title: "Homepage restructure — Start With A Beat™",
-    body: "Marketplace hero now leads with mood chips, a live 'writing now' counter, and a clear Start Writing™ CTA. Endless scrolling is out.",
+    title: "Homepage restructure — Start With A Beat",
+    body: "Marketplace hero now leads with mood chips, a live 'writing now' counter, and a clear Start Writing CTA. Endless scrolling is out.",
   },
   {
     date: "May 27, 2026",
     tag: "Marketplace",
-    title: "Producer Storefronts™",
+    title: "Producer Storefronts",
     body: "Every producer now has a full storefront: hero banner, collections, best sellers, social proof, and a producer story.",
   },
   {

@@ -15,7 +15,7 @@ export function SiteFooter() {
             </span>
           </Link>
           <p className="mt-3 text-muted-foreground max-w-sm leading-relaxed">
-            The luxury prep studio for rap artists. Go from idea to Booth Ready™ —
+            The luxury prep studio for rap artists. Go from idea to Booth Ready —
             without leaving one environment.
           </p>
           <div className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
@@ -51,7 +51,7 @@ export function SiteFooter() {
       <div className="border-t border-border/30">
         <div className="mx-auto max-w-6xl px-5 py-4 text-[11px] uppercase tracking-[0.2em] text-muted-foreground/70 flex items-center justify-between">
           <span>Made in Atlanta · Written everywhere</span>
-          <span>Booth Ready™ · Ghost Studio™ · Prep Studio™</span>
+          <span>Booth Ready · Ghost Studio · Prep Studio</span>
         </div>
       </div>
     </footer>

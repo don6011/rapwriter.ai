@@ -33,7 +33,7 @@ function Manifesto() {
             <p>
               RapWriter.ai is that room. A luxury prep studio. Beats you can actually
               license. A workspace that scores your cadence, your structure, your replay
-              value. A finish line called <span className="text-gold">Booth Ready™</span>.
+              value. A finish line called <span className="text-gold">Booth Ready</span>.
             </p>
             <p>
               We built it because writers deserve better than a text box. Because producers

@@ -77,17 +77,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "RapWriter.ai — The Prep Studio™ for artists" },
+      { title: "RapWriter.ai — The Prep Studio for artists" },
       {
         name: "description",
         content:
-          "RapWriter.ai is the luxury prep studio for rap artists. License beats, write to them, and go Booth Ready™ — all in one environment.",
+          "RapWriter.ai is the luxury prep studio for rap artists. License beats, write to them, and go Booth Ready — all in one environment.",
       },
       { name: "author", content: "RapWriter.ai" },
       { name: "theme-color", content: "#0d0d0f" },
       { property: "og:site_name", content: "RapWriter.ai" },
       { property: "og:type", content: "website" },
-      { property: "og:title", content: "RapWriter.ai — Go from idea to Booth Ready™" },
+      { property: "og:title", content: "RapWriter.ai — Go from idea to Booth Ready" },
       {
         property: "og:description",
         content:

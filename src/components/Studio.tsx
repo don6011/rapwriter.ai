@@ -37,14 +37,14 @@ const SEED_CONTENT: Record<string, string> = {
   "Outro":   "",
 };
 
-// Producer Notes™ replaces the old Pen Coach action grid — see ProducerNotesPanel
+// Producer Notes replaces the old Pen Coach action grid — see ProducerNotesPanel
 
 
 // Three studio environments
 const modes = [
-  { id: "midnight", label: "Midnight Session™", icon: Moon,     blurb: "After-hours pen. Low light. Smoke-thick." },
-  { id: "booth",    label: "Booth Mode™",       icon: Mic,      blurb: "Performance lens. Cadence-first. Mic warm." },
-  { id: "writers",  label: "Writer's Room™",    icon: BookOpen, blurb: "Daylight focus. Clean page. Collab energy." },
+  { id: "midnight", label: "Midnight Session", icon: Moon,     blurb: "After-hours pen. Low light. Smoke-thick." },
+  { id: "booth",    label: "Booth Mode",       icon: Mic,      blurb: "Performance lens. Cadence-first. Mic warm." },
+  { id: "writers",  label: "Writer's Room",    icon: BookOpen, blurb: "Daylight focus. Clean page. Collab energy." },
 ];
 
 const ambiance = [
@@ -83,9 +83,9 @@ const projects = [
 
 const snapshots = [
   { day: "Today",     time: "12 min ago", title: "Midnight on the Strip", note: "Hook locked. Verse 1 polished. Coach approved cadence shift.", bars: 16, state: 2, duration: "1h 14m", linesAdded: 22, sections: ["Hook", "Verse 1"], beat: "Smoke & Velvet", glyph: "MS", art: "linear-gradient(160deg, #0a0a1a 0%, #1a1438 50%, #c9a84c 130%)" },
-  { day: "Yesterday", time: "11:42 PM",   title: "Midnight on the Strip", note: "Pulled hook from Hook Locker™. Tried two cadences.",                bars: 8,  state: 1, duration: "42m",    linesAdded: 14, sections: ["Hook"],           beat: "Smoke & Velvet", glyph: "MS", art: "linear-gradient(160deg, #0a0a1a 0%, #1a1438 50%, #c9a84c 130%)" },
+  { day: "Yesterday", time: "11:42 PM",   title: "Midnight on the Strip", note: "Pulled hook from Hook Locker. Tried two cadences.",                bars: 8,  state: 1, duration: "42m",    linesAdded: 14, sections: ["Hook"],           beat: "Smoke & Velvet", glyph: "MS", art: "linear-gradient(160deg, #0a0a1a 0%, #1a1438 50%, #c9a84c 130%)" },
   { day: "Tuesday",   time: "1:18 AM",    title: "Velvet Pressure",       note: "Bridge rewrite. Loaded NightOwl beat pack.",                       bars: 24, state: 2, duration: "2h 03m", linesAdded: 31, sections: ["Bridge", "Verse 2"], beat: "Lowlight",     glyph: "VP", art: "linear-gradient(180deg, #051a1a 0%, #0d3838 50%, #5cbdb9 130%)" },
-  { day: "Sunday",    time: "9:04 PM",    title: "Backseat Cathedral",    note: "Booth Ready™ certified. Sent to engineer.",                       bars: 32, state: 3, duration: "3h 21m", linesAdded: 48, sections: ["Hook", "V1", "V2", "Bridge", "Outro"], beat: "Cathedral 88", glyph: "BC", art: "linear-gradient(200deg, #2d0a1f 0%, #5c1840 50%, #d4842a 110%)" },
+  { day: "Sunday",    time: "9:04 PM",    title: "Backseat Cathedral",    note: "Booth Ready certified. Sent to engineer.",                       bars: 32, state: 3, duration: "3h 21m", linesAdded: 48, sections: ["Hook", "V1", "V2", "Bridge", "Outro"], beat: "Cathedral 88", glyph: "BC", art: "linear-gradient(200deg, #2d0a1f 0%, #5c1840 50%, #d4842a 110%)" },
 ];
 
 const currentBeat = {
@@ -164,7 +164,7 @@ export default function Studio() {
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [sectionContent, draftKey]);
 
-  // -------- Live Completion % + Booth Ready Score™ --------
+  // -------- Live Completion % + Booth Ready Score --------
   const { completionPct, boothScore, totalBars } = useMemo(() => {
     let weightedDone = 0;
     let weightedTotal = 0;
@@ -199,7 +199,7 @@ export default function Studio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completionPct]);
 
-  // Auto-trigger Booth Ready™ achievement once per project
+  // Auto-trigger Booth Ready achievement once per project
   const certifiedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (boothScore >= 90 && !certifiedRef.current.has(activeProject.id)) {
@@ -274,7 +274,7 @@ export default function Studio() {
     setTimeout(() => {
       purchase(beat.id, tier.license, tier.price);
       setLicenseState("licensed");
-      setLicenseFlash(`${tier.license} license cleared · added to Beat Locker™ + My Licenses`);
+      setLicenseFlash(`${tier.license} license cleared · added to Beat Locker + My Licenses`);
       setTimeout(() => setLicenseFlash(null), 4000);
     }, 650);
   };
@@ -312,7 +312,7 @@ export default function Studio() {
           <div className="hidden md:flex items-center gap-2 px-4 py-1.5 rounded-full border border-border bg-onyx-elev/60">
             <span className="h-1.5 w-1.5 rounded-full bg-gold animate-pulse" />
             <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              The Prep Studio™ · {modes.find(m => m.id === activeMode)?.label}
+              The Prep Studio · {modes.find(m => m.id === activeMode)?.label}
             </span>
           </div>
 
@@ -362,7 +362,7 @@ export default function Studio() {
         <aside className="hidden lg:block col-span-3 xl:col-span-2">
           <div className="glass-panel rounded-2xl p-4 sticky top-24">
             <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground mb-3 px-2">
-              The Locker™
+              The Locker
             </div>
             <nav className="space-y-1">
               {dynamicLockerItems.map((it) => {
@@ -379,7 +379,7 @@ export default function Studio() {
                   >
                     <span className="flex items-center gap-3">
                       <Icon className={cn("h-4 w-4", (it.accent || it.certified) && "text-gold")} />
-                      <span className="text-sm">{it.label}™</span>
+                      <span className="text-sm">{it.label}</span>
                     </span>
                     <span className={cn(
                       "text-[10px] px-1.5 py-0.5 rounded-md tabular-nums",
@@ -561,7 +561,7 @@ export default function Studio() {
               {/* Live metrics row */}
               <div className="grid grid-cols-3 gap-3">
                 <MetricTile label="Song Completion" value={`${completionPct}%`} highlight />
-                <MetricTile label="Booth Ready Score™" value={`${boothScore}`} suffix="/100" gold />
+                <MetricTile label="Booth Ready Score" value={`${boothScore}`} suffix="/100" gold />
                 <MetricTile label="Total Bars" value={`${totalBars}`} />
               </div>
 
@@ -574,7 +574,7 @@ export default function Studio() {
                     onClick={() => setBoothModalOpen(true)}
                     className="text-[10px] uppercase tracking-[0.25em] text-gold hover:underline flex items-center gap-1"
                   >
-                    Preview Booth Ready™ <ArrowUpRight className="h-3 w-3" />
+                    Preview Booth Ready <ArrowUpRight className="h-3 w-3" />
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -592,7 +592,7 @@ export default function Studio() {
                         "text-[10px] uppercase tracking-[0.2em] mt-2 transition-colors",
                         i === songState ? "text-gold" : "text-muted-foreground"
                       )}>
-                        {s}{i === 3 && "™"}
+                        {s}{i === 3 && ""}
                       </div>
                     </button>
                   ))}
@@ -608,14 +608,14 @@ export default function Studio() {
 
         {/* RIGHT SIDEBAR */}
         <aside className="col-span-12 xl:col-span-3 space-y-4">
-          {/* Producer Notes™ — replaces generic Pen Coach actions */}
+          {/* Producer Notes — replaces generic Pen Coach actions */}
           <ProducerNotesPanel
             sectionContent={sectionContent}
             completionPct={completionPct}
             boothScore={boothScore}
           />
 
-          {/* Booth Ready Engine™ */}
+          {/* Booth Ready Engine */}
           <BoothReadyEngine
             sectionContent={sectionContent}
             completionPct={completionPct}
@@ -629,7 +629,7 @@ export default function Studio() {
             <div className="flex items-center gap-2 mb-3">
               <Headphones className="h-4 w-4 text-gold" />
               <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                Studio Air™
+                Studio Air
               </span>
             </div>
             <p className="text-xs text-muted-foreground mb-4">
@@ -823,7 +823,7 @@ function FullScreenWriter({
         {/* Footer metrics */}
         <div className="border-t border-border pt-4 mt-4 grid grid-cols-3 gap-3">
           <MetricTile label="Song Completion" value={`${completionPct}%`} highlight />
-          <MetricTile label="Booth Ready Score™" value={`${boothScore}`} suffix="/100" gold />
+          <MetricTile label="Booth Ready Score" value={`${boothScore}`} suffix="/100" gold />
           <MetricTile label="Section Bars" value={String((sectionContent[section.name] ?? "").split("\n").filter(l => l.trim()).length)} />
         </div>
       </div>
@@ -874,7 +874,7 @@ function ResumeSessionCard({ project, onResume }: { project: typeof projects[num
             Midnight on the Strip
           </div>
           <div className="text-sm text-muted-foreground">
-            Verse 1 · 16 bars in · cadence approved by Pen Coach™
+            Verse 1 · 16 bars in · cadence approved by Pen Coach
           </div>
         </div>
         <button
@@ -895,7 +895,7 @@ function SnapshotHistory() {
         <div className="flex items-center gap-2">
           <Camera className="h-4 w-4 text-gold" />
           <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Writing Session Timeline™
+            Writing Session Timeline
           </span>
         </div>
         <button className="text-xs text-muted-foreground hover:text-gold flex items-center gap-1">
@@ -933,7 +933,7 @@ function SnapshotHistory() {
                       </div>
                       {s.state === 3 && (
                         <span className="gold-seal text-onyx text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
-                          <Award className="h-2.5 w-2.5" /> Booth Ready™
+                          <Award className="h-2.5 w-2.5" /> Booth Ready
                         </span>
                       )}
                     </div>
@@ -1330,7 +1330,7 @@ function BoothReadyMilestone({ project, score = 94, onClose }: { project: typeof
                 Achievement Unlocked
               </div>
               <div className="font-display text-3xl text-gold-gradient mt-1 animate-fade-in" style={{ animationDelay: "0.85s", animationFillMode: "both" }}>
-                Booth Ready™
+                Booth Ready
               </div>
             </div>
           </div>
@@ -1382,7 +1382,7 @@ function BoothReadyMilestone({ project, score = 94, onClose }: { project: typeof
             </div>
 
             <h3 className="font-display text-5xl md:text-6xl text-gold-gradient leading-[1.05]">
-              Booth Ready™
+              Booth Ready
             </h3>
             <div className="hairline my-5 max-w-[220px] mx-auto" />
             <div className="font-display text-2xl md:text-3xl text-foreground/95">
@@ -1437,7 +1437,7 @@ function BoothReadyMilestone({ project, score = 94, onClose }: { project: typeof
         </div>
 
         <div className="relative text-center text-[10px] uppercase tracking-[0.35em] text-muted-foreground pb-7">
-          Certified in RapWriter.ai · The Prep Studio™
+          Certified in RapWriter.ai · The Prep Studio
         </div>
       </div>
     </div>
@@ -1526,8 +1526,8 @@ function LicenseDialog({
         </div>
 
         <div className="mt-5 text-xs text-foreground/80 leading-relaxed">
-          Writing is free in The Prep Studio™. To export, send to engineer, or mark
-          <span className="text-gold"> Booth Ready™</span>, this beat must be licensed.
+          Writing is free in The Prep Studio. To export, send to engineer, or mark
+          <span className="text-gold"> Booth Ready</span>, this beat must be licensed.
         </div>
 
         <div className="mt-5 space-y-2">
@@ -1564,7 +1564,7 @@ function LicenseDialog({
         {state === "purchasing" && (
           <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gold">
             <span className="h-2 w-2 rounded-full bg-gold animate-pulse" />
-            Clearing license · syncing Beat Locker™…
+            Clearing license · syncing Beat Locker…
           </div>
         )}
 
@@ -1578,7 +1578,7 @@ function LicenseDialog({
 }
 
 // ============================================================
-// Song Mission™ — checklist + progress + Flow Mode entry
+// Song Mission — checklist + progress + Flow Mode entry
 // ============================================================
 function SongMission({
   sectionContent, completionPct, onJumpTo, onFlowMode,
@@ -1603,14 +1603,14 @@ function SongMission({
         <div className="flex items-center gap-2">
           <Flame className="h-4 w-4 text-gold" />
           <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Song Mission™
+            Song Mission
           </span>
         </div>
         <button
           onClick={onFlowMode}
           className="text-[10px] uppercase tracking-[0.25em] text-gold border border-gold/30 hover:bg-gold/10 px-2.5 py-1 rounded-full flex items-center gap-1.5"
         >
-          <EyeOff className="h-3 w-3" /> Writer Flow Mode™
+          <EyeOff className="h-3 w-3" /> Writer Flow Mode
         </button>
       </div>
 
@@ -1620,7 +1620,7 @@ function SongMission({
           <span className="text-sm text-muted-foreground ml-2">complete</span>
         </div>
         <div className="text-[11px] text-muted-foreground">
-          {remaining === 0 ? "Song sealed" : `${remaining} section${remaining > 1 ? "s" : ""} to Booth Ready™`}
+          {remaining === 0 ? "Song sealed" : `${remaining} section${remaining > 1 ? "s" : ""} to Booth Ready`}
         </div>
       </div>
 
@@ -1666,7 +1666,7 @@ function SongMission({
 }
 
 // ============================================================
-// Producer Notes™ — real-feeling scoring + targeted suggestions
+// Producer Notes — real-feeling scoring + targeted suggestions
 // ============================================================
 function ProducerNotesPanel({
   sectionContent, completionPct, boothScore,
@@ -1704,7 +1704,7 @@ function ProducerNotesPanel({
       <div className="flex items-center gap-2 mb-1">
         <MessageSquareQuote className="h-4 w-4 text-gold" />
         <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-          Producer Notes™
+          Producer Notes
         </span>
       </div>
       <p className="text-xs text-muted-foreground mb-4">
@@ -1754,7 +1754,7 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
 }
 
 // ============================================================
-// Booth Ready Engine™ — 5-axis radar of song fitness
+// Booth Ready Engine — 5-axis radar of song fitness
 // ============================================================
 function BoothReadyEngine({
   sectionContent, completionPct, boothScore, onCertify,
@@ -1794,7 +1794,7 @@ function BoothReadyEngine({
         <div className="flex items-center gap-2 mb-3">
           <Award className="h-4 w-4 text-gold" />
           <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Booth Ready Engine™
+            Booth Ready Engine
           </span>
         </div>
 
@@ -1805,7 +1805,7 @@ function BoothReadyEngine({
           </div>
           {certified ? (
             <div className="gold-seal text-onyx text-[10px] uppercase tracking-[0.2em] px-2.5 py-1 rounded-full font-semibold flex items-center gap-1 animate-scale-in">
-              <BadgeCheck className="h-3 w-3" /> Booth Ready™
+              <BadgeCheck className="h-3 w-3" /> Booth Ready
             </div>
           ) : (
             <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
@@ -1842,7 +1842,7 @@ function BoothReadyEngine({
           )}
         >
           <Award className="h-4 w-4" />
-          {certified ? "Certify Booth Ready™" : "Locked — keep writing"}
+          {certified ? "Certify Booth Ready" : "Locked — keep writing"}
         </button>
       </div>
     </div>
