@@ -497,7 +497,8 @@ export default function Studio() {
 
           {/* Section tabs + writing pad */}
           <div className="glass-panel rounded-2xl overflow-hidden">
-            <div className="flex items-center gap-1 px-4 pt-4 overflow-x-auto">
+            {/* Section tabs — scroll-snap, 44px+ targets, live bar chip */}
+            <div className="flex items-center gap-1 px-2 md:px-4 pt-2 md:pt-4 overflow-x-auto snap-x snap-mandatory scrollbar-none">
               {SECTION_BLUEPRINT.map((s, i) => {
                 const content = (sectionContent[s.name] ?? "").trim();
                 const bars = content ? content.split("\n").filter(l => l.trim()).length : 0;
@@ -507,37 +508,50 @@ export default function Studio() {
                     key={s.name}
                     onClick={() => setActiveSection(i)}
                     className={cn(
-                      "px-4 py-2 rounded-t-lg text-sm transition-all whitespace-nowrap border-b-2 flex items-center gap-2",
+                      "snap-start min-h-11 px-3 md:px-4 py-2 rounded-t-lg text-sm md:text-sm transition-all whitespace-nowrap border-b-2 flex items-center gap-2 active:scale-[0.97]",
                       activeSection === i
-                        ? "text-gold border-gold bg-gold/5"
+                        ? "text-gold border-gold bg-gold/10"
                         : "text-muted-foreground border-transparent hover:text-foreground"
                     )}
                   >
-                    <span>{s.name}</span>
+                    <span className="font-medium">{s.name}</span>
                     <span className={cn(
-                      "text-[9px] tabular-nums px-1.5 rounded-full",
+                      "text-[10px] tabular-nums px-1.5 py-0.5 rounded-full font-mono",
                       full ? "gold-seal text-onyx font-semibold" : "bg-onyx-elev text-muted-foreground"
                     )}>{bars}/{s.target}</span>
                   </button>
                 );
               })}
-              <div className="ml-auto flex items-center gap-1">
-                <span className="hidden md:flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-muted-foreground px-2">
+              <div className="ml-auto flex items-center gap-1 pr-2">
+                <span className="hidden sm:flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-muted-foreground px-2">
                   <Save className={cn("h-3 w-3", savingFlash ? "text-gold animate-pulse" : "text-gold/60")} />
                   {savingFlash ? "Saving…" : lastSaved ? `Saved ${formatAgo(lastSaved)}` : "Draft"}
                 </span>
                 <button
                   onClick={() => setFullscreen(true)}
                   title="Full Screen Writing"
-                  className="p-2 rounded-lg text-muted-foreground hover:text-gold hover:bg-gold/5"
+                  aria-label="Enter full screen writing mode"
+                  className="min-h-11 min-w-11 grid place-items-center rounded-lg text-muted-foreground hover:text-gold hover:bg-gold/5 active:bg-gold/10"
                 >
-                  <Maximize2 className="h-4 w-4" />
+                  <Maximize2 className="h-5 w-5" />
                 </button>
               </div>
             </div>
 
-            <div className="px-8 py-10 md:px-12 md:py-14 min-h-[420px] bg-gradient-to-b from-transparent to-onyx/40">
-              <div className="flex items-center justify-between mb-6">
+            {/* Mobile status bar — always-visible saved + section target */}
+            <div className="flex sm:hidden items-center justify-between px-4 py-2 border-t border-border/60 bg-onyx/40">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                <Save className={cn("h-3 w-3", savingFlash ? "text-gold animate-pulse" : "text-gold/60")} />
+                {savingFlash ? "Saving…" : lastSaved ? formatAgo(lastSaved) : "Draft"}
+              </div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-gold/70 font-mono">
+                {SECTION_BLUEPRINT[activeSection].name} · {SECTION_BLUEPRINT[activeSection].target} bars
+              </div>
+            </div>
+
+            {/* Writing pad — mobile-first typography and spacing */}
+            <div className="px-4 py-5 sm:px-8 sm:py-10 md:px-12 md:py-14 min-h-[440px] bg-gradient-to-b from-transparent to-onyx/40">
+              <div className="hidden sm:flex items-center justify-between mb-6">
                 <div className="text-[10px] uppercase tracking-[0.3em] text-gold/70">
                   {SECTION_BLUEPRINT[activeSection].name}
                 </div>
@@ -552,13 +566,48 @@ export default function Studio() {
                   [SECTION_BLUEPRINT[activeSection].name]: e.target.value,
                 }))}
                 placeholder="Tap to start writing…"
-                rows={10}
-                className="w-full bg-transparent resize-none font-display text-2xl md:text-[28px] leading-[1.7] text-foreground/95 outline-none placeholder:text-muted-foreground/50"
+                rows={12}
+                autoCapitalize="sentences"
+                autoCorrect="on"
+                spellCheck
+                enterKeyHint="enter"
+                inputMode="text"
+                style={{ fontSize: "18px" }}
+                className="w-full bg-transparent resize-none font-sans leading-[1.65] sm:leading-[1.7] sm:text-2xl md:text-[28px] text-foreground/95 outline-none placeholder:text-muted-foreground/40 tracking-[-0.005em] caret-gold selection:bg-gold/25"
               />
             </div>
 
+            {/* Mobile quick-action rail — thumb-reachable section jump */}
+            <div className="flex sm:hidden items-stretch border-t border-border bg-onyx/70">
+              <button
+                onClick={() => setActiveSection(Math.max(0, activeSection - 1))}
+                disabled={activeSection === 0}
+                aria-label="Previous section"
+                className="flex-1 min-h-12 grid place-items-center text-muted-foreground disabled:opacity-30 active:bg-gold/10 active:text-gold"
+              >
+                <SkipBack className="h-5 w-5" />
+              </button>
+              <div className="w-px bg-border" />
+              <button
+                onClick={() => setFullscreen(true)}
+                aria-label="Full screen writer"
+                className="flex-[1.4] min-h-12 grid place-items-center gap-1 text-gold active:bg-gold/15"
+              >
+                <Maximize2 className="h-5 w-5" />
+              </button>
+              <div className="w-px bg-border" />
+              <button
+                onClick={() => setActiveSection(Math.min(SECTION_BLUEPRINT.length - 1, activeSection + 1))}
+                disabled={activeSection === SECTION_BLUEPRINT.length - 1}
+                aria-label="Next section"
+                className="flex-1 min-h-12 grid place-items-center text-muted-foreground disabled:opacity-30 active:bg-gold/10 active:text-gold"
+              >
+                <SkipForward className="h-5 w-5" />
+              </button>
+            </div>
+
             {/* Progress tracker */}
-            <div className="border-t border-border px-5 py-4 bg-onyx/60 space-y-4">
+            <div className="border-t border-border px-4 sm:px-5 py-4 bg-onyx/60 space-y-4">
               {/* Live metrics row */}
               <div className="grid grid-cols-3 gap-3">
                 <MetricTile label="Song Completion" value={`${completionPct}%`} highlight />
