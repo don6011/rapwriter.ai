@@ -3886,10 +3886,10 @@ function MobileWriter({
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#050506]">
       <div
-        className="pointer-events-none absolute inset-0 bg-cover opacity-[0.1] blur-[2px] saturate-[0.8]"
+        className="pointer-events-none absolute inset-0 bg-cover opacity-[0.17] blur-[1px] saturate-[0.78]"
         style={{ backgroundImage: `url('${studioPack.image}')`, backgroundPosition: studioPack.position }}
       />
-      <div className="pointer-events-none absolute inset-0" style={{ background: studioPack.overlay }} />
+      <div className="pointer-events-none absolute inset-0 opacity-80" style={{ background: studioPack.overlay }} />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,176,32,0.12),transparent_42%)]" />
       <div className="relative z-10 flex items-center justify-between border-b border-white/10 bg-black/52 px-5 py-3 backdrop-blur-xl">
         <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Exit writer">
@@ -3970,41 +3970,51 @@ function MobileWriter({
             onSave={onSaveRoughTake}
           />
         </div>
-        {penView ? (
-          <PenView sectionName={section.name} text={sectionText} />
-        ) : (
-          <textarea
-            autoFocus
-            value={sectionText}
-            onChange={(event) => onChange(event.target.value)}
-            placeholder={`Start ${section.name}...`}
-            aria-label={`${section.name} lyrics`}
-            spellCheck={false}
-            className="min-h-[52svh] flex-none resize-none rounded-2xl border border-white/8 bg-[#080809]/82 p-5 font-mono text-[18px] leading-9 text-gold/90 caret-gold shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-white/30 focus:border-gold/25 focus:shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_0_0_3px_rgba(255,176,32,0.06)]"
-          />
-        )}
-        <div className="mt-3 grid grid-cols-[1fr_auto_auto_auto] items-center gap-1 rounded-xl border border-white/10 bg-[#111113]/94 p-1.5">
-          <div className="min-w-0 px-2">
-            <div className="text-[10px] font-semibold tabular-nums text-gold">{sectionBars} / {section.target} bars</div>
-            <div className="mt-0.5 truncate text-[9px] uppercase tracking-[0.13em] text-white/42">{writerSaveLabel}</div>
+        <div className="overflow-hidden rounded-2xl border border-white/12 bg-black/26 shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_18px_50px_rgba(0,0,0,0.26)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 focus-within:border-gold/28 focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_0_0_3px_rgba(255,176,32,0.055),0_18px_50px_rgba(0,0,0,0.3)]">
+          {penView ? (
+            <PenView sectionName={section.name} text={sectionText} />
+          ) : (
+            <textarea
+              autoFocus
+              value={sectionText}
+              onChange={(event) => onChange(event.target.value)}
+              placeholder={`Start ${section.name}...`}
+              aria-label={`${section.name} lyrics`}
+              spellCheck={false}
+              style={{
+                backgroundImage: "repeating-linear-gradient(to bottom, transparent 0, transparent 35px, rgba(255,255,255,0.05) 36px)",
+                backgroundPosition: "0 20px",
+                backgroundSize: "100% 36px",
+              }}
+              className="min-h-[54svh] w-full flex-none resize-none bg-transparent p-5 font-sans text-[18px] leading-9 text-white/92 caret-gold outline-none placeholder:text-white/28"
+            />
+          )}
+          <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-1 border-t border-white/10 bg-black/24 p-1.5 backdrop-blur-xl">
+            <div className="min-w-0 px-2">
+              <div className="text-[10px] font-semibold tabular-nums text-white/72">{sectionBars} / {section.target} bars</div>
+              <div className="mt-0.5 truncate text-[9px] uppercase tracking-[0.13em] text-emerald-300/80">{writerSaveLabel}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPenView((current) => !current)}
+              className={cn(
+                "flex min-h-10 flex-col items-center justify-center rounded-full border px-2.5 text-[9px] font-semibold transition-colors",
+                penView ? "border-gold/45 bg-gold/14 text-gold" : "border-transparent text-muted-foreground hover:border-white/10 hover:bg-white/[0.035]",
+              )}
+              aria-pressed={penView}
+            >
+              <Pencil className="mb-0.5 h-3.5 w-3.5" />
+              {penView ? "Edit" : "Pen View"}
+            </button>
+            <button type="button" onClick={signedIn ? onOpenHistory : onSyncRequest} className="flex min-h-10 flex-col items-center justify-center rounded-full border border-transparent px-2.5 text-[9px] font-semibold text-muted-foreground transition-colors hover:border-white/10 hover:bg-white/[0.035]">
+              <History className="mb-0.5 h-3.5 w-3.5" />
+              History
+            </button>
+            <button type="button" onClick={padActions.onSaveHook} disabled={padActions.status.state === "saving"} className="flex min-h-10 flex-col items-center justify-center rounded-full border border-transparent px-2.5 text-[9px] font-semibold text-gold transition-colors hover:border-gold/20 hover:bg-gold/[0.06] disabled:opacity-50">
+              <Save className="mb-0.5 h-3.5 w-3.5" />
+              Save hook
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setPenView((current) => !current)}
-            className={cn("flex min-h-10 flex-col items-center justify-center rounded-lg px-2 text-[9px] font-semibold", penView ? "bg-gold/14 text-gold" : "text-muted-foreground")}
-            aria-pressed={penView}
-          >
-            <Pencil className="mb-0.5 h-3.5 w-3.5" />
-            {penView ? "Edit" : "Pen View"}
-          </button>
-          <button type="button" onClick={signedIn ? onOpenHistory : onSyncRequest} className="flex min-h-10 flex-col items-center justify-center rounded-lg px-2 text-[9px] font-semibold text-muted-foreground">
-            <History className="mb-0.5 h-3.5 w-3.5" />
-            History
-          </button>
-          <button type="button" onClick={padActions.onSaveHook} disabled={padActions.status.state === "saving"} className="flex min-h-10 flex-col items-center justify-center rounded-lg px-2 text-[9px] font-semibold text-gold disabled:opacity-50">
-            <Save className="mb-0.5 h-3.5 w-3.5" />
-            Save hook
-          </button>
         </div>
         {padActions.status.message && (
           <div className={cn("mt-2 text-center text-[11px]", padActions.status.state === "error" ? "text-rec" : "text-gold")}>{padActions.status.message}</div>
@@ -4082,7 +4092,7 @@ function PenView({ sectionName, text }: { sectionName: string; text: string }) {
 
   if (!analysis.lines.length) {
     return (
-      <div className="grid min-h-[52svh] place-items-center rounded-2xl border border-white/8 bg-[#080809]/82 px-8 text-center">
+      <div className="grid min-h-[54svh] place-items-center bg-white/[0.012] px-8 text-center">
         <div>
           <Pencil className="mx-auto h-5 w-5 text-gold" />
           <div className="mt-3 text-sm font-semibold">Write a few lines first.</div>
@@ -4093,18 +4103,18 @@ function PenView({ sectionName, text }: { sectionName: string; text: string }) {
   }
 
   return (
-    <section className="min-h-[52svh] overflow-hidden rounded-2xl border border-gold/18 bg-[#080809]/88" aria-label={`${sectionName} Pen View analysis`}>
-      <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
+    <section className="min-h-[54svh] overflow-hidden bg-white/[0.012]" aria-label={`${sectionName} Pen View analysis`}>
+      <div className="flex items-center justify-between border-b border-white/8 bg-black/18 px-4 py-3 backdrop-blur-lg">
         <div>
           <div className="label-hw text-gold/80">Pen View</div>
-          <div className="mt-1 text-xs text-muted-foreground">Your words. A clearer pattern.</div>
+          <div className="mt-1 text-[10px] uppercase tracking-[0.12em] text-white/38">Matching endings / syllables</div>
         </div>
         <div className="text-right text-[10px] text-white/45">
           <div>{analysis.totalSyllables} syllables</div>
           <div className="mt-1">{rhymeGroups.size} rhyme groups</div>
         </div>
       </div>
-      <ol className="divide-y divide-white/[0.055] px-2 py-2">
+      <ol className="divide-y divide-white/[0.06] px-2 py-2">
         {analysis.lines.map((line) => {
           const group = line.rhymeKey ? rhymeGroups.get(line.rhymeKey) : undefined;
           const endingMatch = line.text.match(/([A-Za-z0-9']+)([^A-Za-z0-9']*)$/);
@@ -4112,7 +4122,7 @@ function PenView({ sectionName, text }: { sectionName: string; text: string }) {
           return (
             <li key={`${line.number}-${line.text}`} className="grid grid-cols-[1.75rem_1fr_auto] gap-2 rounded-lg px-2 py-3">
               <span className="pt-1 text-right font-mono text-[10px] tabular-nums text-white/28">{line.number}</span>
-              <p className="min-w-0 whitespace-pre-wrap font-mono text-[15px] leading-7 text-white/82">
+              <p className="min-w-0 whitespace-pre-wrap font-sans text-[16px] leading-7 text-white/88">
                 {line.text.slice(0, endingStart)}
                 {endingMatch ? (
                   <span className={cn("font-semibold", group ? "text-gold" : "text-white/82")}>
@@ -4318,7 +4328,14 @@ function MobileSectionTabs({
   preview?: boolean;
 }) {
   return (
-    <div role="tablist" aria-label="Song sections" className={cn("flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", preview ? "-mx-1 mb-3 pb-1" : "border-b border-white/10 px-3 pt-3")}>
+    <div
+      role="tablist"
+      aria-label="Song sections"
+      className={cn(
+        "flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        preview ? "-mx-1 mb-3 pb-1" : "px-4 py-3",
+      )}
+    >
       {mobileSections.map((item, index) => (
         <button
           key={item.name}
@@ -4327,11 +4344,11 @@ function MobileSectionTabs({
           aria-selected={activeSection === index}
           onClick={() => onSetActiveSection(index)}
           className={cn(
-            "min-h-10 shrink-0 text-xs text-muted-foreground",
+            "min-h-10 shrink-0 rounded-full border px-3 py-1.5 text-[11px] text-muted-foreground backdrop-blur-md transition-[border-color,background-color,color,box-shadow]",
             preview
-              ? "rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[11px]"
-              : "rounded-t-xl border-b-2 px-3 py-2",
-            activeSection === index && (preview ? "border-gold/50 bg-gold/12 text-gold" : "border-gold bg-gold/8 text-gold"),
+              ? "border-white/10 bg-black/20"
+              : "border-white/12 bg-black/24 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]",
+            activeSection === index && "border-gold/50 bg-gold/12 text-gold shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_0_18px_rgba(255,176,32,0.08)]",
           )}
         >
           {item.name} <span className="tabular-nums opacity-70">{countBars(sectionContent[item.name])}/{item.target}</span>

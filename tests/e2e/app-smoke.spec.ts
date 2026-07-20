@@ -64,6 +64,46 @@ test("writer draft and active section survive refresh", async ({ page }) => {
   await expectHealthyPage(resumedPage);
 });
 
+test("writer glass pad stays focused and mobile safe", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.evaluate(() => localStorage.clear());
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  await page.getByRole("button", { name: "Open Writer Flow" }).click();
+  const startSession = page.getByRole("button", { name: "Start Session" });
+  if (await startSession.isVisible().catch(() => false)) await startSession.click();
+
+  const editor = page.getByRole("textbox", { name: "Hook lyrics" });
+  await editor.fill("Glass roof, still I see the sky though\nEvery ceiling that they built, I broke the light through");
+
+  const editorStyle = await editor.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const surfaceStyle = getComputedStyle(element.parentElement as HTMLElement);
+    return {
+      color: style.color,
+      backgroundImage: style.backgroundImage,
+      surfaceBackground: surfaceStyle.backgroundColor,
+      surfaceBackdrop: surfaceStyle.backdropFilter,
+    };
+  });
+  const hookTabRadius = await page.getByRole("tab", { name: /^Hook/ }).evaluate((element) => parseFloat(getComputedStyle(element).borderRadius));
+
+  expect(editorStyle.color).toMatch(/255,\s*255,\s*255|0\.999/);
+  expect(editorStyle.backgroundImage).toContain("linear-gradient");
+  expect(editorStyle.surfaceBackground).not.toBe("rgba(0, 0, 0, 0)");
+  expect(editorStyle.surfaceBackdrop).not.toBe("none");
+  expect(hookTabRadius).toBeGreaterThanOrEqual(20);
+  await expect(page.locator("nav")).toHaveCount(0);
+  await expectHealthyPage(page);
+  await page.screenshot({ path: testInfo.outputPath("writer-glass.png"), fullPage: false });
+
+  await page.getByRole("button", { name: "Pen View" }).click();
+  await expect(page.getByRole("region", { name: "Hook Pen View analysis" })).toContainText("Matching endings / syllables");
+  await expectHealthyPage(page);
+  await page.screenshot({ path: testInfo.outputPath("pen-view-glass.png"), fullPage: false });
+});
+
 test("foreign-origin API mutation is rejected", async ({ request }) => {
   const response = await request.post("/api/marketplace/events", {
     headers: { Origin: "https://example.com" },
