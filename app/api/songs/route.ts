@@ -1,0 +1,55 @@
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/api/auth";
+import { parseJson } from "@/lib/api/json";
+import { songCreateSchema, songPatchSchema } from "@/lib/schemas";
+
+export async function GET() {
+  const { supabase, user, response } = await requireUser();
+  if (response) return response;
+
+  const { data, error } = await supabase
+    .from("songs")
+    .select("*, projects(title, project_type)")
+    .eq("owner_id", user.id)
+    .order("updated_at", { ascending: false });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ songs: data });
+}
+
+export async function POST(request: Request) {
+  const { supabase, user, response } = await requireUser();
+  if (response) return response;
+
+  const parsed = await parseJson(request, songCreateSchema);
+  if (parsed.response) return parsed.response;
+
+  const { data, error } = await supabase
+    .from("songs")
+    .insert({ ...parsed.data, owner_id: user.id })
+    .select("*")
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ song: data }, { status: 201 });
+}
+
+export async function PATCH(request: Request) {
+  const { supabase, user, response } = await requireUser();
+  if (response) return response;
+
+  const parsed = await parseJson(request, songPatchSchema);
+  if (parsed.response) return parsed.response;
+  const { id, ...patch } = parsed.data;
+
+  const { data, error } = await supabase
+    .from("songs")
+    .update(patch)
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .select("*")
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ song: data });
+}

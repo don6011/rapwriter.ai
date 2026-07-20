@@ -10,11 +10,19 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.next
 .output
 .vinxi
 .tanstack/**
 .nitro
 *.local
+*.tsbuildinfo
+supabase/.temp/
+
+# Local visual QA captures
+/rapwriter-*.png
+/playwright-report/
+/test-results/
 
 # Wrangler / Cloudflare
 .wrangler/

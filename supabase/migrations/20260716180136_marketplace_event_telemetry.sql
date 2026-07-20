@@ -1,0 +1,1 @@
+-- Reserved by the Supabase CLI while the telemetry migration file was created.
