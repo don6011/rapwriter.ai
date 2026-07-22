@@ -2,13 +2,26 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/api/auth";
 import { parseJson } from "@/lib/api/json";
 import { producerPlaylistSaveSchema } from "@/lib/schemas";
+import { membershipErrorResponse, requireMembershipEntitlement, requireMembershipLimit } from "@/lib/server/membership-access";
 
 export async function POST(request: Request) {
-  const { supabase, response } = await requireRole("producer");
+  const { supabase, user, response } = await requireRole("producer");
   if (response) return response;
 
   const parsed = await parseJson(request, producerPlaylistSaveSchema);
   if (parsed.response) return parsed.response;
+
+  const { count, error: countError } = await supabase
+    .from("producer_playlists")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", user.id);
+  if (countError) return NextResponse.json({ error: countError.message }, { status: 500 });
+  try {
+    await requireMembershipEntitlement(supabase, user.id, "producer", "collections");
+    await requireMembershipLimit(supabase, user.id, "producer", "collections", count ?? 0);
+  } catch (error) {
+    return membershipErrorResponse(error);
+  }
 
   const { data, error } = await supabase.rpc("save_producer_playlist", {
     p_playlist_id: null,

@@ -7,7 +7,11 @@ export async function GET() {
 
   const [
     profile,
+    artistProfile,
     roles,
+    subscriptions,
+    entitlementGrants,
+    usageCounters,
     projects,
     songs,
     sessions,
@@ -28,7 +32,11 @@ export async function GET() {
     producerActions,
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+    supabase.from("artist_profiles").select("*").eq("owner_id", user.id).maybeSingle(),
     supabase.from("user_roles").select("role, created_at").eq("user_id", user.id),
+    supabase.from("user_subscriptions").select("*").eq("owner_id", user.id).order("created_at"),
+    supabase.from("entitlement_grants").select("*").eq("owner_id", user.id).order("created_at"),
+    supabase.from("usage_counters").select("*").eq("owner_id", user.id).order("period_start"),
     supabase.from("projects").select("*").eq("owner_id", user.id).order("created_at"),
     supabase.from("songs").select("*").eq("owner_id", user.id).order("created_at"),
     supabase.from("ghost_studio_sessions").select("*").eq("owner_id", user.id).order("created_at"),
@@ -51,7 +59,11 @@ export async function GET() {
 
   const results = {
     profile,
+    artist_profile: artistProfile,
     roles,
+    subscriptions,
+    entitlement_grants: entitlementGrants,
+    usage_counters: usageCounters,
     projects,
     songs,
     sessions,

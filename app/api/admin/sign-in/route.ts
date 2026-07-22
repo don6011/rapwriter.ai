@@ -42,8 +42,9 @@ export async function POST(request: Request) {
     });
 
     if (error) {
-      if (isFormPost) return adminRedirect(request, error.message);
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      const message = "Email or password is incorrect.";
+      if (isFormPost) return adminRedirect(request, message);
+      return NextResponse.json({ error: message }, { status: 401 });
     }
 
     const { data: role, error: roleError } = await supabase
@@ -67,8 +68,8 @@ export async function POST(request: Request) {
 
     if (isFormPost) return adminRedirect(request);
     return NextResponse.json({ ok: true, email: data.user.email });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Admin sign-in failed.";
+  } catch {
+    const message = "Admin sign-in is temporarily unavailable.";
     if (isFormPost) return adminRedirect(request, message);
     return NextResponse.json({ error: message }, { status: 500 });
   }

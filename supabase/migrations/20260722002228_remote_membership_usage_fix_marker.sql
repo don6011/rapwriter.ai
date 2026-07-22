@@ -1,0 +1,3 @@
+-- Remote migration history marker.
+-- The durable usage-counter fix is preserved in
+-- 20260721031500_fix_membership_usage_counter.sql for fresh environments.

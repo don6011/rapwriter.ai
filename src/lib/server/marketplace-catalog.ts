@@ -140,7 +140,7 @@ function toMarketplaceProducer(profile: ProducerProfileRow, metrics?: ProducerMe
     name: profile.display_name,
     handle: profile.handle ? `@${profile.handle}` : "@producer",
     city: profile.city ?? "Online",
-    bio: profile.bio ?? "Independent producer on RapWriter Marketplace.",
+    bio: profile.bio ?? "Independent producer in RapWriter Studio Store.",
     verified: profile.verified,
     sales: positiveInteger(metrics?.sales),
     followers: positiveInteger(metrics?.followers),

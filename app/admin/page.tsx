@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, LockKeyhole, ShieldCheck } from "lucide-react";
 import { getAdminSession } from "@/lib/admin";
@@ -9,6 +10,11 @@ import { AdminOpsBoard } from "./admin-ops-board";
 import { AdminReviewBoard } from "./admin-review-board";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const metadata: Metadata = {
+  title: "Control Room | RapWriter.ai",
+  robots: { index: false, follow: false, nocache: true },
+};
 
 type BeatWithPreview = Beat & {
   previewUrl?: string;
@@ -137,23 +143,35 @@ export default async function AdminPage({
           <div className="flex items-center gap-3">
             <BrandLogo compact />
             <div>
-              <div className="label-hw text-gold">RapWriter Admin</div>
-              <h1 className="text-xl font-semibold">Control Room</h1>
+              <div className="label-hw hidden text-gold sm:block">RapWriter Admin</div>
+              <h1 className="whitespace-nowrap text-lg font-semibold sm:text-xl">Control Room</h1>
             </div>
           </div>
-          <Link
-            href="/"
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-gold/25 bg-gold/8 px-3 text-sm font-semibold text-gold"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Studio
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-gold/25 bg-gold/8 px-3 text-sm font-semibold text-gold"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Studio
+            </Link>
+            <form action="/api/admin/sign-out" method="post">
+              <button
+                type="submit"
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-black/35 px-3 text-sm font-semibold text-muted-foreground hover:text-foreground"
+                title="Lock the Control Room and sign out"
+              >
+                <LockKeyhole className="h-4 w-4" />
+                <span className="hidden sm:inline">Lock</span>
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-7xl px-5 py-6">
         {(beats.length > 0 || producers.length > 0) && (
-          <section className="grid gap-4 md:grid-cols-4">
+          <section className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
             <StatCard label="Beat Catalog" value={String(beats.length)} note={`${previewReady} previews wired for playback.`} />
             <StatCard label="Producer Roster" value={String(producers.length)} note="Approved public producer storefronts." />
             <StatCard label="Total Plays" value={formatNumber(totalPlays)} note="Recorded Marketplace beat plays." />

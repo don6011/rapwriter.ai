@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   if (parsed.response) return parsed.response;
 
   const product = getCatalogProduct(parsed.data.product_id);
-  if (!product) return NextResponse.json({ error: "Unknown marketplace product" }, { status: 404 });
+  if (!product) return NextResponse.json({ error: "Unknown Studio Store asset" }, { status: 404 });
   if (product.priceCents > 0) {
     return NextResponse.json({ error: "Secure checkout is required for this product." }, { status: 402 });
   }

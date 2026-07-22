@@ -10,6 +10,7 @@ import {
   CloudOff,
   Crown,
   Download,
+  FileText,
   FolderPlus,
   Heart,
   Headphones,
@@ -31,12 +32,14 @@ import {
   Sparkles,
   Trash2,
   Undo2,
+  Upload,
   UserCircle,
   Volume2,
   WandSparkles,
   X,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
+import { MembershipCard } from "@/components/MembershipCard";
 import { PremiumMarketplace } from "@/components/PremiumMarketplace";
 import {
   analyzeLyrics,
@@ -58,15 +61,21 @@ import {
   useRapWriterData,
   isSessionConflictError,
   type BeatLockerRow,
+  type BoothExportCreateInput,
   type HookLockerRow,
   type ProductEntitlementRow,
   type ProfileRow,
+  type PrivateBeatImportInput,
   type ProjectRow,
+  type RoughTakeRow,
   type SongRow,
   type SongLockerRow,
   type SessionRow,
 } from "@/hooks/use-rapwriter-data";
+import type { BoothExportRecord, BoothExportSnapshot } from "@/lib/booth-export";
 import { consumePendingBeat, type Beat, type Producer } from "@/lib/marketplace";
+import type { StarterBeat } from "@/lib/starter-beats";
+import type { WorkspaceMembership } from "@/lib/membership";
 import { cn } from "@/lib/utils";
 
 const mobileSections = [
@@ -103,7 +112,7 @@ const RAW_BEAT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{
 const EMPTY_BEAT = {
   id: "no-beat",
   title: "No beat selected",
-  producer: "Choose from Marketplace",
+  producer: "Choose from Studio Store",
   bpm: 0,
   key: "",
   mood: "",
@@ -394,13 +403,16 @@ export function MobileStudioShell() {
     addBeatLicense,
     beatLocker,
     createSong,
+    createBoothExport,
     ensureWorkspace,
     error: workspaceError,
     hookLocker,
+    importPrivateBeat,
     loadLatestRoughTake,
     loading,
     loadingData,
     lockerCounts,
+    membership,
     profile,
     productEntitlements,
     projects,
@@ -475,6 +487,15 @@ export function MobileStudioShell() {
   const [marketplaceFeed, setMarketplaceFeed] = useState<MarketplaceFeed>({ beats: [], producers: [] });
   const [marketplaceFeedLoading, setMarketplaceFeedLoading] = useState(true);
   const [marketplaceFeedError, setMarketplaceFeedError] = useState<string | null>(null);
+  const [starterBeats, setStarterBeats] = useState<StarterBeat[]>([]);
+  const [starterBeatsLoading, setStarterBeatsLoading] = useState(true);
+  const [starterBeatsError, setStarterBeatsError] = useState<string | null>(null);
+  const [beatSwitcherOpen, setBeatSwitcherOpen] = useState(false);
+  const [boothExportOpen, setBoothExportOpen] = useState(false);
+  const [boothExportDraft, setBoothExportDraft] = useState<BoothExportCreateInput | null>(null);
+  const [boothExportRecord, setBoothExportRecord] = useState<BoothExportRecord | null>(null);
+  const [boothExportStatus, setBoothExportStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [boothExportError, setBoothExportError] = useState<string | null>(null);
   const [studioDna, setStudioDna] = useState<StudioDna>(defaultStudioDna);
   const [studioDnaOpen, setStudioDnaOpen] = useState(false);
   const [producerActionProposal, setProducerActionProposal] = useState<ProducerActionProposal | null>(null);
@@ -566,6 +587,23 @@ export function MobileStudioShell() {
     setSyncRetryNonce((value) => value + 1);
   }, [buildDraftRecord, draftLoaded, user]);
 
+  const selectBeatForSession = useCallback((beat: SelectedBeat) => {
+    const draft = {
+      ...buildDraftRecord(true),
+      beat: { ...beat },
+      playbackPositionSeconds: 0,
+    };
+
+    localDraftRef.current = draft;
+    writeMobileDraftRecord(draft);
+    setSelectedBeat(beat);
+    setSaveStatus(user ? "saving" : "saved");
+
+    if (!user) return;
+    retryUrgentRef.current = true;
+    setSyncRetryNonce((value) => value + 1);
+  }, [buildDraftRecord, user]);
+
   useEffect(() => {
     beatCurrentTimeRef.current = beatCurrentTime;
   }, [beatCurrentTime]);
@@ -645,6 +683,32 @@ export function MobileStudioShell() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    setStarterBeatsLoading(true);
+    setStarterBeatsError(null);
+    void fetch("/api/starter-beats")
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Starter Beats are unavailable.");
+        return data;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setStarterBeats(Array.isArray(data.beats) ? data.beats : []);
+        setStarterBeatsLoading(false);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setStarterBeats([]);
+        setStarterBeatsLoading(false);
+        setStarterBeatsError(error instanceof Error ? error.message : "Starter Beats are unavailable.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     try {
       const raw = window.localStorage.getItem(MOBILE_STUDIO_DNA_KEY);
       if (raw) {
@@ -659,7 +723,7 @@ export function MobileStudioShell() {
 
   function changeStudioPack(id: StudioPackId) {
     if (!canUseStudioPack(id)) {
-      setSyncMessage(`${getStudioPack(id).label} is locked. Preview it in Marketplace first.`);
+      setSyncMessage(`${getStudioPack(id).label} is locked. Preview it in Studio Store first.`);
       setActiveNav("market");
       return;
     }
@@ -674,7 +738,7 @@ export function MobileStudioShell() {
       const next = { ...current, ...patch };
       if (patch.environment) {
         if (!canUseStudioPack(patch.environment)) {
-          setSyncMessage(`${getStudioPack(patch.environment).label} is locked. Preview it in Marketplace first.`);
+          setSyncMessage(`${getStudioPack(patch.environment).label} is locked. Preview it in Studio Store first.`);
           setActiveNav("market");
           return current;
         }
@@ -688,7 +752,7 @@ export function MobileStudioShell() {
   function startStudioDnaSession() {
     const normalized = { ...studioDna, environment: getStudioPack(studioDna.environment).id };
     if (!canUseStudioPack(normalized.environment)) {
-      setSyncMessage(`${getStudioPack(normalized.environment).label} is locked. Preview it in Marketplace first.`);
+      setSyncMessage(`${getStudioPack(normalized.environment).label} is locked. Preview it in Studio Store first.`);
       setActiveNav("market");
       setStudioDnaOpen(false);
       return;
@@ -834,7 +898,7 @@ export function MobileStudioShell() {
     }
 
     activePreviewBeatIdRef.current = null;
-    setBeatError(beat.id === EMPTY_BEAT.id ? "Choose an approved beat from Marketplace." : "This beat has no playable preview.");
+    setBeatError(beat.id === EMPTY_BEAT.id ? "Choose an approved beat from Studio Store." : "This beat has no playable preview.");
   }
 
   const toggleBeatPlayback = () => {
@@ -848,6 +912,20 @@ export function MobileStudioShell() {
       stopBeatPreview({ reset: true });
     });
   };
+
+  const seekBeatPlayback = useCallback((requestedTime: number) => {
+    const audio = beatAudioRef.current;
+    const audioDuration = audio && Number.isFinite(audio.duration) ? audio.duration : 0;
+    const duration = Math.max(audioDuration, beatDurationRef.current, 0);
+    const upperBound = duration > 0.1 ? duration - 0.05 : duration;
+    const nextTime = Math.min(upperBound, Math.max(0, requestedTime));
+
+    beatOffsetRef.current = nextTime;
+    beatCurrentTimeRef.current = nextTime;
+    if (audio) audio.currentTime = nextTime;
+    setBeatCurrentTime(nextTime);
+    setBeatError(null);
+  }, []);
 
   const previewMarketplaceBeat = (beat: Beat) => {
     const snapshot = toBeatSnapshot(beat);
@@ -1156,7 +1234,7 @@ export function MobileStudioShell() {
     setScreen("writer");
     setPlaying(false);
     setBeatCurrentTime(0);
-    setSyncMessage(`${pendingBeat.title} loaded from Marketplace`);
+    setSyncMessage(`${pendingBeat.title} loaded from Studio Store`);
   }, [loadingData]);
 
   useEffect(() => {
@@ -1405,6 +1483,12 @@ export function MobileStudioShell() {
   const openVersionHistory = async () => {
     if (!user) {
       requestAuth("Sign in to view and restore writing history.");
+      return;
+    }
+    if (membership?.artist?.entitlements.version_history !== true) {
+      setScreen("home");
+      setActiveNav("profile");
+      setSyncMessage("Prep Studio Pro unlocks revision history");
       return;
     }
 
@@ -1965,6 +2049,135 @@ export function MobileStudioShell() {
     },
   };
 
+  const openCurrentBoothExport = async () => {
+    if (!user) {
+      requestAuth("Sign in to freeze a Booth Ready version and download studio files.");
+      return;
+    }
+
+    setBoothExportStatus("idle");
+    setBoothExportError(null);
+    setBoothExportRecord(null);
+    try {
+      let projectId = activeProjectId ?? null;
+      let songId = activeSongId ?? null;
+      let songTitle = titleDraft.trim() || activeSong?.title || "Untitled Song";
+      let projectTitle = projects.find((project) => project.id === projectId)?.title || "Untitled Project";
+
+      if (!projectId || !songId) {
+        const workspaceResult = await ensureWorkspace({
+          title: projectTitle,
+          songTitle,
+          project_type: "Single",
+          sections: sectionContent,
+          beat: selectedBeat,
+        });
+        if (!workspaceResult) throw new Error("Could not prepare this song for export.");
+        projectId = workspaceResult.project.id;
+        songId = workspaceResult.song.id;
+        songTitle = workspaceResult.song.title;
+        projectTitle = workspaceResult.project.title;
+      } else {
+        await saveNow({
+          projectId,
+          songId,
+          sessionId: session?.id,
+          beat: selectedBeat,
+          mode: activeStudioPack.id,
+          ambiance: activeStudioPack.id,
+          sectionContent,
+          activeSection: section.name,
+          songState: completionPct >= 67 ? 2 : 1,
+          completionPct,
+          boothScore: boothReady.score,
+          totalBars,
+        });
+      }
+
+      setBoothExportDraft({
+        projectId,
+        songId,
+        sessionId: session?.song_id === songId ? session.id : null,
+        roughTakeId: roughTake?.song_id === songId ? roughTake.id : null,
+        title: songTitle,
+        snapshot: buildBoothExportSnapshot({
+          projectTitle,
+          artistName: artistDisplayName(profile, user.email),
+          activeSection: section.name,
+          sections: sectionContent,
+          beat: selectedBeat,
+          boothReady,
+          completionPct,
+          totalBars,
+          roughTake: roughTake?.song_id === songId ? roughTake : null,
+        }),
+      });
+      setBoothExportOpen(true);
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "Could not prepare Booth Ready export");
+    }
+  };
+
+  const openLockerBoothExport = (lockerSong: SongLockerRow) => {
+    if (!user) {
+      requestAuth("Sign in to export songs from your Locker.");
+      return;
+    }
+    if (!lockerSong.project_id || !lockerSong.song_id) {
+      setSyncMessage("Resume this song once before preparing its Booth package");
+      return;
+    }
+    const sections = sectionsFromLockerSnapshot(lockerSong.snapshot);
+    if (!sections) {
+      setSyncMessage("This Locker copy does not contain exportable lyrics");
+      return;
+    }
+    const completion = lockerSongProgress(lockerSong);
+    const bars = lockerSnapshotNumber(lockerSong.snapshot, "totalBars", "total_bars") ?? lockerSongBarCount(lockerSong);
+    const fullSong = songs.find((song) => song.id === lockerSong.song_id);
+    const beat = lockerSnapshotBeat(lockerSong.snapshot) ?? beatSnapshotFromSong(fullSong ?? null) ?? EMPTY_BEAT;
+    const lockerBoothReady = boothReadyFromLockerSnapshot(lockerSong.snapshot, sections, completion);
+    const linkedRoughTake = roughTake?.song_id === lockerSong.song_id ? roughTake : null;
+
+    setBoothExportStatus("idle");
+    setBoothExportError(null);
+    setBoothExportRecord(null);
+    setBoothExportDraft({
+      projectId: lockerSong.project_id,
+      songId: lockerSong.song_id,
+      sessionId: session?.song_id === lockerSong.song_id ? session.id : null,
+      roughTakeId: linkedRoughTake?.id ?? null,
+      title: lockerSong.title,
+      snapshot: buildBoothExportSnapshot({
+        projectTitle: projects.find((project) => project.id === lockerSong.project_id)?.title || "Untitled Project",
+        artistName: artistDisplayName(profile, user.email),
+        activeSection: fullSong?.active_section || "Hook",
+        sections,
+        beat,
+        boothReady: lockerBoothReady,
+        completionPct: completion,
+        totalBars: bars,
+        roughTake: linkedRoughTake,
+      }),
+    });
+    setBoothExportOpen(true);
+  };
+
+  const freezeBoothExport = async () => {
+    if (!boothExportDraft) return;
+    setBoothExportStatus("saving");
+    setBoothExportError(null);
+    try {
+      const created = await createBoothExport(boothExportDraft);
+      if (!created) throw new Error("Sign in to create a Booth Ready export.");
+      setBoothExportRecord(created);
+      setBoothExportStatus("idle");
+    } catch (error) {
+      setBoothExportStatus("error");
+      setBoothExportError(error instanceof Error ? error.message : "Could not freeze this Booth Ready version.");
+    }
+  };
+
   if (!draftLoaded) {
     return (
       <main className="grid min-h-[100svh] place-items-center bg-[#070708] px-6 text-foreground" role="status" aria-label="Restoring Studio session">
@@ -2058,14 +2271,15 @@ export function MobileStudioShell() {
             {activeNav === "locker" && (
               <MobileLocker
                 beats={beatLocker}
+                starterBeats={starterBeats}
                 songs={songLocker}
                 hooks={hookLocker}
                 sessionSongs={songs}
                 activeStudioPack={activeStudioPack}
                 productUnlocks={mergedProductUnlocks}
-                loading={loading || loadingData}
+                loading={loading || loadingData || starterBeatsLoading}
                 signedIn={Boolean(user)}
-                error={workspaceError}
+                error={workspaceError ?? starterBeatsError}
                 onAuthRequired={() => requestAuth("Sign in to open your synced Locker.")}
                 onResumeSong={(lockerSong) => {
                   const fullSong = songs.find((song) => song.id === lockerSong.song_id);
@@ -2082,6 +2296,7 @@ export function MobileStudioShell() {
                   setScreen("writer");
                   setSyncMessage(`${lockerSong.title} restored`);
                 }}
+                onPrepareSong={openLockerBoothExport}
                 onUseHook={(hook) => {
                   const cleanHook = hook.content.trim();
                   if (!cleanHook) return;
@@ -2115,6 +2330,18 @@ export function MobileStudioShell() {
                     });
                   });
                 }}
+                onUseStarterBeat={(beat) => {
+                  const snapshot = beatSnapshotFromStarterBeat(beat);
+                  stopBeatPreview({ reset: true });
+                  beatOffsetRef.current = 0;
+                  beatCurrentTimeRef.current = 0;
+                  setBeatCurrentTime(0);
+                  selectBeatForSession(snapshot);
+                  setActiveNav("studio");
+                  setScreen("writer");
+                  setSyncMessage(`${beat.title} loaded from Starter Beats`);
+                }}
+                onImportBeat={importPrivateBeat}
                 onRemove={(kind, id) => void removeLockerItem(kind, id)}
                 onGoToStudio={() => setActiveNav("studio")}
                 onGoToMarket={() => setActiveNav("market")}
@@ -2123,7 +2350,6 @@ export function MobileStudioShell() {
             {activeNav === "market" && (
               <PremiumMarketplace
                 signedIn={Boolean(user)}
-                onAuthRequired={() => requestAuth("Sign in to save marketplace beats.")}
                 onFavoriteBeat={(beat) => {
                   const snapshot = toBeatSnapshot(beat);
                   void runPadAction(`${beat.title} saved to Beat Locker.`, async () => {
@@ -2173,6 +2399,14 @@ export function MobileStudioShell() {
                 onStudioPack={changeStudioPack}
                 productUnlocks={mergedProductUnlocks}
                 onUnlockProduct={unlockProduct}
+                onOpenMembership={() => {
+                  setActiveNav("profile");
+                  window.requestAnimationFrame(() => document.getElementById("profile-membership")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+                }}
+                onContinueWriting={() => {
+                  setActiveNav("studio");
+                  setScreen("writer");
+                }}
                 sessionContext={{
                   title: activeSong?.title ?? titleDraft,
                   mood: studioDna.mood,
@@ -2230,11 +2464,21 @@ export function MobileStudioShell() {
             onSetActiveSection={setActiveSection}
             onChange={changeActiveSectionContent}
             onToggleBeat={toggleBeatPlayback}
+            onSeekBeat={seekBeatPlayback}
+            onCommitBeatSeek={queueUrgentSessionSync}
+            onChangeBeat={() => setBeatSwitcherOpen(true)}
             onToggleRecording={toggleRecording}
             onDeleteRoughTake={deleteRoughTake}
             onSaveRoughTake={saveRoughTake}
+            onPrepareForBooth={() => void openCurrentBoothExport()}
             studioPack={activeStudioPack}
             studioDna={studioDna}
+            artistMembership={membership?.artist ?? null}
+            onUpgrade={() => {
+              setScreen("home");
+              setActiveNav("profile");
+              setSyncMessage("Choose the membership that fits your studio");
+            }}
             producerActions={{
               proposal: producerActionProposal,
               status: producerActionStatus,
@@ -2247,6 +2491,43 @@ export function MobileStudioShell() {
             }}
           />
         )}
+        <BeatSwitcherSheet
+          open={beatSwitcherOpen}
+          signedIn={Boolean(user)}
+          currentBeat={selectedBeat}
+          starterBeats={starterBeats}
+          lockerBeats={beatLocker}
+          marketplaceBeats={marketplaceFeed.beats}
+          marketplaceLoading={marketplaceFeedLoading}
+          marketplaceError={marketplaceFeedError}
+          onClose={() => setBeatSwitcherOpen(false)}
+          onPreviewStart={() => stopBeatPreview()}
+          onImportBeat={importPrivateBeat}
+          onAuthRequired={() => {
+            setBeatSwitcherOpen(false);
+            requestAuth("Sign in to import a private beat into your Locker.");
+          }}
+          onUseBeat={(beat) => {
+            const snapshot = beatSnapshotFromLockerBeat(beat);
+            stopBeatPreview({ reset: true });
+            beatOffsetRef.current = 0;
+            beatCurrentTimeRef.current = 0;
+            setBeatCurrentTime(0);
+            selectBeatForSession(snapshot);
+            setBeatSwitcherOpen(false);
+            setSyncMessage(`${beat.title} loaded. Saving session...`);
+          }}
+          onUseStarterBeat={(beat) => {
+            const snapshot = beatSnapshotFromStarterBeat(beat);
+            stopBeatPreview({ reset: true });
+            beatOffsetRef.current = 0;
+            beatCurrentTimeRef.current = 0;
+            setBeatCurrentTime(0);
+            selectBeatForSession(snapshot);
+            setBeatSwitcherOpen(false);
+            setSyncMessage(`${beat.title} loaded. Saving session...`);
+          }}
+        />
         {screen === "home" && (
           <MobileBottomNav
             activeNav={activeNav}
@@ -2313,6 +2594,22 @@ export function MobileStudioShell() {
           error={versionHistoryError}
           onClose={() => setVersionHistoryOpen(false)}
           onRestore={(versionId) => void restoreSectionVersion(versionId)}
+        />
+        <BoothExportSheet
+          open={boothExportOpen}
+          draft={boothExportDraft}
+          exportRecord={boothExportRecord}
+          status={boothExportStatus}
+          error={boothExportError}
+          premiumExports={membership?.artist?.entitlements.premium_exports === true}
+          onClose={() => setBoothExportOpen(false)}
+          onFreeze={() => void freezeBoothExport()}
+          onUpgrade={() => {
+            setBoothExportOpen(false);
+            setScreen("home");
+            setActiveNav("profile");
+            setSyncMessage("Prep Studio Pro unlocks the full Booth package");
+          }}
         />
         {user && profile && !profile.role_onboarding_completed && (
           <MobileRoleOnboarding
@@ -2852,6 +3149,295 @@ function MobileHeader() {
   );
 }
 
+function BeatSwitcherSheet({
+  open,
+  signedIn,
+  currentBeat,
+  starterBeats,
+  lockerBeats,
+  marketplaceBeats,
+  marketplaceLoading,
+  marketplaceError,
+  onClose,
+  onPreviewStart,
+  onImportBeat,
+  onAuthRequired,
+  onUseBeat,
+  onUseStarterBeat,
+}: {
+  open: boolean;
+  signedIn: boolean;
+  currentBeat: SelectedBeat;
+  starterBeats: StarterBeat[];
+  lockerBeats: BeatLockerRow[];
+  marketplaceBeats: MarketplaceBeat[];
+  marketplaceLoading: boolean;
+  marketplaceError: string | null;
+  onClose: () => void;
+  onPreviewStart: () => void;
+  onImportBeat: (input: PrivateBeatImportInput) => Promise<BeatLockerRow | null>;
+  onAuthRequired: () => void;
+  onUseBeat: (beat: BeatLockerRow) => void;
+  onUseStarterBeat: (beat: StarterBeat) => void;
+}) {
+  const [tab, setTab] = useState<"locker" | "preview">("locker");
+  const [previewingBeatId, setPreviewingBeatId] = useState<string | null>(null);
+  const [previewProgress, setPreviewProgress] = useState(0);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const stopSample = useCallback(() => {
+    const audio = previewAudioRef.current;
+    if (audio) {
+      audio.ontimeupdate = null;
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+      audio.removeAttribute("src");
+      previewAudioRef.current = null;
+    }
+    setPreviewingBeatId(null);
+    setPreviewProgress(0);
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      stopSample();
+      setImportOpen(false);
+      return;
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose, open, stopSample]);
+
+  useEffect(() => stopSample, [stopSample]);
+
+  const toggleMarketplaceSample = async (beat: MarketplaceBeat) => {
+    if (previewingBeatId === beat.id) {
+      stopSample();
+      return;
+    }
+
+    stopSample();
+    onPreviewStart();
+    setPreviewError(null);
+    const snapshot = toBeatSnapshot(beat);
+    const previewUrl = getBeatPreviewUrl(snapshot);
+    if (!previewUrl) {
+      setPreviewError("This producer has not added a playable preview yet.");
+      return;
+    }
+
+    const audio = new Audio(previewUrl);
+    const sampleLength = Math.max(1, Math.min(30, getBeatDurationSeconds(snapshot)));
+    previewAudioRef.current = audio;
+    setPreviewingBeatId(beat.id);
+    audio.ontimeupdate = () => {
+      const elapsed = Math.min(sampleLength, audio.currentTime);
+      setPreviewProgress((elapsed / sampleLength) * 100);
+      if (audio.currentTime >= sampleLength) stopSample();
+    };
+    audio.onended = stopSample;
+    audio.onerror = () => {
+      stopSample();
+      setPreviewError("This preview could not be played.");
+    };
+
+    try {
+      await audio.play();
+      trackMarketplaceEvent("beat_play", beat.id);
+    } catch {
+      stopSample();
+      setPreviewError("Tap again to start this preview.");
+    }
+  };
+
+  if (!open) return null;
+
+  const lockerByBeatId = new Map(lockerBeats.map((beat) => [beat.beat_id, beat]));
+
+  return (
+    <div className="fixed inset-0 z-[75] flex items-end justify-center bg-black/72 backdrop-blur-sm" onMouseDown={onClose}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="beat-switcher-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        className="flex max-h-[82svh] w-full max-w-[430px] flex-col overflow-hidden rounded-t-2xl border border-b-0 border-gold/22 bg-[#0d0d0e] pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-24px_80px_rgba(0,0,0,0.7)]"
+      >
+        <div className="px-5 pt-3">
+          <div className="mx-auto h-1 w-10 rounded-full bg-white/20" />
+          <div className="mt-4 flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="label-hw text-gold">Beat pocket</div>
+              <h2 id="beat-switcher-title" className="mt-1 text-xl font-semibold">Change the beat.</h2>
+              <p className="mt-1 truncate text-xs text-muted-foreground">Writing stays open. Your lyrics do not move.</p>
+            </div>
+            <button type="button" onClick={onClose} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Close beat picker">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 rounded-xl border border-white/10 bg-black/30 p-1">
+            <button
+              type="button"
+              onClick={() => setTab("locker")}
+              className={cn("min-h-9 rounded-lg text-xs font-semibold transition-colors", tab === "locker" ? "bg-gold/14 text-gold" : "text-muted-foreground")}
+            >
+              My Beats {starterBeats.length + lockerBeats.length > 0 ? `(${starterBeats.length + lockerBeats.length})` : ""}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("preview")}
+              className={cn("min-h-9 rounded-lg text-xs font-semibold transition-colors", tab === "preview" ? "bg-gold/14 text-gold" : "text-muted-foreground")}
+            >
+              30-sec Previews
+            </button>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2 pt-4">
+          {tab === "locker" && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3 px-1 pb-1">
+                <div className="min-w-0"><div className="label-hw text-white/50">Your Beat Locker</div><div className="mt-1 truncate text-[10px] text-muted-foreground">Switch pockets without leaving the pad.</div></div>
+                <button
+                  type="button"
+                  onClick={() => signedIn ? setImportOpen(true) : onAuthRequired()}
+                  className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-xl border border-gold/30 bg-gold/8 px-3 text-[11px] font-semibold text-gold"
+                >
+                  <Upload className="h-3.5 w-3.5" />Import beat
+                </button>
+              </div>
+              {starterBeats.length > 0 && <div className="px-1 pb-1 label-hw text-gold/75">Included with RapWriter</div>}
+              {starterBeats.map((beat) => {
+                const active = currentBeat.id === `starter-beat-${beat.id}`;
+                return (
+                  <button
+                    key={beat.id}
+                    type="button"
+                    onClick={() => onUseStarterBeat(beat)}
+                    className={cn(
+                      "flex min-h-[68px] w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+                      active ? "border-gold/40 bg-gold/10" : "border-white/10 bg-white/[0.025] hover:border-gold/25",
+                    )}
+                  >
+                    <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full border", active ? "border-gold/45 bg-gold text-black" : "border-gold/25 bg-gold/8 text-gold")}>
+                      {active ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" fill="currentColor" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">{beat.title}</span>
+                      <span className="mt-1 block truncate text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                        {[beat.producer, beat.genre, "Included"].filter(Boolean).join(" - ")}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-[10px] font-semibold text-gold">{active ? "Active" : "Use"}</span>
+                  </button>
+                );
+              })}
+              {starterBeats.length > 0 && lockerBeats.length > 0 && <div className="px-1 pb-1 pt-3 label-hw text-white/45">Saved and licensed</div>}
+              {lockerBeats.map((beat) => {
+                const active = currentBeat.id === beat.beat_id;
+                return (
+                  <button
+                    key={beat.id}
+                    type="button"
+                    onClick={() => onUseBeat(beat)}
+                    className={cn(
+                      "flex min-h-[68px] w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+                      active ? "border-gold/40 bg-gold/10" : "border-white/10 bg-white/[0.025] hover:border-gold/25",
+                    )}
+                  >
+                    <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full border", active ? "border-gold/45 bg-gold text-black" : "border-gold/25 bg-gold/8 text-gold")}>
+                      {active ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" fill="currentColor" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">{beat.title}</span>
+                      <span className="mt-1 block truncate text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                        {[beat.producer, beat.bpm ? `${beat.bpm} BPM` : null, beat.license === "Favorite" ? "Saved" : beat.license].filter(Boolean).join(" - ")}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-[10px] font-semibold text-gold">{active ? "Active" : "Use"}</span>
+                  </button>
+                );
+              })}
+              {starterBeats.length === 0 && lockerBeats.length === 0 && (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5 text-center">
+                  <Headphones className="mx-auto h-5 w-5 text-gold" />
+                  <div className="mt-3 text-sm font-semibold">{signedIn ? "Your Beat Locker is ready." : "Sign in to open your Beat Locker."}</div>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Save or license beats in Studio Store, then switch them here without leaving Writer Flow.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === "preview" && (
+            <div className="space-y-2">
+              {marketplaceBeats.slice(0, 12).map((beat) => {
+                const ownedBeat = lockerByBeatId.get(beat.id);
+                const previewing = previewingBeatId === beat.id;
+                return (
+                  <div key={beat.id} className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.025]">
+                    <div className="flex min-h-[72px] items-center gap-3 px-3 py-2.5">
+                      <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-gold/20 bg-gold/8 text-xs font-semibold text-gold" style={{ background: beat.art, backgroundPosition: "center", backgroundSize: "cover" }}>
+                        {beat.glyph}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{beat.title}</span>
+                        <span className="mt-1 block truncate text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                          {[beat.producer, beat.bpm ? `${beat.bpm} BPM` : null, "30 sec"].filter(Boolean).join(" - ")}
+                        </span>
+                      </span>
+                      {ownedBeat ? (
+                        <button type="button" onClick={() => onUseBeat(ownedBeat)} className="min-h-9 shrink-0 rounded-full border border-gold/35 bg-gold/10 px-3 text-[10px] font-semibold text-gold">
+                          Use
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void toggleMarketplaceSample(beat)}
+                          className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full border", previewing ? "border-gold bg-gold text-black" : "border-gold/35 bg-gold/10 text-gold")}
+                          aria-label={previewing ? `Pause ${beat.title} preview` : `Play 30 second preview of ${beat.title}`}
+                        >
+                          {previewing ? <Pause className="h-4 w-4" fill="currentColor" /> : <Play className="h-4 w-4" fill="currentColor" />}
+                        </button>
+                      )}
+                    </div>
+                    {previewing && <div className="h-0.5 bg-white/8"><div className="h-full bg-gold transition-[width] duration-150" style={{ width: `${previewProgress}%` }} /></div>}
+                  </div>
+                );
+              })}
+              {marketplaceLoading && <div className="py-10 text-center text-xs text-muted-foreground">Loading producer previews...</div>}
+              {!marketplaceLoading && marketplaceBeats.length === 0 && (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5 text-center text-sm text-muted-foreground">
+                  {marketplaceError ?? "Producer previews will appear after beats are approved."}
+                </div>
+              )}
+              {previewError && <div className="rounded-xl border border-rec/25 bg-rec/10 p-3 text-xs text-rec">{previewError}</div>}
+              <p className="px-2 pt-2 text-center text-[10px] leading-relaxed text-muted-foreground">Previews stop at 30 seconds. Full session use unlocks from your Beat Locker.</p>
+            </div>
+          )}
+        </div>
+      </section>
+      {signedIn && (
+        <PrivateBeatImportSheet
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          onImport={async (input) => {
+            const imported = await onImportBeat(input);
+            if (imported) onUseBeat(imported);
+            return imported;
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 function NewSongSheet({
   open,
   title,
@@ -3058,6 +3644,124 @@ function VersionHistorySheet({
       </section>
     </div>
   );
+}
+
+function BoothExportSheet({
+  open,
+  draft,
+  exportRecord,
+  status,
+  error,
+  premiumExports,
+  onClose,
+  onFreeze,
+  onUpgrade,
+}: {
+  open: boolean;
+  draft: BoothExportCreateInput | null;
+  exportRecord: BoothExportRecord | null;
+  status: "idle" | "saving" | "error";
+  error: string | null;
+  premiumExports: boolean;
+  onClose: () => void;
+  onFreeze: () => void;
+  onUpgrade: () => void;
+}) {
+  if (!open || !draft) return null;
+  const snapshot = exportRecord?.snapshot ?? draft.snapshot;
+  const score = exportRecord?.booth_score ?? snapshot.boothReady.score;
+  const readyChecks = snapshot.boothReady.checklist.filter((item) => item.complete).length;
+  const missingSections = mobileSections.filter((section) => !(snapshot.sections[section.name] ?? "").trim());
+
+  return (
+    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-black/78 px-3 pt-12 backdrop-blur-sm" role="presentation" onMouseDown={onClose}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="booth-export-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        className="flex max-h-[90svh] w-full max-w-[430px] flex-col overflow-hidden rounded-t-[28px] border border-gold/20 bg-[#101011] shadow-[0_-28px_90px_rgba(0,0,0,0.72)] sm:rounded-[28px]"
+      >
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/18" />
+        <header className="flex items-start justify-between gap-4 border-b border-white/10 px-5 pb-4 pt-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-gold"><Download className="h-4 w-4" /><span className="label-hw">Booth Ready Export</span></div>
+            <h2 id="booth-export-title" className="mt-2 truncate text-xl font-semibold">{draft.title}</h2>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Review the handoff, then freeze this exact version.</p>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Close Booth Ready export"><X className="h-5 w-5" /></button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div className="grid grid-cols-3 divide-x divide-white/10 rounded-2xl border border-gold/20 bg-gold/[0.07] py-4">
+            <ExportMetric label="Booth Score" value={String(score)} />
+            <ExportMetric label="Bars" value={String(snapshot.totalBars)} />
+            <ExportMetric label="Ready" value={`${readyChecks}/${snapshot.boothReady.checklist.length}`} />
+          </div>
+
+          <section className="mt-3 rounded-2xl border border-white/10 bg-black/24 p-4">
+            <div className="flex items-center justify-between gap-3"><span className="label-hw">Session Handoff</span>{exportRecord && <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-300">Frozen V{exportRecord.version_number}</span>}</div>
+            <div className="mt-3 space-y-2 text-xs">
+              <ExportReviewRow label="Lyrics" value={missingSections.length === 0 ? "All sections included" : `${mobileSections.length - missingSections.length} of ${mobileSections.length} sections`} ready={missingSections.length === 0} />
+              <ExportReviewRow label="Beat credits" value={typeof snapshot.beat.title === "string" ? snapshot.beat.title : "No beat selected"} ready={typeof snapshot.beat.title === "string"} />
+              <ExportReviewRow label="Rough take" value={snapshot.roughTake ? `${formatDuration(snapshot.roughTake.durationSeconds)} attached` : "Not attached"} ready={Boolean(snapshot.roughTake)} />
+              <ExportReviewRow label="Next move" value={snapshot.boothReady.nextAction || "Review the session"} ready />
+            </div>
+          </section>
+
+          {!exportRecord ? (
+            <>
+              {error && <div className="mt-3 rounded-xl border border-rec/25 bg-rec/10 p-3 text-sm text-rec">{error}</div>}
+              <button type="button" onClick={onFreeze} disabled={status === "saving"} className="gold-seal mt-4 flex min-h-13 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold disabled:opacity-55">
+                {status === "saving" ? <><RefreshCw className="h-4 w-4 animate-spin" />Freezing version...</> : <><ShieldCheck className="h-4 w-4" />Freeze Booth Version</>}
+              </button>
+              <p className="mt-2 px-2 text-center text-[10px] leading-relaxed text-muted-foreground">Later edits create a new version. This one stays unchanged.</p>
+            </>
+          ) : (
+            <div className="mt-4 space-y-2">
+              <button type="button" onClick={() => downloadBoothFile(exportRecord.id, "txt")} className="flex min-h-12 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.035] px-4 text-sm font-semibold text-white/85">
+                <span className="inline-flex items-center gap-2"><FileText className="h-4 w-4 text-gold" />Lyrics sheet</span><span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">TXT</span>
+              </button>
+              {premiumExports ? (
+                <>
+                  <button type="button" onClick={() => downloadBoothFile(exportRecord.id, "pdf")} className="flex min-h-12 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.035] px-4 text-sm font-semibold text-white/85">
+                    <span className="inline-flex items-center gap-2"><FileText className="h-4 w-4 text-gold" />Studio lyric book</span><span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">PDF</span>
+                  </button>
+                  <button type="button" onClick={() => downloadBoothFile(exportRecord.id, "zip")} className="gold-seal flex min-h-13 w-full items-center justify-between rounded-xl px-4 text-sm font-semibold">
+                    <span className="inline-flex items-center gap-2"><Download className="h-4 w-4" />Download studio package</span><span className="text-[10px] uppercase tracking-[0.12em]">ZIP</span>
+                  </button>
+                  {exportRecord.rough_take_id && (
+                    <button type="button" onClick={() => downloadBoothFile(exportRecord.id, "rough-take")} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-gold/25 text-xs font-semibold text-gold"><Mic className="h-4 w-4" />Download rough take</button>
+                  )}
+                </>
+              ) : (
+                <button type="button" onClick={onUpgrade} className="mt-1 flex min-h-14 w-full items-center justify-between rounded-xl border border-gold/30 bg-gold/8 px-4 text-left">
+                  <span><span className="flex items-center gap-2 text-sm font-semibold text-gold"><LockKeyhole className="h-4 w-4" />Full Studio Package</span><span className="mt-1 block text-[10px] text-muted-foreground">PDF, ZIP, credits, session data, and rough take.</span></span><ChevronRight className="h-4 w-4 shrink-0 text-gold" />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ExportMetric({ label, value }: { label: string; value: string }) {
+  return <div className="min-w-0 px-2 text-center"><div className="text-xl font-semibold tabular-nums text-gold">{value}</div><div className="mt-1 truncate text-[8px] uppercase tracking-[0.12em] text-muted-foreground">{label}</div></div>;
+}
+
+function ExportReviewRow({ label, value, ready }: { label: string; value: string; ready: boolean }) {
+  return <div className="flex items-start gap-2"><span className={cn("mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border", ready ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-300" : "border-white/12 text-muted-foreground")}>{ready && <Check className="h-2.5 w-2.5" />}</span><span className="min-w-0"><span className="font-semibold text-white/82">{label}</span><span className="ml-1 text-muted-foreground">/ {value}</span></span></div>;
+}
+
+function downloadBoothFile(id: string, format: "txt" | "pdf" | "zip" | "rough-take") {
+  const anchor = document.createElement("a");
+  anchor.href = format === "rough-take" ? `/api/booth-exports/${encodeURIComponent(id)}/rough-take` : `/api/booth-exports/${encodeURIComponent(id)}?format=${format}`;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
 }
 
 function MobileHome({
@@ -3373,7 +4077,7 @@ function MobileHome({
             <button
               type="button"
               onClick={onContinue}
-              className="mt-3 min-h-[112px] w-full rounded-xl px-1 py-2 text-left font-mono text-[13px] leading-7 text-gold/90 outline-none transition-colors hover:bg-white/[0.025] focus-visible:ring-2 focus-visible:ring-gold/45"
+              className="mt-3 min-h-[112px] w-full rounded-xl px-1 py-2 text-left font-mono text-[13px] leading-7 text-white/90 outline-none transition-colors hover:bg-white/[0.025] focus-visible:ring-2 focus-visible:ring-gold/45"
               aria-label={`Continue writing ${section.name}`}
             >
               {previewLines.length ? (
@@ -3832,11 +4536,17 @@ function MobileWriter({
   onSetActiveSection,
   onChange,
   onToggleBeat,
+  onSeekBeat,
+  onCommitBeatSeek,
+  onChangeBeat,
   onToggleRecording,
   onDeleteRoughTake,
   onSaveRoughTake,
+  onPrepareForBooth,
   studioPack,
   studioDna,
+  artistMembership,
+  onUpgrade,
   producerActions,
 }: {
   activeSection: number;
@@ -3866,11 +4576,17 @@ function MobileWriter({
   onSetActiveSection: (index: number) => void;
   onChange: (value: string) => void;
   onToggleBeat: () => void;
+  onSeekBeat: (seconds: number) => void;
+  onCommitBeatSeek: () => void;
+  onChangeBeat: () => void;
   onToggleRecording: () => void;
   onDeleteRoughTake: () => void;
   onSaveRoughTake: () => void;
+  onPrepareForBooth: () => void;
   studioPack: StudioPack;
   studioDna: StudioDna;
+  artistMembership: WorkspaceMembership | null;
+  onUpgrade: () => void;
   producerActions: ProducerActionControls;
 }) {
   const section = mobileSections[activeSection];
@@ -3882,6 +4598,9 @@ function MobileWriter({
   const progressPct = Math.min(100, Math.round((sectionBars / section.target) * 100));
   const momentum = getWritingMomentum(section.name, sectionBars, section.target, boothReady);
   const writerSaveLabel = !signedIn ? "On device" : saveStatus === "error" ? "On device" : saveStatus;
+  const hasPenView = artistMembership?.entitlements.full_pen_view === true;
+  const hasHistory = artistMembership?.entitlements.version_history === true;
+  const hasGhostwriter = artistMembership?.entitlements.ghostwriter === true;
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#050506]">
@@ -3952,6 +4671,9 @@ function MobileWriter({
             duration={beatDuration}
             error={beatError}
             onToggleBeat={onToggleBeat}
+            onSeek={onSeekBeat}
+            onSeekCommit={onCommitBeatSeek}
+            onChangeBeat={onChangeBeat}
             onToggleRecording={onToggleRecording}
           />
           <RoughTakeStrip
@@ -3996,7 +4718,7 @@ function MobileWriter({
             </div>
             <button
               type="button"
-              onClick={() => setPenView((current) => !current)}
+              onClick={() => hasPenView ? setPenView((current) => !current) : onUpgrade()}
               className={cn(
                 "flex min-h-10 flex-col items-center justify-center rounded-full border px-2.5 text-[9px] font-semibold transition-colors",
                 penView ? "border-gold/45 bg-gold/14 text-gold" : "border-transparent text-muted-foreground hover:border-white/10 hover:bg-white/[0.035]",
@@ -4004,11 +4726,11 @@ function MobileWriter({
               aria-pressed={penView}
             >
               <Pencil className="mb-0.5 h-3.5 w-3.5" />
-              {penView ? "Edit" : "Pen View"}
+              {penView ? "Edit" : hasPenView ? "Pen View" : "Pen Pro"}
             </button>
-            <button type="button" onClick={signedIn ? onOpenHistory : onSyncRequest} className="flex min-h-10 flex-col items-center justify-center rounded-full border border-transparent px-2.5 text-[9px] font-semibold text-muted-foreground transition-colors hover:border-white/10 hover:bg-white/[0.035]">
+            <button type="button" onClick={!signedIn ? onSyncRequest : hasHistory ? onOpenHistory : onUpgrade} className="flex min-h-10 flex-col items-center justify-center rounded-full border border-transparent px-2.5 text-[9px] font-semibold text-muted-foreground transition-colors hover:border-white/10 hover:bg-white/[0.035]">
               <History className="mb-0.5 h-3.5 w-3.5" />
-              History
+              {hasHistory ? "History" : "History Pro"}
             </button>
             <button type="button" onClick={padActions.onSaveHook} disabled={padActions.status.state === "saving"} className="flex min-h-10 flex-col items-center justify-center rounded-full border border-transparent px-2.5 text-[9px] font-semibold text-gold transition-colors hover:border-gold/20 hover:bg-gold/[0.06] disabled:opacity-50">
               <Save className="mb-0.5 h-3.5 w-3.5" />
@@ -4021,10 +4743,10 @@ function MobileWriter({
         )}
         <button
           type="button"
-          onClick={() => setGhostwriterOpen(true)}
+          onClick={() => hasGhostwriter ? setGhostwriterOpen(true) : onUpgrade()}
           className="mt-3 flex min-h-12 w-full items-center justify-between rounded-xl border border-gold/35 bg-gold/10 px-4 text-sm font-semibold text-gold"
         >
-          <span className="inline-flex items-center gap-2"><WandSparkles className="h-4 w-4" />Ghostwriter</span>
+          <span className="inline-flex items-center gap-2"><WandSparkles className="h-4 w-4" />Ghostwriter{hasGhostwriter ? "" : " Pro"}</span>
           <ChevronRight className="h-4 w-4" />
         </button>
         <div className="mt-4 space-y-2 pb-4">
@@ -4057,6 +4779,14 @@ function MobileWriter({
                 if (boothReady.primaryAction === "save_take") onSaveRoughTake();
               }}
             />
+            <button
+              type="button"
+              onClick={onPrepareForBooth}
+              className="mt-3 flex min-h-12 w-full items-center justify-between rounded-xl border border-gold/35 bg-gold/10 px-4 text-sm font-semibold text-gold"
+            >
+              <span className="inline-flex items-center gap-2"><Download className="h-4 w-4" />Prepare for Booth</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </MobileDrawer>
           <MobileDrawer title="Studio Air">
             <StudioAirPanel studioPack={studioPack} />
@@ -4366,6 +5096,9 @@ function PadTransport({
   duration,
   error,
   onToggleBeat,
+  onSeek,
+  onSeekCommit,
+  onChangeBeat,
   onToggleRecording,
 }: {
   beat: SelectedBeat;
@@ -4375,6 +5108,9 @@ function PadTransport({
   duration: number;
   error: string | null;
   onToggleBeat: () => void;
+  onSeek: (seconds: number) => void;
+  onSeekCommit: () => void;
+  onChangeBeat: () => void;
   onToggleRecording: () => void;
 }) {
   return (
@@ -4383,11 +5119,22 @@ function PadTransport({
         {playing ? <Pause className="h-4 w-4" fill="currentColor" /> : <Play className="h-4 w-4" fill="currentColor" />}
       </button>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold">{beat.title}</div>
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1 truncate text-sm font-semibold">{beat.title}</div>
+          <button
+            type="button"
+            onClick={onChangeBeat}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.035] text-muted-foreground transition-colors hover:border-gold/30 hover:text-gold"
+            aria-label="Change beat"
+            title="Change beat"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+        </div>
         <div className="mt-0.5 truncate text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
           {formatDuration(currentTime)} / {formatDuration(duration)} - {[beat.producer, beat.bpm ? `${beat.bpm} BPM` : null, beat.key].filter(Boolean).join(" - ")}
         </div>
-        <BeatWaveform beat={beat} currentTime={currentTime} duration={duration} active={playing || recording} recording={recording} />
+        <BeatWaveform beat={beat} currentTime={currentTime} duration={duration} active={playing || recording} recording={recording} onSeek={onSeek} onSeekCommit={onSeekCommit} />
         {error && <div className="mt-1 text-[10px] text-rec">{error}</div>}
       </div>
       <button
@@ -4411,6 +5158,8 @@ function BeatWaveform({
   active,
   recording = false,
   compact = false,
+  onSeek,
+  onSeekCommit,
 }: {
   beat: SelectedBeat;
   currentTime: number;
@@ -4418,6 +5167,8 @@ function BeatWaveform({
   active: boolean;
   recording?: boolean;
   compact?: boolean;
+  onSeek?: (seconds: number) => void;
+  onSeekCommit?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const waveSurferRef = useRef<{ destroy: () => void; setTime: (time: number) => void } | null>(null);
@@ -4475,6 +5226,28 @@ function BeatWaveform({
       <div className={cn("relative mt-2 overflow-hidden rounded-full bg-white/[0.04]", compact ? "h-4" : "h-6")}>
         <div ref={containerRef} className="absolute inset-x-0 top-1/2 -translate-y-1/2" />
         {!waveReady && <SyntheticWaveform beat={beat} progressPct={progressPct} active={active} recording={recording} compact={compact} />}
+        {onSeek && duration > 0 && !recording && (
+          <>
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 z-[1] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/60 bg-gold shadow-[0_0_10px_rgba(255,176,32,0.65)]"
+              style={{ left: `${progressPct}%` }}
+            />
+            <input
+              type="range"
+              min={0}
+              max={duration}
+              step={0.05}
+              value={Math.min(currentTime, duration)}
+              onChange={(event) => onSeek(Number(event.target.value))}
+              onPointerUp={onSeekCommit}
+              onKeyUp={onSeekCommit}
+              onBlur={onSeekCommit}
+              aria-label={`Seek ${beat.title}`}
+              className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 [touch-action:none]"
+            />
+          </>
+        )}
       </div>
     );
   }
@@ -5006,6 +5779,7 @@ function MobileDrawer({ title, children, defaultOpen = false }: { title: string;
 
 function MobileLocker({
   beats,
+  starterBeats,
   songs,
   hooks,
   sessionSongs,
@@ -5016,13 +5790,17 @@ function MobileLocker({
   error,
   onAuthRequired,
   onResumeSong,
+  onPrepareSong,
   onUseHook,
   onUseBeat,
+  onUseStarterBeat,
+  onImportBeat,
   onRemove,
   onGoToStudio,
   onGoToMarket,
 }: {
   beats: BeatLockerRow[];
+  starterBeats: StarterBeat[];
   songs: SongLockerRow[];
   hooks: HookLockerRow[];
   sessionSongs: SongRow[];
@@ -5033,8 +5811,11 @@ function MobileLocker({
   error: string | null;
   onAuthRequired: () => void;
   onResumeSong: (song: SongLockerRow) => void;
+  onPrepareSong: (song: SongLockerRow) => void;
   onUseHook: (hook: HookLockerRow) => void;
   onUseBeat: (beat: BeatLockerRow) => void;
+  onUseStarterBeat: (beat: StarterBeat) => void;
+  onImportBeat: (input: PrivateBeatImportInput) => Promise<BeatLockerRow | null>;
   onRemove: (kind: "beats" | "songs" | "hooks", id: string) => void;
   onGoToStudio: () => void;
   onGoToMarket: () => void;
@@ -5044,12 +5825,14 @@ function MobileLocker({
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [songFilter, setSongFilter] = useState<"all" | "draft" | "ready">("all");
-  const [beatFilter, setBeatFilter] = useState<"all" | "favorite" | "licensed">("all");
+  const [beatFilter, setBeatFilter] = useState<"all" | "included" | "private" | "favorite" | "licensed">("all");
   const [creativeDnaOpen, setCreativeDnaOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const purchaseCount = 1 + productUnlocks.length;
+  const visibleProductUnlocks = productUnlocks.filter((unlock) => unlock.category !== "Producer Style");
+  const purchaseCount = 1 + visibleProductUnlocks.length;
   const savedCount = songs.length + hooks.length + beats.length;
-  const collectionCount = savedCount + purchaseCount;
+  const collectionCount = savedCount + starterBeats.length + purchaseCount;
   const boothReadyCount = songs.filter((song) => song.booth_ready).length;
   const totalBarsWritten = songs.reduce((total, song) => total + (lockerSnapshotNumber(song.snapshot, "totalBars", "total_bars") ?? lockerSongBarCount(song)), 0);
   const favoriteProducer = mostFrequent(beats.map((beat) => beat.producer).filter((value): value is string => Boolean(value))) ?? "Not enough saves yet";
@@ -5058,7 +5841,7 @@ function MobileLocker({
   const tabs: Array<{ id: LockerTab; label: string; count: number; icon: typeof Save }> = [
     { id: "songs", label: "Songs", count: songs.length, icon: Save },
     { id: "hooks", label: "Hooks", count: hooks.length, icon: Pencil },
-    { id: "beats", label: "Beats", count: beats.length, icon: Headphones },
+    { id: "beats", label: "Beats", count: beats.length + starterBeats.length, icon: Headphones },
     { id: "purchases", label: "Owned", count: purchaseCount, icon: ShoppingCart },
   ];
   const normalizedQuery = query.trim().toLowerCase();
@@ -5073,14 +5856,22 @@ function MobileLocker({
   const visibleBeats = beats.filter((beat) => {
     const matchesQuery = !normalizedQuery || [beat.title, beat.producer, beat.mood, beat.musical_key, beat.license, beat.created_at, formatShortDate(beat.created_at)].filter(Boolean).join(" ").toLowerCase().includes(normalizedQuery);
     const normalizedLicense = beat.license?.toLowerCase() ?? "";
-    const matchesFilter = Boolean(normalizedQuery) || beatFilter === "all" || (beatFilter === "favorite" ? normalizedLicense === "favorite" : normalizedLicense !== "favorite");
+    const matchesFilter = Boolean(normalizedQuery) || beatFilter === "all"
+      || (beatFilter === "favorite" && normalizedLicense === "favorite")
+      || (beatFilter === "private" && normalizedLicense === "private import")
+      || (beatFilter === "licensed" && normalizedLicense !== "favorite" && normalizedLicense !== "private import");
     return matchesQuery && matchesFilter;
   });
-  const visibleUnlocks = productUnlocks.filter((unlock) =>
+  const visibleStarterBeats = starterBeats.filter((beat) => {
+    const matchesQuery = !normalizedQuery || [beat.title, beat.producer, beat.genre, beat.mood, beat.key, ...beat.tags].filter(Boolean).join(" ").toLowerCase().includes(normalizedQuery);
+    const matchesFilter = Boolean(normalizedQuery) || beatFilter === "all" || beatFilter === "included";
+    return matchesQuery && matchesFilter;
+  });
+  const visibleUnlocks = visibleProductUnlocks.filter((unlock) =>
     !normalizedQuery || [unlock.title, unlock.category, unlock.detail].join(" ").toLowerCase().includes(normalizedQuery),
   );
   const activeRoomMatchesQuery = !normalizedQuery || [activeStudioPack.label, "Studio Room", activeStudioPack.writingCue].join(" ").toLowerCase().includes(normalizedQuery);
-  const globalSearchCount = visibleSongs.length + visibleHooks.length + visibleBeats.length + visibleUnlocks.length + (activeRoomMatchesQuery ? 1 : 0);
+  const globalSearchCount = visibleSongs.length + visibleHooks.length + visibleBeats.length + visibleStarterBeats.length + visibleUnlocks.length + (activeRoomMatchesQuery ? 1 : 0);
 
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
@@ -5139,7 +5930,7 @@ function MobileLocker({
             <div className="mt-3 grid grid-cols-3 divide-x divide-white/10">
               <LockerSummaryMetric value={collectionCount} label="Collection" />
               <LockerSummaryMetric value={boothReadyCount} label="Booth Ready" />
-              <LockerSummaryMetric value={beats.length} label="Beat Locker" />
+              <LockerSummaryMetric value={beats.length + starterBeats.length} label="Beat Locker" />
             </div>
           </section>
 
@@ -5200,7 +5991,7 @@ function MobileLocker({
           )}
           {!normalizedQuery && tab === "beats" && (
             <LockerFilterRow
-              items={[{ id: "all", label: "All" }, { id: "favorite", label: "Favorites" }, { id: "licensed", label: "Licensed" }]}
+              items={[{ id: "all", label: "All" }, { id: "included", label: "Included" }, { id: "private", label: "Yours" }, { id: "favorite", label: "Favorites" }, { id: "licensed", label: "Licensed" }]}
               active={beatFilter}
               onChange={(value) => setBeatFilter(value as typeof beatFilter)}
             />
@@ -5211,8 +6002,9 @@ function MobileLocker({
           ) : normalizedQuery ? (
             <div className="mt-4 space-y-3">
               <div className="flex items-center justify-between gap-3"><div className="label-hw text-white/52">Vault Results</div><div className="text-[11px] tabular-nums text-gold">{globalSearchCount}</div></div>
-              {visibleSongs.map((song) => <LockerSongCard key={`search-${song.id}`} song={song} live={sessionSongIds.has(song.song_id ?? "")} onResume={() => onResumeSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
+              {visibleSongs.map((song) => <LockerSongCard key={`search-${song.id}`} song={song} live={sessionSongIds.has(song.song_id ?? "")} onResume={() => onResumeSong(song)} onPrepare={() => onPrepareSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
               {visibleHooks.map((hook) => <LockerHookCard key={`search-${hook.id}`} hook={hook} onUse={() => onUseHook(hook)} onRemove={() => onRemove("hooks", hook.id)} />)}
+              {visibleStarterBeats.map((beat) => <StarterBeatCard key={`search-starter-${beat.id}`} beat={beat} onUse={() => onUseStarterBeat(beat)} />)}
               {visibleBeats.map((beat) => <LockerBeatCard key={`search-${beat.id}`} beat={beat} onUse={() => onUseBeat(beat)} onRemove={() => onRemove("beats", beat.id)} />)}
               {activeRoomMatchesQuery && <LockerPurchaseCard title={activeStudioPack.label} meta="Active Studio Room" body={activeStudioPack.writingCue} state="Active" image={activeStudioPack.image} position={activeStudioPack.position} overlay={activeStudioPack.overlay} />}
               {visibleUnlocks.map((unlock) => <LockerOwnedCard key={`search-${unlock.id}`} unlock={unlock} />)}
@@ -5220,27 +6012,157 @@ function MobileLocker({
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              {tab === "songs" && visibleSongs.map((song) => <LockerSongCard key={song.id} song={song} live={sessionSongIds.has(song.song_id ?? "")} onResume={() => onResumeSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
+              {tab === "beats" && (
+                <div className="flex items-center justify-between gap-3 px-1 pb-1">
+                  <div><div className="label-hw text-white/48">Beat Locker</div><div className="mt-1 text-[10px] text-muted-foreground">Private files stay yours.</div></div>
+                  <button type="button" onClick={() => setImportOpen(true)} className="flex min-h-10 shrink-0 items-center gap-2 rounded-xl border border-gold/30 bg-gold/8 px-3 text-xs font-semibold text-gold">
+                    <Upload className="h-3.5 w-3.5" />Import beat
+                  </button>
+                </div>
+              )}
+              {tab === "songs" && visibleSongs.map((song) => <LockerSongCard key={song.id} song={song} live={sessionSongIds.has(song.song_id ?? "")} onResume={() => onResumeSong(song)} onPrepare={() => onPrepareSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
               {tab === "songs" && visibleSongs.length === 0 && <LockerEmpty title={normalizedQuery ? "No songs match." : "No saved songs yet."} body="Save a song from the writing pad and it will be ready to resume here." actionLabel="Open Studio" onAction={onGoToStudio} />}
 
               {tab === "hooks" && visibleHooks.map((hook) => <LockerHookCard key={hook.id} hook={hook} onUse={() => onUseHook(hook)} onRemove={() => onRemove("hooks", hook.id)} />)}
               {tab === "hooks" && visibleHooks.length === 0 && <LockerEmpty title={normalizedQuery ? "No hooks match." : "No hooks saved yet."} body="Capture the lines worth returning to, then reuse them in any session." actionLabel="Write a Hook" onAction={onGoToStudio} />}
 
+              {tab === "beats" && visibleStarterBeats.length > 0 && <div className="flex items-center justify-between gap-3 px-1"><div className="label-hw text-gold/75">Included with RapWriter</div><div className="text-[10px] text-muted-foreground">Full session use</div></div>}
+              {tab === "beats" && visibleStarterBeats.map((beat) => <StarterBeatCard key={beat.id} beat={beat} onUse={() => onUseStarterBeat(beat)} />)}
+              {tab === "beats" && visibleBeats.length > 0 && visibleStarterBeats.length > 0 && <div className="px-1 pt-2 label-hw text-white/45">Saved and licensed</div>}
               {tab === "beats" && visibleBeats.map((beat) => <LockerBeatCard key={beat.id} beat={beat} onUse={() => onUseBeat(beat)} onRemove={() => onRemove("beats", beat.id)} />)}
-              {tab === "beats" && visibleBeats.length === 0 && <LockerEmpty title={normalizedQuery ? "No beats match." : "No beats saved yet."} body="Favorite a beat in Marketplace and keep the pocket close." actionLabel="Browse Beats" onAction={onGoToMarket} />}
+              {tab === "beats" && visibleBeats.length === 0 && visibleStarterBeats.length === 0 && <LockerEmpty title={normalizedQuery ? "No beats match." : "No beats saved yet."} body="Favorite a beat in Studio Store and keep the pocket close." actionLabel="Browse Beats" onAction={onGoToMarket} />}
 
               {tab === "purchases" && (
                 <>
                   {activeRoomMatchesQuery && <LockerPurchaseCard title={activeStudioPack.label} meta="Active Studio Room" body={activeStudioPack.writingCue} state="Active" image={activeStudioPack.image} position={activeStudioPack.position} overlay={activeStudioPack.overlay} />}
                   {visibleUnlocks.map((unlock) => <LockerOwnedCard key={unlock.id} unlock={unlock} />)}
                   {visibleUnlocks.length === 0 && !activeRoomMatchesQuery && normalizedQuery && <LockerEmpty title="No owned items match." body="Try another search or browse the full studio collection." actionLabel="Explore Market" onAction={onGoToMarket} />}
-                  {productUnlocks.length === 0 && !normalizedQuery && <LockerEmpty title="Your first room is ready." body="New rooms, AI Pens, vocal chains, and themes will join Midnight Session here." actionLabel="Explore Market" onAction={onGoToMarket} />}
+                  {visibleProductUnlocks.length === 0 && !normalizedQuery && <LockerEmpty title="Your first room is ready." body="New rooms, vocal chains, ambience, and themes will join Midnight Session here." actionLabel="Explore Market" onAction={onGoToMarket} />}
                 </>
               )}
             </div>
           )}
+          <PrivateBeatImportSheet open={importOpen} onClose={() => setImportOpen(false)} onImport={onImportBeat} />
         </>
       )}
+    </div>
+  );
+}
+
+function PrivateBeatImportSheet({
+  open,
+  onClose,
+  onImport,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onImport: (input: PrivateBeatImportInput) => Promise<BeatLockerRow | null>;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [title, setTitle] = useState("");
+  const [producer, setProducer] = useState("");
+  const [bpm, setBpm] = useState("");
+  const [musicalKey, setMusicalKey] = useState("");
+  const [durationSeconds, setDurationSeconds] = useState(0);
+  const [rightsConfirmed, setRightsConfirmed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) return;
+    setFile(null);
+    setTitle("");
+    setProducer("");
+    setBpm("");
+    setMusicalKey("");
+    setDurationSeconds(0);
+    setRightsConfirmed(false);
+    setSubmitting(false);
+    setError(null);
+  }, [open]);
+
+  if (!open) return null;
+
+  const chooseFile = async (nextFile?: File) => {
+    setError(null);
+    if (!nextFile) return;
+    const extension = nextFile.name.toLowerCase().split(".").pop();
+    if (!extension || !["mp3", "wav"].includes(extension) || nextFile.size > 100 * 1024 * 1024) {
+      setError("Choose an MP3 or WAV file under 100 MB.");
+      return;
+    }
+    try {
+      const duration = await readAudioFileDuration(nextFile);
+      setFile(nextFile);
+      setDurationSeconds(Math.max(1, Math.round(duration)));
+      if (!title.trim()) setTitle(nextFile.name.replace(/\.[^.]+$/, ""));
+    } catch {
+      setError("RapWriter could not read this audio file.");
+    }
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!file || !title.trim() || !durationSeconds || !rightsConfirmed) {
+      setError("Add a beat, title it, and confirm you have permission to use it.");
+      return;
+    }
+    const parsedBpm = bpm.trim() ? Number(bpm) : null;
+    if (parsedBpm !== null && (!Number.isInteger(parsedBpm) || parsedBpm < 40 || parsedBpm > 240)) {
+      setError("BPM must be a whole number between 40 and 240.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const imported = await onImport({
+        file,
+        title: title.trim(),
+        producer: producer.trim(),
+        bpm: parsedBpm,
+        musicalKey: musicalKey.trim() || null,
+        durationSeconds,
+      });
+      if (imported) onClose();
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "The beat could not be imported.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 px-3 pt-16 backdrop-blur-sm" role="presentation" onMouseDown={(event) => event.stopPropagation()}>
+      <section className="w-full max-w-[430px] overflow-hidden rounded-t-3xl border border-white/12 bg-[#101011] shadow-[0_-24px_80px_rgba(0,0,0,0.72)]" role="dialog" aria-modal="true" aria-labelledby="private-beat-title">
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/20" />
+        <div className="flex items-start justify-between gap-4 border-b border-white/8 px-5 pb-4 pt-3">
+          <div><div className="label-hw text-gold/80">Beat Locker</div><h2 id="private-beat-title" className="mt-1 text-xl font-semibold">Import your beat</h2><p className="mt-1 text-xs text-muted-foreground">Private to your account. Ready in Writer Flow.</p></div>
+          <button type="button" onClick={onClose} disabled={submitting} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Close beat import"><X className="h-4 w-4" /></button>
+        </div>
+        <form onSubmit={submit} className="max-h-[72dvh] space-y-4 overflow-y-auto px-5 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-4">
+          <label className="flex min-h-16 cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-gold/30 bg-gold/[0.04] px-4">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold/25 bg-gold/8"><Upload className="h-4 w-4 text-gold" /></span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{file?.name || "Choose MP3 or WAV"}</span><span className="mt-1 block text-[10px] text-muted-foreground">{file ? `${formatFileSize(file.size)} / ${formatDuration(durationSeconds)}` : "Up to 100 MB"}</span></span>
+            <input type="file" accept=".mp3,.wav,audio/mpeg,audio/wav,audio/x-wav" className="sr-only" onChange={(event) => void chooseFile(event.target.files?.[0])} />
+          </label>
+
+          <label className="block"><span className="label-hw text-white/48">Beat title</span><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} placeholder="Untitled beat" className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none focus:border-gold/45" /></label>
+          <label className="block"><span className="label-hw text-white/48">Producer credit</span><input value={producer} onChange={(event) => setProducer(event.target.value)} maxLength={120} placeholder="Optional" className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none focus:border-gold/45" /></label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block"><span className="label-hw text-white/48">BPM</span><input value={bpm} onChange={(event) => setBpm(event.target.value.replace(/\D/g, "").slice(0, 3))} inputMode="numeric" placeholder="Optional" className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none focus:border-gold/45" /></label>
+            <label className="block"><span className="label-hw text-white/48">Key</span><input value={musicalKey} onChange={(event) => setMusicalKey(event.target.value)} maxLength={32} placeholder="Optional" className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none focus:border-gold/45" /></label>
+          </div>
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-3">
+            <input type="checkbox" checked={rightsConfirmed} onChange={(event) => setRightsConfirmed(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[#ffb11b]" />
+            <span className="text-xs leading-relaxed text-white/72">I own this beat or have permission to use it.</span>
+          </label>
+          {error && <div className="rounded-xl border border-rec/25 bg-rec/8 px-3 py-2.5 text-xs text-rec" role="alert">{error}</div>}
+          <div className="grid grid-cols-[0.72fr_1.28fr] gap-3">
+            <button type="button" onClick={onClose} disabled={submitting} className="min-h-12 rounded-xl border border-white/10 text-sm font-semibold text-white/68">Cancel</button>
+            <button type="submit" disabled={submitting} className="min-h-12 rounded-xl bg-gold text-sm font-semibold text-black disabled:opacity-55">{submitting ? "Importing..." : "Add to Beat Locker"}</button>
+          </div>
+        </form>
+      </section>
     </div>
   );
 }
@@ -5281,7 +6203,7 @@ function LockerLoading() {
   );
 }
 
-function LockerSongCard({ song, live, onResume, onRemove }: { song: SongLockerRow; live: boolean; onResume: () => void; onRemove: () => void }) {
+function LockerSongCard({ song, live, onResume, onPrepare, onRemove }: { song: SongLockerRow; live: boolean; onResume: () => void; onPrepare: () => void; onRemove: () => void }) {
   const progress = lockerSongProgress(song);
   const bars = lockerSnapshotNumber(song.snapshot, "totalBars", "total_bars");
   return (
@@ -5296,7 +6218,7 @@ function LockerSongCard({ song, live, onResume, onRemove }: { song: SongLockerRo
       </div>
       <div className="mt-4 flex items-center gap-3">
         <div className="min-w-0 flex-1"><div className="h-1.5 overflow-hidden rounded-full bg-white/8"><div className="h-full rounded-full bg-gold" style={{ width: `${progress}%` }} /></div><div className="mt-1.5 text-[10px] text-muted-foreground">{progress}% written</div></div>
-        <div className="flex shrink-0 items-center gap-2"><LockerRemoveButton label={`Remove ${song.title}`} onRemove={onRemove} /><button type="button" onClick={onResume} className="flex min-h-10 items-center gap-2 rounded-xl border border-gold/25 bg-gold/8 px-3 text-xs font-semibold text-gold"><Play className="h-3.5 w-3.5 fill-current" />Resume</button></div>
+        <div className="flex shrink-0 items-center gap-2"><LockerRemoveButton label={`Remove ${song.title}`} onRemove={onRemove} /><button type="button" onClick={onPrepare} className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-white/68 transition-colors hover:border-gold/25 hover:text-gold" aria-label={`Prepare ${song.title} for Booth`} title="Prepare for Booth"><FileText className="h-4 w-4" /></button><button type="button" onClick={onResume} className="flex min-h-10 items-center gap-2 rounded-xl border border-gold/25 bg-gold/8 px-3 text-xs font-semibold text-gold"><Play className="h-3.5 w-3.5 fill-current" />Resume</button></div>
       </div>
     </article>
   );
@@ -5322,6 +6244,38 @@ function LockerBeatCard({ beat, onUse, onRemove }: { beat: BeatLockerRow; onUse:
         <div className="min-w-0 flex-1 py-1"><div className="flex items-center justify-between gap-2"><span className="label-hw text-gold/75">{favorite ? "Favorite" : beat.license || "Saved Beat"}</span>{beat.price !== null && beat.price > 0 && <span className="text-[10px] text-muted-foreground">${beat.price}</span>}</div><h2 className="mt-2 truncate text-base font-semibold">{beat.title}</h2><div className="mt-1 truncate text-[11px] text-muted-foreground">{beat.producer || "Independent producer"}</div></div>
       </div>
       <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/8 pt-3"><div className="min-w-0 truncate text-[10px] uppercase tracking-[0.1em] text-muted-foreground">{[beat.bpm ? `${beat.bpm} BPM` : null, beat.musical_key, beat.mood].filter(Boolean).join(" / ")}</div><div className="flex shrink-0 items-center gap-2"><LockerRemoveButton label={`Remove ${beat.title}`} onRemove={onRemove} /><button type="button" onClick={onUse} className="flex min-h-10 items-center gap-2 rounded-xl border border-gold/25 bg-gold/8 px-3 text-xs font-semibold text-gold"><Play className="h-3.5 w-3.5 fill-current" />Load</button></div></div>
+    </article>
+  );
+}
+
+function StarterBeatCard({ beat, onUse }: { beat: StarterBeat; onUse: () => void }) {
+  return (
+    <article className="rounded-2xl border border-gold/20 bg-[#111113] p-3">
+      <div className="flex gap-3">
+        <div
+          className="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-xl border border-gold/25 bg-cover bg-center"
+          style={{ background: starterBeatArt(beat) }}
+        >
+          <Headphones className="h-5 w-5 text-gold" />
+          <div className="absolute inset-x-2 bottom-2 h-0.5 rounded-full bg-gold/70" />
+        </div>
+        <div className="min-w-0 flex-1 py-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="label-hw text-gold/80">Starter Beat</span>
+            <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-300">Included</span>
+          </div>
+          <h2 className="mt-2 truncate text-base font-semibold">{beat.title}</h2>
+          <div className="mt-1 truncate text-[11px] text-muted-foreground">{beat.producer}</div>
+        </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/8 pt-3">
+        <div className="min-w-0 truncate text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+          {[beat.genre, beat.mood, beat.bpm ? `${beat.bpm} BPM` : null, formatDuration(beat.duration)].filter(Boolean).join(" / ")}
+        </div>
+        <button type="button" onClick={onUse} className="flex min-h-10 shrink-0 items-center gap-2 rounded-xl border border-gold/25 bg-gold/8 px-3 text-xs font-semibold text-gold">
+          <Play className="h-3.5 w-3.5 fill-current" />Load
+        </button>
+      </div>
     </article>
   );
 }
@@ -5392,6 +6346,12 @@ function lockerBeatArt(beat: BeatLockerRow) {
   const art = beat.beat_snapshot.art;
   if (typeof art === "string" && art.includes("gradient")) return art;
   return "linear-gradient(145deg, #211407 0%, #0c0c0d 55%, #6b4510 125%)";
+}
+
+function starterBeatArt(beat: StarterBeat) {
+  if (beat.artworkUrl) return `center / cover no-repeat url('${beat.artworkUrl}')`;
+  if (beat.genre?.toLowerCase().includes("trap")) return "linear-gradient(145deg, #25110b 0%, #100d12 55%, #6f2f0d 125%)";
+  return "linear-gradient(145deg, #112126 0%, #0c0d10 56%, #6b5418 125%)";
 }
 
 function LockerPurchaseCard({
@@ -5665,7 +6625,6 @@ function MobileProfile({
   const [workspaceUpgradeStatus, setWorkspaceUpgradeStatus] = useState<"idle" | "saving" | "error">("idle");
   const [workspaceUpgradeError, setWorkspaceUpgradeError] = useState<string | null>(null);
   const artistName = profile?.artist_name || profile?.display_name || profile?.email?.split("@")[0] || "RapWriter Artist";
-  const planLabel = profile?.plan ? `${profile.plan.charAt(0).toUpperCase()}${profile.plan.slice(1)} Plan` : "Studio Pro";
   const joinedLabel = profile?.created_at
     ? new Intl.DateTimeFormat("en", { month: "short", year: "numeric" }).format(new Date(profile.created_at))
     : "Private beta";
@@ -5735,7 +6694,7 @@ function MobileProfile({
                 <div className="truncate text-xl font-semibold">{loading ? "Loading artist..." : artistName}</div>
                 <ShieldCheck className="h-4 w-4 shrink-0 text-gold" />
               </div>
-              <div className="mt-1 text-xs text-muted-foreground">{joinedLabel} - {planLabel}</div>
+              <div className="mt-1 text-xs text-muted-foreground">Member since {joinedLabel}</div>
               <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-gold">
                 <Crown className="h-3 w-3" />
                 {emailVerified ? "Verified account" : "Email confirmation pending"}
@@ -5778,6 +6737,10 @@ function MobileProfile({
         <ProfileSignal title="Booth Ready" value={boothLabel} detail={boothReady.locked ? boothReady.lockedReason : boothReady.nextAction} />
       </div>
 
+      <div id="profile-membership" className="scroll-mt-4 pt-4">
+        <MembershipCard />
+      </div>
+
       <div className="mt-4 space-y-2">
         {canExpandWorkspace && (
           <MobileProfileRow
@@ -5788,7 +6751,7 @@ function MobileProfile({
             disabled={workspaceUpgradeStatus === "saving"}
           />
         )}
-        {canAccessProducer && <MobileProfileRow icon={Headphones} title="Producer Portal" value="Onboarding, beat uploads, playlists" href="/producer" />}
+        {canAccessProducer && <MobileProfileRow icon={Headphones} title="Producer HQ" value="Catalog, storefront, and business" href="/producer" />}
         {isAdmin && <MobileProfileRow icon={LockKeyhole} title="Control room" value="Admin tools and catalog ops" href="/admin" muted />}
       </div>
       {workspaceUpgradeStatus === "saving" && <p className="mt-3 text-xs text-gold">Preparing your combined workspace...</p>}
@@ -6355,8 +7318,105 @@ function sectionsFromLockerSnapshot(snapshot: Record<string, unknown>) {
   }, {});
 }
 
+function lockerSnapshotBeat(snapshot: Record<string, unknown>) {
+  const beat = snapshot.beat;
+  if (!beat || typeof beat !== "object" || Array.isArray(beat)) return null;
+  return beatSnapshotFromRecord(beat as Record<string, unknown>);
+}
+
+function boothReadyFromLockerSnapshot(snapshot: Record<string, unknown>, sections: Record<string, string>, completionPct: number) {
+  const analysis = analyzeLyrics(sections);
+  const fallback = scoreBoothReady(sections, completionPct, analysis, {
+    activeSection: "Hook",
+    roughTakeDuration: 0,
+    roughTakeSaved: false,
+    roughTakeSection: null,
+    roughTakeExists: false,
+    roughTakeAnalyzing: false,
+    roughTakeAnalysis: null,
+  });
+  const stored = snapshot.boothReady;
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return fallback;
+  const record = stored as Record<string, unknown>;
+  const number = (key: string, current: number) => typeof record[key] === "number" && Number.isFinite(record[key]) ? clampScore(record[key] as number) : current;
+  const string = (key: string, current: string) => typeof record[key] === "string" ? (record[key] as string).slice(0, 300) : current;
+  const checklist = Array.isArray(record.checklist)
+    ? record.checklist.filter((item): item is { label: string; detail: string; complete: boolean } => Boolean(item && typeof item === "object" && typeof (item as Record<string, unknown>).label === "string" && typeof (item as Record<string, unknown>).detail === "string" && typeof (item as Record<string, unknown>).complete === "boolean")).slice(0, 12)
+    : fallback.checklist;
+  const improvements = Array.isArray(record.improvements) ? record.improvements.filter((item): item is string => typeof item === "string").slice(0, 12) : fallback.improvements;
+  const rawMetrics = record.metrics && typeof record.metrics === "object" && !Array.isArray(record.metrics) ? record.metrics as Record<string, unknown> : {};
+  return {
+    ...fallback,
+    score: number("score", fallback.score),
+    lyricScore: number("lyricScore", fallback.lyricScore),
+    performanceScore: number("performanceScore", fallback.performanceScore),
+    nextAction: string("nextAction", fallback.nextAction),
+    checklist,
+    improvements,
+    metrics: {
+      structure: typeof rawMetrics.structure === "number" ? clampScore(rawMetrics.structure) : fallback.metrics.structure,
+      completion: typeof rawMetrics.completion === "number" ? clampScore(rawMetrics.completion) : fallback.metrics.completion,
+      cadence: typeof rawMetrics.cadence === "number" ? clampScore(rawMetrics.cadence) : fallback.metrics.cadence,
+      hook: typeof rawMetrics.hook === "number" ? clampScore(rawMetrics.hook) : fallback.metrics.hook,
+      originality: typeof rawMetrics.originality === "number" ? clampScore(rawMetrics.originality) : fallback.metrics.originality,
+      replay: typeof rawMetrics.replay === "number" ? clampScore(rawMetrics.replay) : fallback.metrics.replay,
+    },
+  };
+}
+
+function buildBoothExportSnapshot({
+  projectTitle,
+  artistName,
+  activeSection,
+  sections,
+  beat,
+  boothReady,
+  completionPct,
+  totalBars,
+  roughTake,
+}: {
+  projectTitle: string;
+  artistName: string;
+  activeSection: string;
+  sections: Record<string, string>;
+  beat: Record<string, unknown>;
+  boothReady: BoothReadyResult;
+  completionPct: number;
+  totalBars: number;
+  roughTake: RoughTakeRow | null;
+}): BoothExportSnapshot {
+  return {
+    projectTitle,
+    artistName,
+    activeSection,
+    sections: { ...sections },
+    beat: { ...beat },
+    boothReady: {
+      score: boothReady.score,
+      lyricScore: boothReady.lyricScore,
+      performanceScore: boothReady.performanceScore,
+      nextAction: boothReady.nextAction,
+      checklist: boothReady.checklist.map((item) => ({ ...item })),
+      improvements: [...boothReady.improvements],
+      metrics: { ...boothReady.metrics },
+    },
+    completionPct,
+    totalBars,
+    roughTake: roughTake ? {
+      id: roughTake.id,
+      sectionName: roughTake.section_name,
+      durationSeconds: roughTake.duration_seconds,
+      analysis: roughTake.analysis,
+    } : null,
+  };
+}
+
+function artistDisplayName(profile: ProfileRow | null, email?: string | null) {
+  return profile?.artist_name?.trim() || profile?.display_name?.trim() || email?.split("@")[0] || "Artist";
+}
+
 function productUnlockFromEntitlement(entitlement: ProductEntitlementRow): ProductUnlock {
-  const detail = typeof entitlement.metadata.detail === "string" ? entitlement.metadata.detail : "Marketplace product unlocked.";
+  const detail = typeof entitlement.metadata.detail === "string" ? entitlement.metadata.detail : "Studio Store product unlocked.";
   const price = typeof entitlement.metadata.price === "string" ? entitlement.metadata.price : `$${Math.round(entitlement.price_cents / 100)}`;
   return {
     id: entitlement.product_id,
@@ -6394,6 +7454,24 @@ function beatSnapshotFromLockerBeat(beat: BeatLockerRow): SelectedBeat {
     bpm: beat.bpm ?? savedSnapshot?.bpm,
     key: beat.musical_key ?? savedSnapshot?.key,
     mood: beat.mood ?? savedSnapshot?.mood,
+  };
+}
+
+function beatSnapshotFromStarterBeat(beat: StarterBeat): SelectedBeat {
+  return {
+    id: `starter-beat-${beat.id}`,
+    title: beat.title,
+    producer: beat.producer,
+    bpm: beat.bpm ?? undefined,
+    key: beat.key ?? undefined,
+    mood: beat.mood ?? beat.genre ?? undefined,
+    genre: beat.genre ?? undefined,
+    duration: beat.duration,
+    previewUrl: beat.previewUrl,
+    source: "starter",
+    starterBeatId: beat.id,
+    licenseScope: beat.licenseScope,
+    attribution: beat.attribution,
   };
 }
 
@@ -6610,6 +7688,35 @@ function formatDuration(seconds: number) {
   const mins = Math.floor(safeSeconds / 60);
   const secs = String(safeSeconds % 60).padStart(2, "0");
   return `${mins}:${secs}`;
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+}
+
+function readAudioFileDuration(file: File) {
+  return new Promise<number>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    const cleanup = () => {
+      audio.removeAttribute("src");
+      audio.load();
+      URL.revokeObjectURL(url);
+    };
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => {
+      const duration = audio.duration;
+      cleanup();
+      if (Number.isFinite(duration) && duration > 0) resolve(duration);
+      else reject(new Error("Invalid audio duration."));
+    };
+    audio.onerror = () => {
+      cleanup();
+      reject(new Error("Audio metadata could not be read."));
+    };
+    audio.src = url;
+  });
 }
 
 function getProgressPct(currentTime: number, duration: number) {

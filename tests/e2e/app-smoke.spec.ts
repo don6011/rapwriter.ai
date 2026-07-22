@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const publicRoutes = ["/", "/?view=locker", "/?view=market", "/?view=profile", "/producer"];
+const publicRoutes = ["/", "/?view=locker", "/?view=market", "/?view=profile", "/mobile-preview", "/producer"];
 
 async function expectHealthyPage(page: Page) {
   await expect(page.locator("body")).not.toContainText("Application error");
@@ -31,6 +31,15 @@ test.describe("public app shell", () => {
       expect(pageErrors).toEqual([]);
     });
   }
+});
+
+test("admin data stays behind authentication", async ({ page, request }) => {
+  await page.goto("/admin", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "Sign in required" })).toBeVisible();
+  await expect(page.getByText("database-backed admin role")).toBeVisible();
+
+  const response = await request.get("/api/admin/review");
+  expect(response.status()).toBe(401);
 });
 
 test("writer draft and active section survive refresh", async ({ page }) => {
@@ -66,6 +75,32 @@ test("writer draft and active section survive refresh", async ({ page }) => {
 
 test("writer glass pad stays focused and mobile safe", async ({ page }, testInfo) => {
   test.setTimeout(60_000);
+  await page.route("**/api/starter-beats", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        beats: [{
+          id: "fb699cd4-66f4-46d2-bb99-c454c00689ed",
+          slug: "city-shadows",
+          title: "City Shadows",
+          producer: "N0izepack Ent",
+          producerProfileId: null,
+          sourceType: "suno_licensed",
+          rightsHolder: "N0izepack Ent",
+          licenseScope: "rapwriter_starter_nonexclusive",
+          duration: 155,
+          bpm: null,
+          key: null,
+          genre: "Jazz R&B",
+          mood: "Laid Back",
+          tags: ["Jazz", "R&B", "Laid Back"],
+          attribution: "Created by N0izepack Ent for the RapWriter Starter catalog.",
+          previewUrl: "/api/starter-beats/fb699cd4-66f4-46d2-bb99-c454c00689ed/media?kind=audio",
+          artworkUrl: null,
+        }],
+      }),
+    });
+  });
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -98,10 +133,34 @@ test("writer glass pad stays focused and mobile safe", async ({ page }, testInfo
   await expectHealthyPage(page);
   await page.screenshot({ path: testInfo.outputPath("writer-glass.png"), fullPage: false });
 
+  await page.getByRole("button", { name: "Change beat" }).click();
+  await expect(page.getByRole("dialog", { name: "Change the beat." })).toBeVisible();
+  await expect(page.getByRole("button", { name: "My Beats" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "30-sec Previews" })).toBeVisible();
+  await page.getByRole("button", { name: /City Shadows N0izepack Ent/ }).click();
+  await expect(page.getByText("City Shadows", { exact: true })).toBeVisible();
+  await expect(editor).toHaveValue("Glass roof, still I see the sky though\nEvery ceiling that they built, I broke the light through");
+
   await page.getByRole("button", { name: "Pen View" }).click();
   await expect(page.getByRole("region", { name: "Hook Pen View analysis" })).toContainText("Matching endings / syllables");
   await expectHealthyPage(page);
   await page.screenshot({ path: testInfo.outputPath("pen-view-glass.png"), fullPage: false });
+});
+
+test("device preview embeds the live app and switches shells", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto("/mobile-preview", { waitUntil: "domcontentloaded" });
+
+  await expect(page.locator("main")).toHaveAttribute("data-preview-ready", "true", { timeout: 20_000 });
+  const phoneShell = page.getByTestId("phone-shell");
+  const deviceFrame = page.frameLocator('iframe[title="RapWriter device preview"]');
+  await expect(phoneShell).toHaveAttribute("data-device", "iphone");
+  await expect(deviceFrame.locator("body")).toContainText(/Restoring Studio|Studio is ready\./, { timeout: 20_000 });
+  await deviceFrame.locator("body").evaluate((body) => body.dataset.previewSession = "preserved");
+  await page.getByRole("tab", { name: "Samsung" }).click();
+  await expect(phoneShell).toHaveAttribute("data-device", "samsung");
+  await expect(deviceFrame.locator("body")).toHaveAttribute("data-preview-session", "preserved");
+  await expectHealthyPage(page);
 });
 
 test("foreign-origin API mutation is rejected", async ({ request }) => {

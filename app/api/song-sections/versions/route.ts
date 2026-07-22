@@ -2,10 +2,17 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api/auth";
 import { parseJson } from "@/lib/api/json";
 import { sectionVersionRestoreSchema } from "@/lib/schemas";
+import { membershipErrorResponse, requireMembershipEntitlement } from "@/lib/server/membership-access";
 
 export async function GET(request: Request) {
   const { supabase, user, response } = await requireUser();
   if (response) return response;
+
+  try {
+    await requireMembershipEntitlement(supabase, user.id, "artist", "version_history");
+  } catch (error) {
+    return membershipErrorResponse(error);
+  }
 
   const url = new URL(request.url);
   const songId = url.searchParams.get("song_id");
@@ -42,8 +49,14 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { supabase, response } = await requireUser();
+  const { supabase, user, response } = await requireUser();
   if (response) return response;
+
+  try {
+    await requireMembershipEntitlement(supabase, user.id, "artist", "version_history");
+  } catch (error) {
+    return membershipErrorResponse(error);
+  }
 
   const parsed = await parseJson(request, sectionVersionRestoreSchema);
   if (parsed.response) return parsed.response;

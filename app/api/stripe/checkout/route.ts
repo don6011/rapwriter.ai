@@ -6,6 +6,7 @@ import { parseJson } from "@/lib/api/json";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
 import { getCatalogProduct } from "@/lib/product-catalog";
 import { resolveBeatCheckout } from "@/lib/server/beat-checkout";
+import { hasValidRequestOrigin } from "@/lib/api/origin";
 
 const beatCheckoutSchema = z.object({
   beat_id: z.string().min(1),
@@ -23,6 +24,9 @@ const productCheckoutSchema = z.object({
 const checkoutSchema = z.union([beatCheckoutSchema, productCheckoutSchema]);
 
 export async function POST(request: Request) {
+  if (!hasValidRequestOrigin(request)) {
+    return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+  }
   const { user, response } = await requireUser();
   if (response) return response;
 
@@ -51,7 +55,7 @@ export async function POST(request: Request) {
   const isProductCheckout = "product_id" in data;
   const product = isProductCheckout ? getCatalogProduct(data.product_id) : null;
   const beat = isProductCheckout ? null : await resolveBeatCheckout(data.beat_id, data.license);
-  if (isProductCheckout && !product) return NextResponse.json({ error: "Unknown marketplace product" }, { status: 404 });
+  if (isProductCheckout && !product) return NextResponse.json({ error: "That Studio Store asset is not available for purchase." }, { status: 404 });
   if (!isProductCheckout && !beat) return NextResponse.json({ error: "That beat license is not available." }, { status: 404 });
   if (product && product.priceCents <= 0) {
     return NextResponse.json({ error: "This item does not require checkout." }, { status: 422 });
@@ -71,7 +75,7 @@ export async function POST(request: Request) {
     beatSnapshot: string;
   } = (() => {
     if (isProductCheckout) {
-      if (!product) throw new Error("Unknown marketplace product");
+      if (!product) throw new Error("Unknown Studio Store asset");
       return {
         name: product.title,
         description: product.detail,

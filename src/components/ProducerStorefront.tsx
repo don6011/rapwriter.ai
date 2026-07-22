@@ -223,7 +223,7 @@ export function ProducerStorefront({ handle }: { handle: string }) {
     <main className="min-h-svh bg-[#060607] text-white">
       <div className="mx-auto min-h-svh w-full max-w-[430px] overflow-hidden border-x border-white/8 bg-[#09090a] shadow-[0_0_80px_rgba(0,0,0,0.75)]">
         <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-white/8 bg-black/88 px-4 backdrop-blur-xl">
-          <Link href="/?view=market" className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/[0.03] text-white/75" aria-label="Back to Marketplace">
+          <Link href="/?view=market" className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/[0.03] text-white/75" aria-label="Back to Studio Store">
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <BrandLogo className="scale-90" />
@@ -385,7 +385,7 @@ function StorefrontState({ title, body }: { title: string; body: string }) {
         <BrandLogo className="justify-center" />
         <h1 className="mt-8 text-2xl font-semibold">{title}</h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{body}</p>
-        <Link href="/?view=market" className="gold-seal mt-7 inline-flex min-h-12 items-center gap-2 rounded-xl px-5 text-sm font-semibold text-black"><ArrowLeft className="h-4 w-4" /> Marketplace</Link>
+        <Link href="/?view=market" className="gold-seal mt-7 inline-flex min-h-12 items-center gap-2 rounded-xl px-5 text-sm font-semibold text-black"><ArrowLeft className="h-4 w-4" /> Studio Store</Link>
       </div>
     </main>
   );

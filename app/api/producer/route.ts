@@ -4,6 +4,7 @@ import { parseJson } from "@/lib/api/json";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
 import { producerUpgradeAccountType, type AccountType } from "@/lib/account-role";
 import { getProducerBeatBlockers, getProducerProfileBlockers } from "@/lib/producer-release";
+import { getMembershipForUser } from "@/lib/server/membership";
 import { producerProfileUpsertSchema } from "@/lib/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -30,6 +31,22 @@ async function signProducerBeatAssets(
 export async function GET() {
   const { supabase, user, response } = await requireRole("producer");
   if (response) return response;
+
+  let membership;
+  try {
+    membership = await getMembershipForUser(supabase, user.id);
+  } catch {
+    return NextResponse.json({ error: "Producer membership is temporarily unavailable." }, { status: 503 });
+  }
+
+  const { data: producerPlans, error: producerPlansError } = await supabase
+    .from("subscription_plans")
+    .select("id, audience, tier, name, tagline, monthly_price_cents, annual_price_cents, currency, entitlements, limits, metadata")
+    .eq("audience", "producer")
+    .eq("is_active", true)
+    .eq("is_public", true)
+    .order("tier");
+  if (producerPlansError) return NextResponse.json({ error: producerPlansError.message }, { status: 500 });
 
   const { data: profile, error: profileError } = await supabase
     .from("producer_profiles")
@@ -67,6 +84,8 @@ export async function GET() {
     playlists: playlistsResult.data ?? [],
     business: settingsResult.data ?? null,
     billing: billingResult.data ?? { plan: "free", stripe_status: "not_connected", payouts_enabled: false, charges_enabled: false, verification: {} },
+    membership,
+    plans: producerPlans ?? [],
     metrics: metricsResult.data ?? emptyProducerMetrics(),
     reviews: reviewsResult.data ?? [],
     release_readiness: buildReleaseReadiness(profile, beatsResult.data ?? [], profileBlockers, beatReadiness),
@@ -244,7 +263,7 @@ function buildReleaseReadiness(
       nextAction = "Submit your producer profile for review.";
     } else if (approvedBeat) {
       phase = "live";
-      nextAction = "Your first release is live in Marketplace.";
+      nextAction = "Your first release is live in Studio Store.";
     } else if (submittedBeat) {
       phase = "beat_review";
       nextAction = "Your beat is waiting for admin review.";

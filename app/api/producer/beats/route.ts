@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/api/auth";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
 import { getProducerBeatBlockers, getProducerProfileBlockers } from "@/lib/producer-release";
 import { producerBeatUpdateSchema } from "@/lib/schemas";
+import { membershipErrorResponse, requireMembershipLimit } from "@/lib/server/membership-access";
 
 const BUCKET = "producer-beats";
 const MAX_AUDIO_BYTES = 200 * 1024 * 1024;
@@ -61,6 +62,17 @@ export async function POST(request: Request) {
   if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
   if (businessError) return NextResponse.json({ error: businessError.message }, { status: 500 });
   if (!profile) return NextResponse.json({ error: "Complete producer onboarding before uploading beats." }, { status: 409 });
+
+  const { count: beatCount, error: beatCountError } = await supabase
+    .from("producer_beats")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", user.id);
+  if (beatCountError) return NextResponse.json({ error: beatCountError.message }, { status: 500 });
+  try {
+    await requireMembershipLimit(supabase, user.id, "producer", "beat_uploads", beatCount ?? 0);
+  } catch (error) {
+    return membershipErrorResponse(error);
+  }
 
   const formData = await request.formData();
   const audio = formData.get("audio");

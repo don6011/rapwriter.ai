@@ -6,6 +6,9 @@ import { getProducerBeatBlockers, getProducerProfileBlockers } from "@/lib/produ
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const BUCKET = "producer-beats";
+const STARTER_BUCKET = "starter-beats";
+
+export const dynamic = "force-dynamic";
 
 const reviewSchema = z.object({
   target: z.enum(["profile", "beat"]),
@@ -30,6 +33,15 @@ async function signBeatAssets(supabase: ReturnType<typeof createAdminClient>, be
   };
 }
 
+async function signStarterBeat(supabase: ReturnType<typeof createAdminClient>, beat: Record<string, unknown>) {
+  const audioPath = typeof beat.audio_path === "string" ? beat.audio_path : null;
+  const audioBucket = typeof beat.audio_bucket === "string" ? beat.audio_bucket : STARTER_BUCKET;
+  const audio = audioPath
+    ? await supabase.storage.from(audioBucket).createSignedUrl(audioPath, 60 * 20)
+    : { data: null };
+  return { ...beat, audio_url: audio.data?.signedUrl ?? null };
+}
+
 export async function GET() {
   const admin = await requireRole("admin");
   if (admin.response) return admin.response;
@@ -44,34 +56,79 @@ export async function GET() {
         error: err instanceof Error ? err.message : "Supabase admin client is not configured.",
         profiles: [],
         beats: [],
+        starter_beats: [],
+        accounts: [],
       },
       { status: 200 },
     );
   }
 
-  const [{ data: profiles, error: profilesError }, { data: beats, error: beatsError }] = await Promise.all([
+  const [
+    { data: profiles, error: profilesError },
+    { data: beats, error: beatsError },
+    { data: starterBeats, error: starterBeatsError },
+    { data: activity, error: activityError },
+    { count: adminCount, error: adminCountError },
+    { data: accountPage, error: accountsError },
+  ] = await Promise.all([
     supabase
       .from("producer_profiles")
       .select("id, owner_id, display_name, handle, city, country, bio, genres, specialties, status, verified, is_public, submitted_at, reviewed_at, created_at, updated_at, producer_business_settings(onboarding_completed, business_email)")
       .order("updated_at", { ascending: false })
-      .limit(40),
+      .limit(100),
     supabase
       .from("producer_beats")
       .select("*, producer_profiles(display_name, handle, city, status, verified)")
       .order("updated_at", { ascending: false })
-      .limit(60),
+      .limit(150),
+    supabase
+      .from("starter_beats")
+      .select("id, slug, title, producer_name, producer_profile_id, source_type, rights_holder, audio_bucket, audio_path, artwork_path, duration_seconds, bpm, musical_key, genre, mood, tags, attribution, is_active, sort_order, created_at, updated_at")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("producer_release_reviews")
+      .select("id, target_type, target_id, from_status, to_status, notes, blockers, created_at")
+      .order("created_at", { ascending: false })
+      .limit(12),
+    supabase
+      .from("user_roles")
+      .select("user_id", { count: "exact", head: true })
+      .eq("role", "admin"),
+    supabase.auth.admin.listUsers({ page: 1, perPage: 200 }),
   ]);
 
   if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 500 });
   if (beatsError) return NextResponse.json({ error: beatsError.message }, { status: 500 });
+  if (starterBeatsError) return NextResponse.json({ error: starterBeatsError.message }, { status: 500 });
+  if (activityError) return NextResponse.json({ error: activityError.message }, { status: 500 });
+  if (adminCountError) return NextResponse.json({ error: adminCountError.message }, { status: 500 });
+  if (accountsError) return NextResponse.json({ error: accountsError.message }, { status: 500 });
 
-  const signedBeats = await Promise.all((beats ?? []).map((beat) => signBeatAssets(supabase, beat)));
+  const [signedBeats, signedStarterBeats] = await Promise.all([
+    Promise.all((beats ?? []).map((beat) => signBeatAssets(supabase, beat))),
+    Promise.all((starterBeats ?? []).map((beat) => signStarterBeat(supabase, beat))),
+  ]);
+  const profileOwnerIds = new Set((profiles ?? []).map((profile) => profile.owner_id));
+  const accounts = (accountPage.users ?? []).map((user) => ({
+    id: user.id,
+    email: user.email ?? null,
+    has_producer_profile: profileOwnerIds.has(user.id),
+  }));
 
-  return NextResponse.json({
-    configured: true,
-    profiles: profiles ?? [],
-    beats: signedBeats,
-  });
+  return NextResponse.json(
+    {
+      configured: true,
+      profiles: profiles ?? [],
+      beats: signedBeats,
+      starter_beats: signedStarterBeats,
+      accounts,
+      activity: activity ?? [],
+      security: { admin_count: adminCount ?? 0 },
+    },
+    { headers: { "Cache-Control": "private, no-store, max-age=0" } },
+  );
 }
 
 export async function PATCH(request: Request) {

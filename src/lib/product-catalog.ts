@@ -36,32 +36,14 @@ export const vocalChainProducts: CatalogProduct[] = [
     priceCents: 1900,
     tags: ["Hooks", "Melodies", "Polished demos"],
   },
-  {
-    id: "vocal-raw-cypher",
-    type: "vocal_chain",
-    title: "Raw Cypher",
-    detail: "Dryer presence with a close, immediate tone for bar-heavy verses and punch-ins.",
-    price: "$12",
-    priceCents: 1200,
-    tags: ["Raw bars", "Punch-ins", "Cyphers"],
-  },
-  {
-    id: "vocal-radio-hook",
-    type: "vocal_chain",
-    title: "Radio Hook",
-    detail: "Wider hook tone with controlled delay space, vocal shine, and commercial lift.",
-    price: "$29",
-    priceCents: 2900,
-    tags: ["Hit hooks", "Club songs", "Melodic rap"],
-  },
 ];
 
 export const writingPackProducts: CatalogProduct[] = [
   {
     id: "writing-hook-builder",
     type: "writing_pack",
-    title: "Hook Builder",
-    detail: "Prompts and section goals for memorable repeat lines.",
+    title: "Finish Better Hooks",
+    detail: "Turn one strong idea into repeatable lines that carry replay value.",
     price: "$9",
     priceCents: 900,
     tags: ["Hooks", "Melody"],
@@ -69,8 +51,8 @@ export const writingPackProducts: CatalogProduct[] = [
   {
     id: "writing-16-bar-pressure",
     type: "writing_pack",
-    title: "16-Bar Pressure",
-    detail: "Verse structure drills for tighter punchlines.",
+    title: "Write Stronger Verses",
+    detail: "Build momentum, tighten setups, and make each fourth line land harder.",
     price: "$9",
     priceCents: 900,
     tags: ["Verses", "Cadence"],
@@ -78,8 +60,8 @@ export const writingPackProducts: CatalogProduct[] = [
   {
     id: "writing-story-mode",
     type: "writing_pack",
-    title: "Story Mode",
-    detail: "Scene, detail, and payoff prompts for narrative songs.",
+    title: "Build Better Stories",
+    detail: "Shape real details into scenes, tension, and a payoff listeners remember.",
     price: "$14",
     priceCents: 1400,
     tags: ["Story", "Detail"],
@@ -256,33 +238,38 @@ export const bundleProducts: CatalogBundle[] = [
     id: "bundle-penthouse-drop",
     type: "bundle",
     title: "Penthouse Sessions Drop",
-    detail: "The complete commercial writing room: skyline atmosphere, hook-first guidance, and a polished vocal finish.",
+    detail: "The complete commercial writing room: skyline atmosphere, an executive visual finish, and a hook-building pack you own.",
     price: "$59",
     priceCents: 5900,
     tags: ["Commercial", "Hooks", "Luxury"],
     image: "/studio/penthouse-sessions.webp",
     savings: "Save 35%",
-    includes: ["Penthouse Sessions", "Billboard Writer", "Radio Hook", "Gold Executive"],
+    includes: ["Penthouse Sessions", "Gold Executive", "Finish Better Hooks"],
   },
   {
     id: "bundle-late-night",
     type: "bundle",
     title: "Late Night Studio",
-    detail: "A darker creative stack for honest hooks, reflective verses, and headphones-on writing.",
+    detail: "A darker owned-asset stack for honest hooks, reflective verses, and headphones-on writing.",
     price: "$45",
     priceCents: 4500,
     tags: ["Pain", "Night", "Melodic"],
     image: "/studio/bedroom-dreams.webp",
     savings: "Save 30%",
-    includes: ["Bedroom Dreams", "Pain Architect", "Rain On Glass", "Booth Polish"],
+    includes: ["Bedroom Dreams", "Rain On Glass", "Purple Dreams", "Build Better Stories"],
   },
+];
+
+// Capability products remain resolvable for historical purchases, but they are
+// no longer offered for sale. New access comes from Prep Studio membership.
+export const legacyCapabilityProducts = [
+  ...producerStyleProducts,
+  ...vocalChainProducts,
 ];
 
 export const marketplaceProducts = [
   ...studioRoomProducts,
-  ...vocalChainProducts,
   ...writingPackProducts,
-  ...producerStyleProducts,
   ...ambientPackProducts,
   ...themeProducts,
   ...bundleProducts,
@@ -290,4 +277,10 @@ export const marketplaceProducts = [
 
 export function getCatalogProduct(productId: string) {
   return marketplaceProducts.find((product) => product.id === productId) ?? null;
+}
+
+export function getAnyCatalogProduct(productId: string) {
+  return getCatalogProduct(productId)
+    ?? legacyCapabilityProducts.find((product) => product.id === productId)
+    ?? null;
 }

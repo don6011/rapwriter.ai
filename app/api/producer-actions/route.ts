@@ -4,6 +4,7 @@ import { parseJson } from "@/lib/api/json";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
 import { producerActionCreateSchema } from "@/lib/schemas";
 import { generateProducerActionWithProvider } from "@/lib/server/producer-action-provider";
+import { consumeMembershipUsage, membershipErrorResponse } from "@/lib/server/membership-access";
 
 export async function POST(request: Request) {
   const { supabase, user, response } = await requireUser();
@@ -42,6 +43,16 @@ export async function POST(request: Request) {
 
     if (sessionError) return NextResponse.json({ error: sessionError.message }, { status: 500 });
     if (!session) return NextResponse.json({ error: "Session not found." }, { status: 404 });
+  }
+
+  try {
+    await consumeMembershipUsage(supabase, user.id, "artist", {
+      entitlement: "ghostwriter",
+      limitKey: "ghostwriter_actions_monthly",
+      metric: "ghostwriter_actions",
+    });
+  } catch (error) {
+    return membershipErrorResponse(error);
   }
 
   const draft = await generateProducerActionWithProvider({

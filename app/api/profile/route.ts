@@ -42,7 +42,19 @@ export async function PATCH(request: Request) {
   const admin = createAdminClient();
   const roles = parsed.data.account_type === "artist"
     ? ["artist"]
-    : ["artist", "producer"];
+    : parsed.data.account_type === "producer"
+      ? ["producer"]
+      : ["artist", "producer"];
+  const rolesToRemove = ["artist", "producer"].filter((role) => !roles.includes(role));
+
+  if (rolesToRemove.length) {
+    const { error: roleRemovalError } = await admin
+      .from("user_roles")
+      .delete()
+      .eq("user_id", user.id)
+      .in("role", rolesToRemove);
+    if (roleRemovalError) return NextResponse.json({ error: roleRemovalError.message }, { status: 500 });
+  }
 
   const { error: roleError } = await admin.from("user_roles").upsert(
     roles.map((role) => ({ user_id: user.id, role, granted_by: user.id })),
@@ -50,6 +62,13 @@ export async function PATCH(request: Request) {
   );
 
   if (roleError) return NextResponse.json({ error: roleError.message }, { status: 500 });
+
+  if (roles.includes("artist")) {
+    const { error: artistProfileError } = await admin
+      .from("artist_profiles")
+      .upsert({ owner_id: user.id }, { onConflict: "owner_id" });
+    if (artistProfileError) return NextResponse.json({ error: artistProfileError.message }, { status: 500 });
+  }
 
   const { data: profile, error } = await supabase
     .from("profiles")

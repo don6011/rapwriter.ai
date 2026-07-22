@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { PhonePreview } from "@/components/PhonePreview";
 
 export default function MobilePreviewPage() {
-  redirect("/");
+  return <PhonePreview />;
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api/auth";
 import { parseJson } from "@/lib/api/json";
 import { songCreateSchema, songPatchSchema } from "@/lib/schemas";
+import { membershipErrorResponse, requireMembershipLimit } from "@/lib/server/membership-access";
 
 export async function GET() {
   const { supabase, user, response } = await requireUser();
@@ -23,6 +24,17 @@ export async function POST(request: Request) {
 
   const parsed = await parseJson(request, songCreateSchema);
   if (parsed.response) return parsed.response;
+
+  const { count, error: countError } = await supabase
+    .from("songs")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", user.id);
+  if (countError) return NextResponse.json({ error: countError.message }, { status: 500 });
+  try {
+    await requireMembershipLimit(supabase, user.id, "artist", "song_storage", count ?? 0);
+  } catch (error) {
+    return membershipErrorResponse(error);
+  }
 
   const { data, error } = await supabase
     .from("songs")

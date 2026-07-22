@@ -82,6 +82,23 @@ export const beatLockerSchema = z.object({
   beat_snapshot: jsonRecordSchema.optional(),
 });
 
+export const privateBeatImportSchema = z.object({
+  title: z.string().trim().min(1).max(160),
+  producer: z.string().trim().max(120).default(""),
+  bpm: z.number().int().min(40).max(240).nullable().default(null),
+  musical_key: z.string().trim().max(32).nullable().default(null),
+  duration_seconds: z.number().int().min(1).max(7200),
+  file_name: z.string().trim().min(1).max(255),
+  file_size: z.number().int().min(1).max(100 * 1024 * 1024),
+  mime_type: z.string().trim().min(1).max(120),
+  rights_confirmed: z.literal(true),
+});
+
+export const privateBeatImportCompleteSchema = privateBeatImportSchema.extend({
+  storage_path: z.string().trim().min(1).max(500),
+  content_type: z.string().trim().min(1).max(120),
+});
+
 export const songLockerSchema = z.object({
   project_id: z.string().uuid().nullable().optional(),
   song_id: z.string().uuid().nullable().optional(),

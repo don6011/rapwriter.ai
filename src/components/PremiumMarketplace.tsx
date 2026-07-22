@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
-import Link from "next/link";
 import {
-  Activity,
   ArrowRight,
   Award,
   Check,
@@ -15,7 +13,6 @@ import {
   Heart,
   Headphones,
   Home,
-  Layers3,
   LockKeyhole,
   Mic,
   Palette,
@@ -37,15 +34,14 @@ import { cn } from "@/lib/utils";
 import {
   ambientPackProducts,
   bundleProducts,
-  producerStyleProducts,
   studioRoomProducts,
   themeProducts,
-  vocalChainProducts,
   writingPackProducts,
   type CatalogBundle,
   type CatalogProduct,
 } from "@/lib/product-catalog";
 import type { Beat, Producer } from "@/lib/marketplace";
+import { prepStudioTiers } from "@/lib/prep-studio-plans";
 
 type StudioPackId = "midnight" | "trap-house" | "bedroom" | "penthouse" | "cypher";
 
@@ -112,12 +108,11 @@ type MarketSelection =
   | { kind: "bundle"; bundle: CatalogBundle; owned: boolean }
   | { kind: "producer"; producer: Producer; beats: MarketplaceBeat[]; saved: boolean };
 
-type MarketCategory = "beats" | "rooms" | "pens" | "vocal" | "tools" | "themes" | "bundles";
-type MarketToolCategory = "pens" | "vocal" | "tools" | "themes";
+type MarketCategory = "beats" | "producer" | "studio-upgrades" | "creator-assets";
+type StudioUpgradeCategory = "rooms" | "themes" | "atmosphere";
 
 type PremiumMarketplaceProps = {
   signedIn: boolean;
-  onAuthRequired: () => void;
   onFavoriteBeat: (beat: Beat) => void;
   onAddBeatToProject: (beat: Beat) => void;
   onLicenseBeat: (beat: Beat) => void;
@@ -133,26 +128,20 @@ type PremiumMarketplaceProps = {
   productUnlocks: ProductUnlock[];
   onUnlockProduct: (product: Omit<ProductUnlock, "unlockedAt">) => void;
   sessionContext: SessionContext;
+  onOpenMembership: () => void;
+  onContinueWriting: () => void;
 };
 
-const sessionToolProducts = [...writingPackProducts, ...ambientPackProducts];
+const creatorAssetProducts = writingPackProducts;
 const marketCategories: Array<{ id: MarketCategory; label: string; icon: ComponentType<{ className?: string }> }> = [
   { id: "beats", label: "Beats", icon: Play },
-  { id: "rooms", label: "Rooms", icon: Home },
-  { id: "pens", label: "AI Pens", icon: PenLine },
-  { id: "vocal", label: "Vocal", icon: Mic },
-  { id: "tools", label: "Tools", icon: WandSparkles },
-  { id: "themes", label: "Themes", icon: Palette },
-  { id: "bundles", label: "Bundles", icon: Layers3 },
+  { id: "producer", label: "Producer", icon: Users },
+  { id: "studio-upgrades", label: "Studio Upgrades", icon: Home },
+  { id: "creator-assets", label: "Creator Assets", icon: WandSparkles },
 ];
-
-function isMarketToolCategory(category: MarketCategory): category is MarketToolCategory {
-  return category === "pens" || category === "vocal" || category === "tools" || category === "themes";
-}
 
 export function PremiumMarketplace({
   signedIn,
-  onAuthRequired,
   onFavoriteBeat,
   onAddBeatToProject,
   onLicenseBeat,
@@ -168,12 +157,13 @@ export function PremiumMarketplace({
   productUnlocks,
   onUnlockProduct,
   sessionContext,
+  onOpenMembership,
+  onContinueWriting,
 }: PremiumMarketplaceProps) {
   const [category, setCategory] = useState<MarketCategory>("beats");
-  const [toolCategory, setToolCategory] = useState<MarketToolCategory>("pens");
+  const [studioUpgradeCategory, setStudioUpgradeCategory] = useState<StudioUpgradeCategory>("rooms");
   const [selection, setSelection] = useState<MarketSelection | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
-  const [pulseIndex, setPulseIndex] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [beatCatalogOpen, setBeatCatalogOpen] = useState(false);
@@ -191,27 +181,22 @@ export function PremiumMarketplace({
   const spotlightBeats = spotlightProducer
     ? allMarketplaceBeats.filter((beat) => beat.producerId === spotlightProducer.id)
     : [];
-  const penthousePack = studioPacks.find((pack) => pack.id === "penthouse") ?? studioPacks[0];
-  const bedroomPack = studioPacks.find((pack) => pack.id === "bedroom") ?? studioPacks[0];
   const featuredBundle = bundleProducts[0];
+  const featuredBundleOwned = unlockedIds.has(featuredBundle.id);
+  const featuredProductTitles = useMemo(
+    () => new Set(featuredBundle.includes.map((item) => item.toLowerCase())),
+    [featuredBundle.includes],
+  );
   const recommendedBeat =
     featuredBeats.find((beat) => beat.emotionalTags.some((tag) => tag.toLowerCase().includes(sessionContext.mood.toLowerCase()))) ??
     featuredBeats[0];
-  const recommendedPen =
-    producerStyleProducts.find((product) => sessionContext.mood.toLowerCase().includes("pain") && product.title === "Pain Architect") ??
-    producerStyleProducts[0];
-  const recommendedRoom = sessionContext.mood.toLowerCase().includes("pain") ? bedroomPack : penthousePack;
-
-  const livePulse = [
-    `${allMarketplaceBeats.length} approved beat${allMarketplaceBeats.length === 1 ? "" : "s"} ready to write to`,
-    `${featuredProducers.length} producer storefront${featuredProducers.length === 1 ? "" : "s"} live`,
-    `${activeStudioPack.label} is your active studio room`,
-  ];
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setPulseIndex((current) => (current + 1) % livePulse.length), 3600);
-    return () => window.clearInterval(timer);
-  }, [livePulse.length]);
+  const discoveryBeats = recommendedBeat
+    ? [recommendedBeat, ...allMarketplaceBeats.filter((beat) => beat.id !== recommendedBeat.id)]
+    : allMarketplaceBeats;
+  const studioUpgradeRooms = studioPacks.filter((pack) => !featuredProductTitles.has(pack.label.toLowerCase()));
+  const studioUpgradeThemes = themeProducts.filter((product) => !featuredProductTitles.has(product.title.toLowerCase()));
+  const studioUpgradeAtmospheres = ambientPackProducts.filter((product) => !featuredProductTitles.has(product.title.toLowerCase()));
+  const visibleCreatorAssets = creatorAssetProducts.filter((product) => !featuredProductTitles.has(product.title.toLowerCase()));
 
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
@@ -220,7 +205,6 @@ export function PremiumMarketplace({
     const storedScroll = Number(window.sessionStorage.getItem("rapwriter:market:scroll") ?? 0);
     if (storedCategory && marketCategories.some((item) => item.id === storedCategory)) {
       setCategory(storedCategory);
-      if (isMarketToolCategory(storedCategory)) setToolCategory(storedCategory);
     }
     if (storedQuery) {
       setQuery(storedQuery);
@@ -253,10 +237,8 @@ export function PremiumMarketplace({
 
   const jumpToShelf = (nextCategory: MarketCategory) => {
     setCategory(nextCategory);
-    if (isMarketToolCategory(nextCategory)) setToolCategory(nextCategory);
     window.requestAnimationFrame(() => {
-      const shelfId = isMarketToolCategory(nextCategory) ? "market-tools" : `market-${nextCategory}`;
-      document.getElementById(shelfId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById(`market-${nextCategory}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
 
@@ -293,8 +275,24 @@ export function PremiumMarketplace({
     if (!normalized) return [];
     const results: Array<{ id: string; title: string; meta: string; selection: MarketSelection }> = [];
     for (const beat of allMarketplaceBeats) {
-      const haystack = [beat.title, beat.producer, beat.region, beat.mood, ...beat.tags].join(" ").toLowerCase();
+      const haystack = [beat.title, beat.producer, beat.region, beat.mood, beat.bpm, beat.key, ...beat.tags].join(" ").toLowerCase();
       if (haystack.includes(normalized)) results.push({ id: `beat-${beat.id}`, title: beat.title, meta: `${beat.producer} / Beat`, selection: { kind: "beat", beat } });
+    }
+    for (const producer of featuredProducers) {
+      const haystack = [producer.name, producer.handle, producer.city, producer.bio].join(" ").toLowerCase();
+      if (haystack.includes(normalized)) {
+        results.push({
+          id: `producer-${producer.id}`,
+          title: producer.name,
+          meta: `${producer.city} / Producer`,
+          selection: {
+            kind: "producer",
+            producer,
+            beats: allMarketplaceBeats.filter((beat) => beat.producerId === producer.id),
+            saved: unlockedIds.has(`producer-${producer.id}`),
+          },
+        });
+      }
     }
     for (const pack of studioPacks) {
       const product = studioRoomProducts.find((item) => item.id === `studio-room-${pack.id}`) ?? null;
@@ -307,19 +305,26 @@ export function PremiumMarketplace({
         });
       }
     }
-    for (const product of [...producerStyleProducts, ...vocalChainProducts, ...sessionToolProducts, ...themeProducts]) {
+    for (const product of [...creatorAssetProducts, ...ambientPackProducts, ...themeProducts, ...bundleProducts]) {
       if ([product.title, product.detail, ...product.tags].join(" ").toLowerCase().includes(normalized)) {
-        results.push({ id: `product-${product.id}`, title: product.title, meta: productTypeLabel(product), selection: { kind: "product", product, owned: unlockedIds.has(product.id) } });
+        results.push({
+          id: `product-${product.id}`,
+          title: product.title,
+          meta: productTypeLabel(product),
+          selection: product.type === "bundle"
+            ? { kind: "bundle", bundle: product as CatalogBundle, owned: unlockedIds.has(product.id) }
+            : { kind: "product", product, owned: unlockedIds.has(product.id) },
+        });
       }
     }
     return results.slice(0, 8);
-  }, [allMarketplaceBeats, query, studioPacks, unlockedIds]);
+  }, [allMarketplaceBeats, featuredProducers, query, studioPacks, unlockedIds]);
 
   return (
     <div ref={scrollContainerRef} className="flex-1 scroll-smooth overflow-y-auto px-5 pb-32 pt-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="label-hw text-gold/85">Marketplace</div>
+          <div className="label-hw text-gold/85">Studio Store&trade;</div>
           <h1 className="mt-2 text-2xl font-semibold">Build your perfect studio.</h1>
           <p className="mt-2 max-w-[310px] text-sm leading-relaxed text-muted-foreground">
             Discover the sound, room, and creative tools that fit tonight&apos;s record.
@@ -332,7 +337,7 @@ export function PremiumMarketplace({
             "grid h-11 w-11 shrink-0 place-items-center rounded-full border transition-colors",
             searchOpen ? "border-gold/45 bg-gold/12 text-gold" : "border-white/10 bg-white/[0.03] text-white/72",
           )}
-          aria-label="Search Marketplace"
+          aria-label="Search Studio Store"
           aria-expanded={searchOpen}
         >
           <Search className="h-4 w-4" />
@@ -346,7 +351,7 @@ export function PremiumMarketplace({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search beats, rooms, AI Pens..."
+              placeholder="Search beats, producers, rooms, assets..."
               className="min-h-11 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               autoFocus
             />
@@ -395,47 +400,32 @@ export function PremiumMarketplace({
             <h2 className="text-[28px] font-semibold leading-[1.05]">{featuredBundle.title}</h2>
             <p className="mt-2 text-sm leading-relaxed text-white/68">The complete commercial room for hook-first records.</p>
             <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/78">
-              {featuredBundle.includes.slice(0, 3).map((item) => (
+              {featuredBundle.includes.filter((item) => !featuredBundle.title.includes(item)).slice(0, 3).map((item) => (
                 <span key={item} className="inline-flex items-center gap-1.5"><Check className="h-3 w-3 text-gold" />{item}</span>
               ))}
             </div>
             <div className="mt-5 grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => selectRoom(penthousePack)}
+                onClick={() => selectBundle(featuredBundle)}
                 className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/18 bg-black/45 px-3 text-xs font-semibold text-white backdrop-blur-md"
               >
-                <Eye className="h-4 w-4" /> Preview Studio
+                <Eye className="h-4 w-4" /> Preview Drop
               </button>
               <button
                 type="button"
-                onClick={() => selectBundle(featuredBundle)}
+                onClick={() => onUnlockProduct(toUnlock(featuredBundle, "Bundle"))}
+                disabled={featuredBundleOwned}
                 className="gold-seal flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold text-black"
               >
-                View Drop <ArrowRight className="h-4 w-4" />
+                {featuredBundleOwned ? "Owned" : `Unlock ${featuredBundle.price}`} {featuredBundleOwned ? <Check className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
               </button>
             </div>
           </div>
         </div>
       </section>
 
-      <div className="mt-3 flex min-h-11 items-center gap-3 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] px-3">
-        <span className="relative flex h-2 w-2 shrink-0">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-55" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-        </span>
-        <Activity className="h-3.5 w-3.5 shrink-0 text-gold/75" />
-        <div key={pulseIndex} className="min-w-0 flex-1 truncate text-[11px] text-white/65">
-          <span className="font-semibold text-white/88">Catalog</span> / {livePulse[pulseIndex]}
-        </div>
-      </div>
-
-      {!signedIn && (
-        <div className="mt-4 flex items-center justify-between gap-4 rounded-2xl border border-gold/20 bg-gold/8 p-3">
-          <div className="text-xs leading-relaxed text-gold/90">Sign in to save favorites and sync your studio.</div>
-          <button onClick={onAuthRequired} className="shrink-0 rounded-lg border border-gold/30 px-3 py-2 text-xs font-semibold text-gold">Sign in</button>
-        </div>
-      )}
+      <PrepStudioMembership signedIn={signedIn} onUpgrade={onOpenMembership} />
 
       {status.message && (
         <div className={cn("mt-4 rounded-xl px-3 py-2 text-center text-[11px]", status.state === "error" ? "border border-rec/25 bg-rec/10 text-rec" : "border border-gold/20 bg-gold/8 text-gold")}>{status.message}</div>
@@ -456,7 +446,7 @@ export function PremiumMarketplace({
         <nav
           ref={categoryRail.ref}
           className="flex min-w-0 flex-1 snap-x snap-mandatory gap-2 overflow-x-auto px-1 py-0.5 scroll-smooth [overscroll-behavior-x:contain] [scrollbar-width:none] [touch-action:pan-x_pan-y] [&::-webkit-scrollbar]:hidden"
-          aria-label="Marketplace shelves"
+          aria-label="Studio Store sections"
         >
           {marketCategories.map((item) => {
             const Icon = item.icon;
@@ -476,29 +466,40 @@ export function PremiumMarketplace({
       </div>
 
       <section className="pt-7">
-        <ShelfHeading eyebrow="Built for tonight" title={`Match ${sessionContext.title}`} detail={`${sessionContext.mood} mood / ${sessionContext.writingStyle} writing`} />
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          {recommendedBeat && (
-            <RecommendationCard label="Beat" title={recommendedBeat.title} icon={Play} onClick={() => setSelection({ kind: "beat", beat: recommendedBeat })} />
-          )}
-          <RecommendationCard label="Room" title={recommendedRoom.label} icon={Home} onClick={() => selectRoom(recommendedRoom)} />
-          <RecommendationCard label="AI Pen" title={recommendedPen.title} icon={PenLine} onClick={() => selectProduct(recommendedPen)} />
+        <ShelfHeading eyebrow="Built for tonight" title="We matched this to your writing." detail={`${sessionContext.mood} mood / ${sessionContext.writingStyle} delivery / ${sessionContext.title}`} />
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <RecommendationCard
+            label="Beat direction"
+            title={recommendedBeat ? `${discoveryBeats.length} approved match${discoveryBeats.length === 1 ? "" : "es"}` : "Matching starts with the first drop"}
+            detail={recommendedBeat ? `${sessionContext.mood} pocket / ${recommendedBeat.bpm} BPM` : "No demo inventory added"}
+            icon={Play}
+            onClick={() => jumpToShelf("beats")}
+          />
+          <RecommendationCard
+            label="Studio DNA"
+            title={`${sessionContext.writingStyle} pressure`}
+            detail={`Built around ${sessionContext.mood.toLowerCase()} records`}
+            icon={Sparkles}
+            onClick={onContinueWriting}
+          />
         </div>
       </section>
 
-      <section id="market-beats" className="scroll-mt-20 pt-9">
-        <MarketplaceShelf
-          eyebrow={featuredBeats.length ? "Approved producer drops" : "Producer catalog"}
-          title={featuredBeats.length ? "Find your next record" : "The first drops are being prepared"}
-          detail={featuredBeats.length ? "Listen first. Write when the pocket feels right." : "Approved producer beats will appear here. Nothing is padded with demo inventory."}
-          label="beats"
-          itemCount={featuredBeats.length}
-          onSeeAll={() => setBeatCatalogOpen(true)}
-        >
-          {featuredBeats.map((beat) => (
-            <BeatShelfCard
+      {discoveryBeats.length > 0 && <section id="market-beats" className="scroll-mt-20 pt-10">
+        <ShelfHeading
+          eyebrow="Trending Beats"
+          title="Find the right pocket"
+          detail="Approved producer releases, with your strongest session match first."
+          controls={discoveryBeats.length > 0 ? (
+            <button type="button" onClick={() => setBeatCatalogOpen(true)} className="min-h-9 shrink-0 px-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-gold">See all</button>
+          ) : undefined}
+        />
+        <div className="mt-4 space-y-3">
+          {discoveryBeats.slice(0, 5).map((beat) => (
+            <TrendingBeatCard
               key={beat.id}
               beat={beat}
+              studioMatch={beat.id === recommendedBeat?.id}
               playing={playingBeatId === beat.id}
               favorite={favoriteIds.has(beat.id)}
               onPreview={() => onPreviewBeat(beat)}
@@ -506,12 +507,11 @@ export function PremiumMarketplace({
               onOpen={() => setSelection({ kind: "beat", beat })}
             />
           ))}
-          {!featuredBeats.length && <MarketplaceInventoryEmpty />}
-        </MarketplaceShelf>
-      </section>
+        </div>
+      </section>}
 
       {spotlightProducer && (
-        <section className="pt-9">
+        <section id="market-producer" className="scroll-mt-20 pt-10">
           <ProducerSpotlight
             producer={spotlightProducer}
             beats={spotlightBeats}
@@ -522,39 +522,29 @@ export function PremiumMarketplace({
         </section>
       )}
 
-      <section id="market-rooms" className="scroll-mt-20 pt-9">
-        <MarketplaceShelf eyebrow="Studio environments" title="Choose the room" detail="The atmosphere changes. Your writing flow stays familiar." label="rooms" itemCount={studioPacks.length}>
-          {studioPacks.map((pack) => {
-            const product = studioRoomProducts.find((item) => item.id === `studio-room-${pack.id}`);
-            const owned = pack.id === "midnight" || Boolean(product && unlockedIds.has(product.id));
-            return <RoomShelfCard key={pack.id} pack={pack} owned={owned} active={activeStudioPack.id === pack.id} onOpen={() => selectRoom(pack)} />;
-          })}
-        </MarketplaceShelf>
-      </section>
-
-      <section id="market-tools" className="scroll-mt-20 pt-9">
+      <section id="market-studio-upgrades" className="scroll-mt-20 pt-10">
         <MarketplaceShelf
-          eyebrow={toolCategory === "pens" ? "Writing personalities" : toolCategory === "vocal" ? "Booth tools" : toolCategory === "tools" ? "Session tools" : "Visual identity"}
-          title={toolCategory === "pens" ? "Choose your AI Pen" : toolCategory === "vocal" ? "Vocal chains" : toolCategory === "tools" ? "Keep the room moving" : "Change the light"}
-          detail={toolCategory === "pens" ? "Different pressure, vocabulary, cadence, and point of view." : toolCategory === "vocal" ? "Pick the finish that matches the record." : toolCategory === "tools" ? "Structure and atmosphere without cluttering the pad." : "Change the room's visual energy."}
-          label={toolCategory === "pens" ? "AI Pens" : toolCategory === "vocal" ? "vocal chains" : toolCategory === "tools" ? "session tools" : "themes"}
-          itemCount={toolCategory === "pens" ? producerStyleProducts.length : toolCategory === "vocal" ? vocalChainProducts.length : toolCategory === "tools" ? sessionToolProducts.length : themeProducts.length}
+          eyebrow="Studio Upgrades"
+          title="Shape the room"
+          detail="Change the environment, visual treatment, or atmosphere without changing how you write."
+          label={studioUpgradeCategory === "rooms" ? "studio rooms" : studioUpgradeCategory === "themes" ? "studio themes" : "studio atmosphere"}
+          itemCount={studioUpgradeCategory === "rooms" ? studioUpgradeRooms.length : studioUpgradeCategory === "themes" ? studioUpgradeThemes.length : studioUpgradeAtmospheres.length}
           beforeRail={(
-            <div className="mt-4 grid grid-cols-4 gap-1.5" role="tablist" aria-label="Studio tools">
-              {marketCategories.filter((item) => isMarketToolCategory(item.id)).map((item) => {
+            <div className="mt-4 grid grid-cols-3 gap-1.5" role="tablist" aria-label="Studio Upgrade categories">
+              {([
+                { id: "rooms" as const, label: "Rooms", icon: Home },
+                { id: "themes" as const, label: "Themes", icon: Palette },
+                { id: "atmosphere" as const, label: "Atmosphere", icon: Headphones },
+              ]).map((item) => {
                 const Icon = item.icon;
-                const toolId = item.id as MarketToolCategory;
                 return (
                   <button
                     key={item.id}
                     type="button"
                     role="tab"
-                    aria-selected={toolCategory === toolId}
-                    onClick={() => {
-                      setToolCategory(toolId);
-                      setCategory(toolId);
-                    }}
-                    className={cn("flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 text-[10px] font-semibold", toolCategory === toolId ? "border-gold/40 bg-gold/10 text-gold" : "border-white/10 bg-white/[0.03] text-muted-foreground")}
+                    aria-selected={studioUpgradeCategory === item.id}
+                    onClick={() => setStudioUpgradeCategory(item.id)}
+                    className={cn("flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 text-[10px] font-semibold", studioUpgradeCategory === item.id ? "border-gold/40 bg-gold/10 text-gold" : "border-white/10 bg-white/[0.03] text-muted-foreground")}
                   >
                     <Icon className="h-3.5 w-3.5" />
                     <span className="truncate">{item.label}</span>
@@ -564,32 +554,32 @@ export function PremiumMarketplace({
             </div>
           )}
         >
-          {toolCategory === "pens" && producerStyleProducts.map((product, index) => (
-            <ProductShelfCard key={product.id} product={product} index={index} owned={unlockedIds.has(product.id)} onOpen={() => selectProduct(product)} />
-          ))}
-          {toolCategory === "vocal" && vocalChainProducts.map((product, index) => (
-            <ProductShelfCard key={product.id} product={product} index={index + 2} owned={unlockedIds.has(product.id)} onOpen={() => selectProduct(product)} />
-          ))}
-          {toolCategory === "tools" && sessionToolProducts.map((product, index) => (
-            <ProductShelfCard key={product.id} product={product} index={index + 4} owned={unlockedIds.has(product.id)} onOpen={() => selectProduct(product)} />
-          ))}
-          {toolCategory === "themes" && themeProducts.map((product, index) => (
+          {studioUpgradeCategory === "rooms" && studioUpgradeRooms.map((pack) => {
+            const product = studioRoomProducts.find((item) => item.id === `studio-room-${pack.id}`);
+            const owned = pack.id === "midnight" || Boolean(product && unlockedIds.has(product.id));
+            return <RoomShelfCard key={pack.id} pack={pack} owned={owned} active={activeStudioPack.id === pack.id} onOpen={() => selectRoom(pack)} />;
+          })}
+          {studioUpgradeCategory === "themes" && studioUpgradeThemes.map((product, index) => (
             <ThemeShelfCard key={product.id} product={product} index={index} owned={unlockedIds.has(product.id)} onOpen={() => selectProduct(product)} />
+          ))}
+          {studioUpgradeCategory === "atmosphere" && studioUpgradeAtmospheres.map((product, index) => (
+            <UpgradeProductCard key={product.id} product={product} index={index} owned={unlockedIds.has(product.id)} onOpen={() => selectProduct(product)} />
           ))}
         </MarketplaceShelf>
       </section>
 
-      <section id="market-bundles" className="scroll-mt-20 pt-9">
-        <MarketplaceShelf eyebrow="Complete studios" title="Build it in one move" detail="Curated rooms, writing personalities, and booth tools that already fit together." label="bundles" itemCount={bundleProducts.length}>
-          {bundleProducts.map((bundle) => (
-            <BundleShelfCard key={bundle.id} bundle={bundle} owned={unlockedIds.has(bundle.id)} onOpen={() => selectBundle(bundle)} />
+      <section id="market-creator-assets" className="scroll-mt-20 pt-9">
+        <ShelfHeading eyebrow="Creator Assets" title="Own the building blocks" detail="Reusable writing packs you keep in your Locker and bring into any session." />
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          {visibleCreatorAssets.map((product, index) => (
+            <CreatorToolCard key={product.id} product={product} index={index} owned={unlockedIds.has(product.id)} onOpen={() => selectProduct(product)} />
           ))}
-        </MarketplaceShelf>
+        </div>
       </section>
 
       <BeatCatalogSheet
         open={beatCatalogOpen}
-        beats={allMarketplaceBeats}
+        beats={discoveryBeats}
         playingBeatId={playingBeatId}
         favoriteIds={favoriteIds}
         onClose={() => setBeatCatalogOpen(false)}
@@ -710,23 +700,6 @@ function MarketplaceShelf({ eyebrow, title, detail, label, itemCount, onSeeAll, 
   );
 }
 
-function MarketplaceInventoryEmpty() {
-  return (
-    <div className="w-[calc(100vw-40px)] max-w-[390px] shrink-0 rounded-2xl border border-dashed border-gold/25 bg-[#111113] p-5">
-      <div className="grid h-11 w-11 place-items-center rounded-xl border border-gold/25 bg-gold/8 text-gold">
-        <Headphones className="h-5 w-5" />
-      </div>
-      <h3 className="mt-4 text-lg font-semibold">Real beats only.</h3>
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-        The catalog opens as producers complete onboarding and RapWriter approves their releases.
-      </p>
-      <Link href="/producer" className="mt-4 inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-gold">
-        Open Producer Portal <ArrowRight className="h-4 w-4" />
-      </Link>
-    </div>
-  );
-}
-
 function RailControl({ direction, label, disabled, onClick }: {
   direction: RailDirection;
   label: string;
@@ -763,53 +736,93 @@ function ShelfHeading({ eyebrow, title, detail, controls }: { eyebrow: string; t
   );
 }
 
-function RecommendationCard({ label, title, icon: Icon, onClick }: { label: string; title: string; icon: ComponentType<{ className?: string }>; onClick: () => void }) {
+function PrepStudioMembership({ signedIn, onUpgrade }: { signedIn: boolean; onUpgrade: () => void }) {
+  return (
+    <section className="mt-4 overflow-hidden rounded-[22px] border border-gold/25 bg-[linear-gradient(145deg,rgba(255,176,32,0.1),rgba(17,17,19,0.98)_54%)] p-4">
+      <div className="flex items-start gap-3">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-gold/30 bg-black/28 text-gold"><Mic className="h-5 w-5" /></span>
+        <div className="min-w-0 flex-1">
+          <div className="label-hw text-gold/85">Prep Studio&trade; Membership</div>
+          <h2 className="mt-1 text-xl font-semibold">Build better records.</h2>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Choose how far you want to take tonight&apos;s session.</p>
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {prepStudioTiers.map((plan) => (
+          <div key={plan.id} className={cn("rounded-xl border px-3 py-3", plan.featured ? "border-gold/45 bg-gold/[0.1] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" : "border-white/10 bg-black/20")}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-white">{plan.shortName}</span>
+                  <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-semibold", plan.featured ? "border-gold/35 bg-gold/10 text-gold" : "border-white/10 text-white/48")}>{plan.decisionLabel}</span>
+                </div>
+                <div className="mt-1 text-[11px] leading-4 text-white/62">{plan.outcome}</div>
+              </div>
+              <span className={cn("shrink-0 text-xs font-semibold", plan.featured ? "text-gold" : "text-white/76")}>{plan.monthlyPriceCents === 0 ? "$0" : `$${(plan.monthlyPriceCents / 100).toFixed(2)}/mo`}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+              {plan.previewBenefits.map((benefit) => (
+                <span key={benefit} className="inline-flex items-center gap-1 text-[10px] text-white/58"><Check className="h-3 w-3 text-gold" />{benefit}</span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button type="button" onClick={onUpgrade} className="gold-seal mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold text-black">
+        {signedIn ? "Explore membership" : "Start with Free"} <ArrowRight className="h-4 w-4" />
+      </button>
+      <p className="mt-2 text-center text-[10px] text-white/46">Your projects stay yours. Change plans anytime.</p>
+    </section>
+  );
+}
+
+function RecommendationCard({ label, title, detail, icon: Icon, onClick }: { label: string; title: string; detail: string; icon: ComponentType<{ className?: string }>; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} className="min-w-0 rounded-xl border border-white/10 bg-[#111113] p-3 text-left transition-transform active:scale-[0.98]">
       <Icon className="h-4 w-4 text-gold" />
       <span className="mt-3 block text-[9px] uppercase tracking-[0.16em] text-muted-foreground">{label}</span>
-      <span className="mt-1 block min-h-8 text-xs font-semibold leading-4">{title}</span>
+      <span className="mt-1 block text-sm font-semibold leading-5">{title}</span>
+      <span className="mt-1 block truncate text-[10px] text-white/48">{detail}</span>
     </button>
   );
 }
 
-function BeatShelfCard({ beat, playing, favorite, onPreview, onFavorite, onOpen }: { beat: MarketplaceBeat; playing: boolean; favorite: boolean; onPreview: () => void; onFavorite: () => void; onOpen: () => void }) {
-  const bars = useMemo(() => makeMarketBars(beat.id, 32), [beat.id]);
+function TrendingBeatCard({ beat, studioMatch, playing, favorite, onPreview, onFavorite, onOpen }: { beat: MarketplaceBeat; studioMatch: boolean; playing: boolean; favorite: boolean; onPreview: () => void; onFavorite: () => void; onOpen: () => void }) {
+  const bars = useMemo(() => makeMarketBars(beat.id, 24), [beat.id]);
+  const startingPrice = beat.prices.length ? Math.min(...beat.prices.map((price) => price.price)) : null;
   return (
-    <article className="w-[78vw] max-w-[292px] shrink-0 snap-start overflow-hidden rounded-2xl border border-white/10 bg-[#111113]">
-      <div className="relative h-40" style={{ background: beat.art }}>
-        {beat.artworkUrl && <img src={beat.artworkUrl} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />}
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.06),rgba(0,0,0,0.72))]" />
-        <button type="button" onClick={onPreview} className="absolute left-3 top-3 grid h-11 w-11 place-items-center rounded-full bg-gold text-black shadow-[0_8px_28px_rgba(0,0,0,0.35)]" aria-label={`${playing ? "Pause" : "Preview"} ${beat.title}`}>
-          {playing ? <Pause className="h-4 w-4 fill-current" /> : <Play className="ml-0.5 h-4 w-4 fill-current" />}
+    <article className="overflow-hidden rounded-2xl border border-white/10 bg-[#111113] p-3">
+      <div className="flex items-center gap-3">
+        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-white/10" style={{ background: beat.art }}>
+          {beat.artworkUrl && <img src={beat.artworkUrl} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" decoding="async" draggable={false} />}
+          <div className="absolute inset-0 bg-black/18" />
+          <button type="button" onClick={onPreview} className="absolute inset-0 m-auto grid h-10 w-10 place-items-center rounded-full bg-gold text-black" aria-label={`${playing ? "Pause" : "Preview"} ${beat.title}`}>
+            {playing ? <Pause className="h-4 w-4 fill-current" /> : <Play className="ml-0.5 h-4 w-4 fill-current" />}
+          </button>
+        </div>
+        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+          <div className="text-[9px] uppercase tracking-[0.14em] text-gold/78">{beat.tags[0] ?? beat.mood} / {beat.bpm} BPM / {beat.key}</div>
+          <h3 className="mt-1 truncate text-base font-semibold">{beat.title}</h3>
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span className="truncate">{beat.producer}</span>{beat.verified && <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-gold" />}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[9px] font-semibold">
+            {studioMatch && <span className="text-emerald-300">Studio Match&trade;</span>}
+            <span className="text-gold">Booth Match&trade; {beat.boothReadyScore > 0 ? `${beat.boothReadyScore}%` : "New"}</span>
+          </div>
         </button>
-        <button type="button" onClick={onFavorite} className={cn("absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border backdrop-blur-md", favorite ? "border-gold/45 bg-gold/18 text-gold" : "border-white/15 bg-black/40 text-white/74")} aria-label={`Favorite ${beat.title}`}>
+        <button type="button" onClick={onFavorite} className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full border", favorite ? "border-gold/45 bg-gold/14 text-gold" : "border-white/10 bg-white/[0.03] text-white/58")} aria-label={`Favorite ${beat.title}`}>
           <Heart className={cn("h-4 w-4", favorite && "fill-current")} />
         </button>
-        <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-3">
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.14em] text-white/58">{beat.region} / {beat.bpm} BPM</div>
-            <div className="mt-1 text-xl font-semibold leading-none">{beat.title}</div>
-          </div>
-          <div className="rounded-full border border-emerald-300/25 bg-black/45 px-2 py-1 text-[9px] font-semibold text-emerald-300">{beat.writingNow > 0 ? `${beat.writingNow} writing` : "New drop"}</div>
-        </div>
       </div>
-      <div className="p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-gold/25 bg-gold/8 text-[9px] font-semibold text-gold">{producerInitials(beat.producer)}</div>
-            <span className="truncate text-xs text-muted-foreground">{beat.producer}</span>
-            {beat.verified && <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-gold" />}
-          </div>
-          <span className="text-[10px] font-semibold text-gold">{beat.boothReadyScore > 0 ? `${beat.boothReadyScore}% Booth fit` : "Awaiting session data"}</span>
-        </div>
-        <div className="mt-3 flex h-7 items-center gap-[2px]" aria-hidden="true">
-          {bars.map((bar, index) => <span key={index} className={cn("flex-1 rounded-full", playing ? "bg-gold" : "bg-gold/28")} style={{ height: `${bar}%`, animation: playing ? `vu-pulse ${0.7 + (index % 5) * 0.09}s ease-in-out infinite` : undefined }} />)}
-        </div>
-        <button type="button" onClick={onOpen} className="mt-3 flex min-h-10 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold">
-          Explore this beat <ChevronRight className="h-4 w-4 text-gold" />
-        </button>
+      <div className="mt-3 flex h-5 items-center gap-[2px]" aria-hidden="true">
+        {bars.map((bar, index) => <span key={index} className={cn("flex-1 rounded-full", playing ? "bg-gold" : "bg-gold/24")} style={{ height: `${bar}%`, animation: playing ? `vu-pulse ${0.7 + (index % 5) * 0.09}s ease-in-out infinite` : undefined }} />)}
       </div>
+      <button type="button" onClick={onOpen} className="mt-3 flex min-h-10 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold">
+        <span>{startingPrice == null ? "Explore licensing" : `License from $${startingPrice}`}</span><ChevronRight className="h-4 w-4 text-gold" />
+      </button>
     </article>
   );
 }
@@ -838,21 +851,21 @@ function RoomShelfCard({ pack, owned, active, onOpen }: { pack: StudioPack; owne
   );
 }
 
-function ProductShelfCard({ product, index, owned, onOpen }: { product: CatalogProduct; index: number; owned: boolean; onOpen: () => void }) {
+function CreatorToolCard({ product, index, owned, onOpen }: { product: CatalogProduct; index: number; owned: boolean; onOpen: () => void }) {
   const Icon = productIcon(product);
   return (
-    <button type="button" onClick={onOpen} className="w-[67vw] max-w-[252px] shrink-0 snap-start rounded-2xl border border-white/10 bg-[#111113] p-4 text-left transition-transform active:scale-[0.99]">
-      <div className="relative h-28 overflow-hidden rounded-xl border border-white/8" style={{ background: productArtwork(product, index) }}>
+    <button type="button" onClick={onOpen} className="min-w-0 rounded-2xl border border-white/10 bg-[#111113] p-3 text-left transition-transform active:scale-[0.99]">
+      <div className="relative h-20 overflow-hidden rounded-xl border border-white/8" style={{ background: productArtwork(product, index) }}>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_18%,rgba(255,255,255,0.12),transparent_38%)]" />
-        <div className="absolute left-3 top-3 grid h-10 w-10 place-items-center rounded-xl border border-gold/25 bg-black/28 text-gold backdrop-blur-md"><Icon className="h-4 w-4" /></div>
-        {owned && <span className="absolute right-3 top-3 rounded-full border border-gold/30 bg-black/45 px-2 py-1 text-[9px] font-semibold text-gold">Owned</span>}
-        <div className="absolute bottom-3 left-3 right-3 text-[9px] font-semibold uppercase tracking-[0.16em] text-white/60">{productTypeLabel(product)}</div>
+        <div className="absolute left-3 top-3 grid h-9 w-9 place-items-center rounded-lg border border-gold/25 bg-black/28 text-gold backdrop-blur-md"><Icon className="h-4 w-4" /></div>
+        {owned && <span className="absolute right-2 top-2 rounded-full border border-gold/30 bg-black/45 px-2 py-1 text-[8px] font-semibold text-gold">Owned</span>}
       </div>
-      <h3 className="mt-4 text-lg font-semibold">{product.title}</h3>
-      <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-muted-foreground">{product.detail}</p>
+      <div className="mt-3 text-[8px] font-semibold uppercase tracking-[0.14em] text-gold/72">{creatorOutcomeLabel(product)}</div>
+      <h3 className="mt-1 text-sm font-semibold leading-5">{product.title}</h3>
+      <p className="mt-1 line-clamp-2 min-h-8 text-[10px] leading-4 text-muted-foreground">{product.detail}</p>
       <div className="mt-3 flex items-center justify-between gap-3">
-        <span className="truncate text-[10px] text-gold/82">{product.tags.slice(0, 2).join(" / ")}</span>
-        <span className="shrink-0 text-xs font-semibold text-gold">{owned ? "Open" : product.price}</span>
+        <span className="truncate text-[9px] text-white/48">{product.tags.slice(0, 2).join(" / ")}</span>
+        <span className="shrink-0 text-[10px] font-semibold text-gold">{owned ? "Open" : product.price}</span>
       </div>
     </button>
   );
@@ -877,17 +890,21 @@ function ThemeShelfCard({ product, index, owned, onOpen }: { product: CatalogPro
   );
 }
 
-function BundleShelfCard({ bundle, owned, onOpen }: { bundle: CatalogBundle; owned: boolean; onOpen: () => void }) {
+function UpgradeProductCard({ product, index, owned, onOpen }: { product: CatalogProduct; index: number; owned: boolean; onOpen: () => void }) {
+  const Icon = productIcon(product);
   return (
-    <button type="button" onClick={onOpen} className="w-[84vw] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-2xl border border-gold/20 bg-[#111113] text-left">
-      <div className="relative h-40">
-        <img src={bundle.image} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: "65% center" }} loading="lazy" decoding="async" draggable={false} />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.05),rgba(0,0,0,0.82))]" />
-        <span className="absolute left-3 top-3 rounded-full border border-gold/30 bg-black/48 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-gold backdrop-blur-md">{bundle.savings}</span>
-        {owned && <span className="absolute right-3 top-3 rounded-full border border-gold/30 bg-black/48 px-2.5 py-1 text-[9px] font-semibold text-gold">Owned</span>}
-        <div className="absolute bottom-3 left-3 right-3"><div className="text-xl font-semibold">{bundle.title}</div><div className="mt-1 text-[11px] text-white/62">{bundle.includes.length} studio pieces / {bundle.price}</div></div>
+    <button type="button" onClick={onOpen} className="w-[70vw] max-w-[266px] shrink-0 snap-start overflow-hidden rounded-2xl border border-white/10 bg-[#111113] text-left">
+      <div className="relative h-32" style={{ background: productArtwork(product, index + 3) }}>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_18%,rgba(255,255,255,0.12),transparent_38%),linear-gradient(180deg,transparent,rgba(0,0,0,0.72))]" />
+        <span className="absolute left-3 top-3 grid h-10 w-10 place-items-center rounded-xl border border-gold/25 bg-black/35 text-gold backdrop-blur-md"><Icon className="h-4 w-4" /></span>
+        {owned && <span className="absolute right-3 top-3 rounded-full border border-gold/30 bg-black/45 px-2 py-1 text-[9px] font-semibold text-gold">Owned</span>}
+        <div className="absolute bottom-3 left-3 right-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/62">Atmosphere Pack</div>
       </div>
-      <div className="flex items-center justify-between gap-3 p-4"><span className="text-xs text-muted-foreground">A complete creative setup</span><ArrowRight className="h-4 w-4 text-gold" /></div>
+      <div className="p-4">
+        <div className="text-lg font-semibold">{product.title}</div>
+        <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">{product.detail}</p>
+        <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="truncate text-white/48">{product.tags.slice(0, 2).join(" / ")}</span><span className="shrink-0 font-semibold text-gold">{owned ? "Open" : product.price}</span></div>
+      </div>
     </button>
   );
 }
@@ -933,16 +950,28 @@ function BeatCatalogSheet({ open, beats, playingBeatId, favoriteIds, onClose, on
   onOpenBeat: (beat: MarketplaceBeat) => void;
 }) {
   const [query, setQuery] = useState("");
-  const visibleBeats = useMemo(() => {
+  const [sort, setSort] = useState<"match" | "booth" | "popular" | "price">("match");
+  const [genre, setGenre] = useState("all");
+  const [visibleCount, setVisibleCount] = useState(12);
+  const genres = useMemo(() => Array.from(new Set(beats.map((beat) => beat.tags[0]).filter(Boolean))).sort(), [beats]);
+  const filteredBeats = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return beats;
-    return beats.filter((beat) =>
-      [beat.title, beat.producer, beat.region, beat.mood, ...beat.tags, ...beat.emotionalTags]
+    const filtered = beats.filter((beat) => {
+      const matchesGenre = genre === "all" || beat.tags[0] === genre;
+      const matchesQuery = !normalized || [beat.title, beat.producer, beat.region, beat.mood, beat.bpm, beat.key, ...beat.tags, ...beat.emotionalTags]
         .join(" ")
         .toLowerCase()
-        .includes(normalized),
-    );
-  }, [beats, query]);
+        .includes(normalized);
+      return matchesGenre && matchesQuery;
+    });
+    if (sort === "booth") return [...filtered].sort((a, b) => b.boothReadyScore - a.boothReadyScore);
+    if (sort === "popular") return [...filtered].sort((a, b) => b.plays - a.plays);
+    if (sort === "price") return [...filtered].sort((a, b) => lowestBeatPrice(a) - lowestBeatPrice(b));
+    return filtered;
+  }, [beats, genre, query, sort]);
+  const visibleBeats = filteredBeats.slice(0, visibleCount);
+
+  useEffect(() => setVisibleCount(12), [genre, open, query, sort]);
 
   if (!open) return null;
 
@@ -952,7 +981,7 @@ function BeatCatalogSheet({ open, beats, playingBeatId, favoriteIds, onClose, on
         <div className="border-b border-white/8 px-4 pb-4 pt-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="label-hw text-gold/80">Producer catalog</div>
+              <div className="label-hw text-gold/80">Beat Discovery</div>
               <h2 className="mt-1 text-xl font-semibold">All beats</h2>
               <p className="mt-0.5 text-[11px] text-muted-foreground">{beats.length} drops ready to preview</p>
             </div>
@@ -964,6 +993,24 @@ function BeatCatalogSheet({ open, beats, playingBeatId, favoriteIds, onClose, on
             <Search className="h-4 w-4 shrink-0 text-gold/72" />
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search beats or producers" className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/32" />
           </label>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <label className="rounded-xl border border-white/10 bg-black/28 px-3 py-2">
+              <span className="block text-[8px] uppercase tracking-[0.14em] text-white/42">Genre</span>
+              <select value={genre} onChange={(event) => setGenre(event.target.value)} className="mt-1 w-full bg-transparent text-xs font-semibold text-white outline-none">
+                <option value="all">All sounds</option>
+                {genres.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="rounded-xl border border-white/10 bg-black/28 px-3 py-2">
+              <span className="block text-[8px] uppercase tracking-[0.14em] text-white/42">Sort</span>
+              <select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="mt-1 w-full bg-transparent text-xs font-semibold text-white outline-none">
+                <option value="match">Best match</option>
+                <option value="booth">Booth Match</option>
+                <option value="popular">Most played</option>
+                <option value="price">Lowest price</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 pb-8">
@@ -1003,6 +1050,9 @@ function BeatCatalogSheet({ open, beats, playingBeatId, favoriteIds, onClose, on
               <div><Search className="mx-auto h-5 w-5 text-gold/60" /><p className="mt-3 text-sm font-semibold">No beats found</p><p className="mt-1 text-xs text-muted-foreground">Try a producer, mood, region, or title.</p></div>
             </div>
           )}
+          {visibleBeats.length < filteredBeats.length && (
+            <button type="button" onClick={() => setVisibleCount((count) => count + 12)} className="mt-3 min-h-11 w-full rounded-xl border border-gold/25 bg-gold/8 text-xs font-semibold text-gold">Load more beats</button>
+          )}
         </div>
       </section>
     </div>
@@ -1024,8 +1074,8 @@ function MarketDetailSheet({ selection, playingBeatId, status, onClose, onPrevie
   if (!selection) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/72 px-3 pb-3 backdrop-blur-sm" onMouseDown={(event) => event.currentTarget === event.target && onClose()}>
-      <section role="dialog" aria-modal="true" aria-label="Marketplace preview" className="max-h-[90svh] w-full max-w-[430px] overflow-hidden rounded-[24px] border border-white/10 bg-[#101012] shadow-[0_-24px_90px_rgba(0,0,0,0.65)]">
-        <div className="flex items-center justify-between border-b border-white/8 px-4 py-3"><div className="label-hw text-gold/80">Studio Preview</div><button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/[0.03] text-white/72" aria-label="Close Marketplace preview"><X className="h-4 w-4" /></button></div>
+      <section role="dialog" aria-modal="true" aria-label="Studio Store preview" className="max-h-[90svh] w-full max-w-[430px] overflow-hidden rounded-[24px] border border-white/10 bg-[#101012] shadow-[0_-24px_90px_rgba(0,0,0,0.65)]">
+        <div className="flex items-center justify-between border-b border-white/8 px-4 py-3"><div className="label-hw text-gold/80">Studio Preview</div><button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/[0.03] text-white/72" aria-label="Close Studio Store preview"><X className="h-4 w-4" /></button></div>
         <div className="max-h-[calc(90svh-65px)] overflow-y-auto">
           {selection.kind === "beat" && <BeatDetail beat={selection.beat} playing={playingBeatId === selection.beat.id} busy={status.state === "saving"} onPreview={() => onPreviewBeat(selection.beat)} onFavorite={() => onFavoriteBeat(selection.beat)} onWrite={() => onWriteBeat(selection.beat)} onLicense={() => onLicenseBeat(selection.beat)} />}
           {selection.kind === "room" && <RoomDetail selection={selection} onUse={() => onUseRoom(selection.pack)} onUnlock={() => selection.product && onUnlockProduct(toUnlock(selection.product, "Studio Room"))} />}
@@ -1088,6 +1138,14 @@ function productTypeLabel(product: CatalogProduct) {
   return "Studio Piece";
 }
 
+function creatorOutcomeLabel(product: CatalogProduct) {
+  if (product.type === "vocal_chain") return "Cleaner demos";
+  if (product.id === "writing-hook-builder") return "Built for replay";
+  if (product.id === "writing-16-bar-pressure") return "Stronger verses";
+  if (product.id === "writing-story-mode") return "Built for storytelling";
+  return "Creator Asset";
+}
+
 function productUnlockCategory(product: CatalogProduct): ProductUnlockCategory {
   if (product.type === "ai_style") return "Producer Style";
   if (product.type === "vocal_chain") return "Vocal Chain";
@@ -1113,7 +1171,7 @@ function productIcon(product: CatalogProduct) {
 
 function productFeatures(product: CatalogProduct) {
   if (product.type === "ai_style") return [{ label: "Writing behavior", value: product.tags[0] ?? "Focused" }, { label: "Cadence preference", value: product.tags[1] ?? "Adaptive" }, { label: "Artist compatibility", value: product.tags[2] ?? "Versatile" }, { label: "Difficulty", value: product.title === "Trap Scientist" ? "Advanced" : "Intuitive" }];
-  if (product.type === "vocal_chain") return [{ label: "Purpose", value: product.detail }, { label: "Perfect for", value: product.tags.join(", ") }, { label: "Signal path", value: product.title === "Raw Cypher" ? "Presence / control / output" : "Tone / compression / space / output" }];
+  if (product.type === "vocal_chain") return [{ label: "Purpose", value: product.detail }, { label: "Perfect for", value: product.tags.join(", ") }, { label: "Signal path", value: "Tone / compression / space / output" }];
   if (product.type === "theme") return [{ label: "Changes", value: "Controls, waveform, backgrounds, visualizer" }, { label: "Visual character", value: product.tags.join(", ") }, { label: "Writing tools", value: "Unchanged" }];
   return [{ label: "Creative purpose", value: product.detail }, { label: "Best for", value: product.tags.join(", ") }, { label: "Works inside", value: "Studio and Writer Flow" }];
 }
@@ -1149,12 +1207,12 @@ function makeMarketBars(seed: string, count: number) {
   });
 }
 
-function producerInitials(name: string) {
-  return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-}
-
 function formatCompactNumber(value: number) {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K`;
   return String(value);
+}
+
+function lowestBeatPrice(beat: MarketplaceBeat) {
+  return beat.prices.length ? Math.min(...beat.prices.map((price) => price.price)) : Number.MAX_SAFE_INTEGER;
 }

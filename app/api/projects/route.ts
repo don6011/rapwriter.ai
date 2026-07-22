@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api/auth";
 import { parseJson } from "@/lib/api/json";
 import { projectCreateSchema, projectPatchSchema } from "@/lib/schemas";
+import { membershipErrorResponse, requireMembershipLimit } from "@/lib/server/membership-access";
 
 export async function GET() {
   const { supabase, user, response } = await requireUser();
@@ -23,6 +24,18 @@ export async function POST(request: Request) {
 
   const parsed = await parseJson(request, projectCreateSchema);
   if (parsed.response) return parsed.response;
+
+  const { count, error: countError } = await supabase
+    .from("projects")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", user.id)
+    .neq("status", "archived");
+  if (countError) return NextResponse.json({ error: countError.message }, { status: 500 });
+  try {
+    await requireMembershipLimit(supabase, user.id, "artist", "active_projects", count ?? 0);
+  } catch (error) {
+    return membershipErrorResponse(error);
+  }
 
   const { data, error } = await supabase
     .from("projects")

@@ -26,11 +26,12 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Account deletion is temporarily unavailable." }, { status: 503 });
   }
 
-  const [{ data: ownAdminRole }, { count: adminCount }, { data: producerBeats }, { data: roughTakes }] = await Promise.all([
+  const [{ data: ownAdminRole }, { count: adminCount }, { data: producerBeats }, { data: roughTakes }, { data: lockerBeats }] = await Promise.all([
     admin.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle(),
     admin.from("user_roles").select("user_id", { count: "exact", head: true }).eq("role", "admin"),
     admin.from("producer_beats").select("audio_bucket, audio_path, artwork_path").eq("owner_id", user.id),
     admin.from("rough_takes").select("storage_bucket, storage_path").eq("owner_id", user.id),
+    admin.from("beat_locker").select("beat_snapshot").eq("owner_id", user.id).eq("license", "Private Import"),
   ]);
 
   if (ownAdminRole && (adminCount ?? 0) <= 1) {
@@ -47,6 +48,12 @@ export async function DELETE(request: Request) {
     if (!take.storage_path) continue;
     const bucket = take.storage_bucket || "rough-takes";
     storageGroups.set(bucket, [...(storageGroups.get(bucket) ?? []), take.storage_path]);
+  }
+  for (const beat of lockerBeats ?? []) {
+    const snapshot = beat.beat_snapshot && typeof beat.beat_snapshot === "object" ? beat.beat_snapshot as Record<string, unknown> : {};
+    const path = typeof snapshot.audioPath === "string" ? snapshot.audioPath : null;
+    if (!path || !path.startsWith(`${user.id}/`)) continue;
+    storageGroups.set("artist-beats", [...(storageGroups.get("artist-beats") ?? []), path]);
   }
 
   for (const [bucket, paths] of storageGroups) {

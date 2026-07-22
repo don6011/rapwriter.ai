@@ -5,6 +5,9 @@ import { useAuth } from "@/hooks/use-auth";
 import type { AccountType, OnboardingAccountType } from "@/lib/account-role";
 import type { RoughTakeAnalysis } from "@/lib/booth-ready-v2";
 import type { License } from "@/lib/marketplace";
+import type { MembershipSnapshot } from "@/lib/membership";
+import type { BoothExportRecord, BoothExportSnapshot } from "@/lib/booth-export";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 type BeatSnapshot = {
   id: string;
@@ -87,6 +90,15 @@ export type BeatLockerRow = {
   updated_at: string;
 };
 
+export type PrivateBeatImportInput = {
+  file: File;
+  title: string;
+  producer: string;
+  bpm: number | null;
+  musicalKey: string | null;
+  durationSeconds: number;
+};
+
 export type SongLockerRow = {
   id: string;
   project_id: string | null;
@@ -97,6 +109,15 @@ export type SongLockerRow = {
   snapshot: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+};
+
+export type BoothExportCreateInput = {
+  projectId: string;
+  songId: string;
+  sessionId?: string | null;
+  roughTakeId?: string | null;
+  title: string;
+  snapshot: BoothExportSnapshot;
 };
 
 export type HookLockerRow = {
@@ -260,6 +281,7 @@ export function useRapWriterData() {
   const [hookLocker, setHookLocker] = useState<HookLockerRow[]>([]);
   const [roughTake, setRoughTake] = useState<RoughTakeRow | null>(null);
   const [productEntitlements, setProductEntitlements] = useState<ProductEntitlementRow[]>([]);
+  const [membership, setMembership] = useState<MembershipSnapshot | null>(null);
   const [lockerCounts, setLockerCounts] = useState<LockerCounts>({ beats: 0, songs: 0, hooks: 0 });
   const [loadingData, setLoadingData] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
@@ -276,7 +298,7 @@ export function useRapWriterData() {
     setLoadingData(true);
     setError(null);
     try {
-      const [projectRes, songRes, sessionRes, beatRes, songLockerRes, hookRes, entitlementRes] = await Promise.all([
+      const [projectRes, songRes, sessionRes, beatRes, songLockerRes, hookRes, entitlementRes, membershipRes] = await Promise.all([
         api<{ projects: ProjectRow[] }>("/api/projects"),
         api<{ songs: SongRow[] }>("/api/songs"),
         api<{ session: SessionRow | null }>("/api/sessions"),
@@ -284,6 +306,7 @@ export function useRapWriterData() {
         api<{ songs: SongLockerRow[] }>("/api/locker/songs"),
         api<{ hooks: HookLockerRow[] }>("/api/locker/hooks"),
         api<{ entitlements: ProductEntitlementRow[] }>("/api/entitlements"),
+        api<{ membership: MembershipSnapshot }>("/api/membership"),
       ]);
       const profileRes = await api<{ profile: ProfileRow }>("/api/profile");
       setProjects(projectRes.projects);
@@ -295,6 +318,7 @@ export function useRapWriterData() {
       setSongLocker(songLockerRes.songs);
       setHookLocker(hookRes.hooks);
       setProductEntitlements(entitlementRes.entitlements);
+      setMembership(membershipRes.membership);
       setLockerCounts({
         beats: beatRes.beats.length,
         songs: songLockerRes.songs.length,
@@ -337,6 +361,7 @@ export function useRapWriterData() {
     setHookLocker([]);
     setRoughTake(null);
     setProductEntitlements([]);
+    setMembership(null);
     setLockerCounts({ beats: 0, songs: 0, hooks: 0 });
     setLastSaved(null);
     setLoadingData(false);
@@ -509,6 +534,55 @@ export function useRapWriterData() {
     [auth.user, refresh],
   );
 
+  const importPrivateBeat = useCallback(
+    async (input: PrivateBeatImportInput) => {
+      if (!auth.user) return null;
+      const metadata = {
+        title: input.title,
+        producer: input.producer,
+        bpm: input.bpm,
+        musical_key: input.musicalKey,
+        duration_seconds: input.durationSeconds,
+        file_name: input.file.name,
+        file_size: input.file.size,
+        mime_type: input.file.type || "application/octet-stream",
+        rights_confirmed: true as const,
+      };
+      const prepared = await api<{
+        upload: { bucket: string; path: string; token: string; contentType: string };
+      }>("/api/locker/beats/import", {
+        method: "POST",
+        body: JSON.stringify(metadata),
+      });
+
+      const supabase = createSupabaseClient();
+      const { error: uploadError } = await supabase.storage
+        .from(prepared.upload.bucket)
+        .uploadToSignedUrl(prepared.upload.path, prepared.upload.token, input.file, {
+          contentType: prepared.upload.contentType,
+        });
+      if (uploadError) throw new RapWriterApiError(uploadError.message, 500, "private_beat_upload_failed");
+
+      try {
+        const completed = await api<{ beat: BeatLockerRow }>("/api/locker/beats/import", {
+          method: "PATCH",
+          body: JSON.stringify({
+            ...metadata,
+            storage_path: prepared.upload.path,
+            content_type: prepared.upload.contentType,
+          }),
+        });
+        setBeatLocker((current) => [completed.beat, ...current.filter((beat) => beat.id !== completed.beat.id)]);
+        setLockerCounts((current) => ({ ...current, beats: current.beats + 1 }));
+        return completed.beat;
+      } catch (error) {
+        await api(`/api/locker/beats/import?path=${encodeURIComponent(prepared.upload.path)}`, { method: "DELETE" }).catch(() => undefined);
+        throw error;
+      }
+    },
+    [auth.user],
+  );
+
   const saveHook = useCallback(
     async (payload: { projectId?: string; songId?: string; title: string; content: string }) => {
       if (!auth.user || !payload.content.trim()) return;
@@ -545,6 +619,25 @@ export function useRapWriterData() {
       await refresh();
     },
     [auth.user, refresh],
+  );
+
+  const createBoothExport = useCallback(
+    async (payload: BoothExportCreateInput) => {
+      if (!auth.user) return null;
+      const result = await api<{ export: BoothExportRecord }>("/api/booth-exports", {
+        method: "POST",
+        body: JSON.stringify({
+          project_id: payload.projectId,
+          song_id: payload.songId,
+          session_id: payload.sessionId ?? null,
+          rough_take_id: payload.roughTakeId ?? null,
+          title: payload.title,
+          snapshot: payload.snapshot,
+        }),
+      });
+      return result.export;
+    },
+    [auth.user],
   );
 
   const removeLockerItem = useCallback(
@@ -683,6 +776,7 @@ export function useRapWriterData() {
     hookLocker,
     roughTake,
     productEntitlements,
+    membership,
     lockerCounts,
     lastSaved,
     refresh,
@@ -692,8 +786,10 @@ export function useRapWriterData() {
     saveNow,
     queueAutosave,
     addBeatLicense,
+    importPrivateBeat,
     saveHook,
     saveSongToLocker,
+    createBoothExport,
     removeLockerItem,
     loadLatestRoughTake,
     uploadRoughTake,

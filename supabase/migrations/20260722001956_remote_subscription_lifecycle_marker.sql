@@ -1,0 +1,3 @@
+-- Remote migration history marker.
+-- The durable subscription lifecycle schema is preserved in
+-- 20260721030000_subscription_lifecycle.sql for fresh environments.
