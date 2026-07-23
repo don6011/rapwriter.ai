@@ -515,9 +515,7 @@ export function PremiumMarketplace({
           <ProducerSpotlight
             producer={spotlightProducer}
             beats={spotlightBeats}
-            saved={unlockedIds.has(`producer-${spotlightProducer.id}`)}
             onOpen={() => selectProducer(spotlightProducer)}
-            onSave={() => onUnlockProduct({ id: `producer-${spotlightProducer.id}`, title: spotlightProducer.name, category: "Producer Profile", detail: spotlightProducer.bio, price: "$0" })}
           />
         </section>
       )}
@@ -593,6 +591,7 @@ export function PremiumMarketplace({
 
       <MarketDetailSheet
         selection={selection}
+        producers={featuredProducers}
         playingBeatId={playingBeatId}
         status={status}
         onClose={() => setSelection(null)}
@@ -909,7 +908,8 @@ function UpgradeProductCard({ product, index, owned, onOpen }: { product: Catalo
   );
 }
 
-function ProducerSpotlight({ producer, beats, saved, onOpen, onSave }: { producer: Producer; beats: MarketplaceBeat[]; saved: boolean; onOpen: () => void; onSave: () => void }) {
+function ProducerSpotlight({ producer, beats, onOpen }: { producer: Producer; beats: MarketplaceBeat[]; onOpen: () => void }) {
+  const storefrontHref = producerStorefrontHref(producer);
   return (
     <div className="overflow-hidden rounded-[22px] border border-white/10 bg-[#111113]">
       <div className="relative min-h-52 p-5" style={{ background: producer.banner }}>
@@ -928,8 +928,8 @@ function ProducerSpotlight({ producer, beats, saved, onOpen, onSave }: { produce
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 p-3">
-        <button type="button" onClick={onOpen} className="min-h-11 rounded-xl border border-gold/30 bg-gold/10 px-3 text-sm font-semibold text-gold">View collection</button>
-        <button type="button" onClick={onSave} disabled={saved} className={cn("min-h-11 rounded-xl px-3 text-sm font-semibold", saved ? "border border-gold/25 bg-gold/8 text-gold" : "border border-white/10 bg-white/[0.03] text-white/75")}>{saved ? "Following" : "Follow"}</button>
+        {storefrontHref ? <a href={storefrontHref} className="gold-seal flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-black">View storefront<ArrowRight className="h-4 w-4" /></a> : <button type="button" onClick={onOpen} className="gold-seal min-h-11 rounded-xl px-3 text-sm font-semibold text-black">View producer</button>}
+        <button type="button" onClick={onOpen} className="min-h-11 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-sm font-semibold text-white/75">Preview beats</button>
       </div>
     </div>
   );
@@ -1059,8 +1059,9 @@ function BeatCatalogSheet({ open, beats, playingBeatId, favoriteIds, onClose, on
   );
 }
 
-function MarketDetailSheet({ selection, playingBeatId, status, onClose, onPreviewBeat, onFavoriteBeat, onWriteBeat, onLicenseBeat, onUseRoom, onUnlockProduct }: {
+function MarketDetailSheet({ selection, producers, playingBeatId, status, onClose, onPreviewBeat, onFavoriteBeat, onWriteBeat, onLicenseBeat, onUseRoom, onUnlockProduct }: {
   selection: MarketSelection | null;
+  producers: Producer[];
   playingBeatId: string | null;
   status: PadActionStatus;
   onClose: () => void;
@@ -1077,25 +1078,27 @@ function MarketDetailSheet({ selection, playingBeatId, status, onClose, onPrevie
       <section role="dialog" aria-modal="true" aria-label="Studio Store preview" className="max-h-[90svh] w-full max-w-[430px] overflow-hidden rounded-[24px] border border-white/10 bg-[#101012] shadow-[0_-24px_90px_rgba(0,0,0,0.65)]">
         <div className="flex items-center justify-between border-b border-white/8 px-4 py-3"><div className="label-hw text-gold/80">Studio Preview</div><button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/[0.03] text-white/72" aria-label="Close Studio Store preview"><X className="h-4 w-4" /></button></div>
         <div className="max-h-[calc(90svh-65px)] overflow-y-auto">
-          {selection.kind === "beat" && <BeatDetail beat={selection.beat} playing={playingBeatId === selection.beat.id} busy={status.state === "saving"} onPreview={() => onPreviewBeat(selection.beat)} onFavorite={() => onFavoriteBeat(selection.beat)} onWrite={() => onWriteBeat(selection.beat)} onLicense={() => onLicenseBeat(selection.beat)} />}
+          {selection.kind === "beat" && <BeatDetail beat={selection.beat} producer={producers.find((producer) => producer.id === selection.beat.producerId) ?? null} playing={playingBeatId === selection.beat.id} busy={status.state === "saving"} onPreview={() => onPreviewBeat(selection.beat)} onFavorite={() => onFavoriteBeat(selection.beat)} onWrite={() => onWriteBeat(selection.beat)} onLicense={() => onLicenseBeat(selection.beat)} />}
           {selection.kind === "room" && <RoomDetail selection={selection} onUse={() => onUseRoom(selection.pack)} onUnlock={() => selection.product && onUnlockProduct(toUnlock(selection.product, "Studio Room"))} />}
           {selection.kind === "product" && <ProductDetail selection={selection} onUnlock={() => onUnlockProduct(toUnlock(selection.product, productUnlockCategory(selection.product)))} />}
           {selection.kind === "bundle" && <BundleDetail selection={selection} onUnlock={() => onUnlockProduct(toUnlock(selection.bundle, "Bundle"))} />}
-          {selection.kind === "producer" && <ProducerDetail selection={selection} onUseBeat={(beat) => onWriteBeat(beat)} onSave={() => onUnlockProduct({ id: `producer-${selection.producer.id}`, title: selection.producer.name, category: "Producer Profile", detail: selection.producer.bio, price: "$0" })} />}
+          {selection.kind === "producer" && <ProducerDetail selection={selection} onUseBeat={(beat) => onWriteBeat(beat)} />}
         </div>
       </section>
     </div>
   );
 }
 
-function BeatDetail({ beat, playing, busy, onPreview, onFavorite, onWrite, onLicense }: { beat: MarketplaceBeat; playing: boolean; busy: boolean; onPreview: () => void; onFavorite: () => void; onWrite: () => void; onLicense: () => void }) {
+function BeatDetail({ beat, producer, playing, busy, onPreview, onFavorite, onWrite, onLicense }: { beat: MarketplaceBeat; producer: Producer | null; playing: boolean; busy: boolean; onPreview: () => void; onFavorite: () => void; onWrite: () => void; onLicense: () => void }) {
   const bars = useMemo(() => makeMarketBars(beat.id, 48), [beat.id]);
+  const storefrontHref = producer ? producerStorefrontHref(producer) : null;
   return <div>
     <div className="relative h-56" style={{ background: beat.art }}>{beat.artworkUrl && <img src={beat.artworkUrl} alt="" className="absolute inset-0 h-full w-full object-cover" decoding="async" />}<div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.04),rgba(16,16,18,0.96))]" /><button type="button" onClick={onPreview} className="absolute left-5 top-5 grid h-12 w-12 place-items-center rounded-full bg-gold text-black" aria-label={`${playing ? "Pause" : "Preview"} ${beat.title}`}>{playing ? <Pause className="h-5 w-5 fill-current" /> : <Play className="ml-0.5 h-5 w-5 fill-current" />}</button><div className="absolute bottom-5 left-5 right-5"><div className="label-hw text-gold/85">{beat.region} / {beat.bpm} BPM / {beat.key}</div><h2 className="mt-2 text-3xl font-semibold">{beat.title}</h2><div className="mt-1 flex items-center gap-2 text-sm text-white/62">{beat.producer}{beat.verified && <ShieldCheck className="h-4 w-4 text-gold" />}</div></div></div>
     <div className="p-5">
       <div className="flex h-10 items-center gap-[2px]">{bars.map((bar, index) => <span key={index} className={cn("flex-1 rounded-full", playing ? "bg-gold" : "bg-gold/25")} style={{ height: `${bar}%`, animation: playing ? `vu-pulse ${0.7 + (index % 5) * 0.09}s ease-in-out infinite` : undefined }} />)}</div>
       <div className="mt-5 grid grid-cols-3 gap-2"><DetailStat icon={Users} value={beat.writingNow > 0 ? `${beat.writingNow}` : "New"} label="Writing now" /><DetailStat icon={TrendingUp} value={beat.completionRate > 0 ? `${beat.completionRate}%` : "New"} label="Finish rate" /><DetailStat icon={Award} value={beat.boothReadyScore > 0 ? `${beat.boothReadyScore}%` : "New"} label="Booth fit" /></div>
       <div className="mt-5"><div className="label-hw text-gold/80">Why it fits</div><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{beat.mood}. Strong for {beat.emotionalTags.slice(0, 3).join(", ").toLowerCase()} records with enough space to shape a complete song.</p></div>
+      {storefrontHref && <a href={storefrontHref} className="mt-4 flex min-h-11 items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 text-xs font-semibold text-white/72"><span>View {beat.producer}&apos;s storefront</span><ArrowRight className="h-4 w-4 text-gold" /></a>}
       <div className="mt-5 grid grid-cols-[48px_1fr] gap-2"><button type="button" onClick={onFavorite} className="grid min-h-12 place-items-center rounded-xl border border-white/10 bg-white/[0.03] text-white/70" aria-label={`Favorite ${beat.title}`}><Heart className="h-4 w-4" /></button><button type="button" onClick={onWrite} disabled={busy} className="gold-seal flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-black disabled:opacity-55"><FolderPlus className="h-4 w-4" />Write to this beat</button></div>
       <button type="button" onClick={onLicense} disabled={busy} className="mt-2 flex min-h-11 w-full items-center justify-between rounded-xl border border-gold/25 bg-gold/8 px-4 text-xs font-semibold text-gold disabled:opacity-55"><span>Licensing options</span><span>From ${beat.prices[0]?.price ?? 0} <ChevronRight className="ml-1 inline h-3.5 w-3.5" /></span></button>
     </div>
@@ -1119,9 +1122,16 @@ function BundleDetail({ selection, onUnlock }: { selection: Extract<MarketSelect
   return <div><div className="relative h-60"><img src={bundle.image} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: "65% center" }} decoding="async" /><div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08),rgba(16,16,18,0.96))]" /><div className="absolute bottom-5 left-5 right-5"><div className="inline-flex rounded-full border border-gold/30 bg-black/40 px-2.5 py-1 text-[10px] font-semibold text-gold">{bundle.savings}</div><h2 className="mt-3 text-3xl font-semibold">{bundle.title}</h2></div></div><div className="p-5"><p className="text-sm leading-relaxed text-muted-foreground">{bundle.detail}</p><div className="mt-5 label-hw text-gold/80">Inside the studio</div><div className="mt-2 divide-y divide-white/8">{bundle.includes.map((item) => <div key={item} className="flex items-center gap-3 py-3 text-sm"><span className="grid h-7 w-7 place-items-center rounded-full border border-gold/25 bg-gold/8 text-gold"><Check className="h-3.5 w-3.5" /></span>{item}</div>)}</div><button type="button" onClick={onUnlock} disabled={owned} className={cn("mt-5 flex min-h-12 w-full items-center justify-between rounded-xl px-4 text-sm font-semibold", owned ? "border border-gold/25 bg-gold/8 text-gold" : "gold-seal text-black")}><span>{owned ? "Studio owned" : "Own entire studio"}</span><span>{owned ? <Check className="h-4 w-4" /> : bundle.price}</span></button></div></div>;
 }
 
-function ProducerDetail({ selection, onUseBeat, onSave }: { selection: Extract<MarketSelection, { kind: "producer" }>; onUseBeat: (beat: MarketplaceBeat) => void; onSave: () => void }) {
-  const { producer, beats, saved } = selection;
-  return <div><div className="relative h-52" style={{ background: producer.banner }}><div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.05),rgba(16,16,18,0.95))]" /><div className="absolute bottom-5 left-5 right-5"><div className="grid h-16 w-16 place-items-center rounded-2xl border border-gold/35 bg-black/25 text-base font-semibold text-gold">{producer.glyph}</div><div className="mt-3 flex items-center gap-2"><h2 className="text-3xl font-semibold">{producer.name}</h2>{producer.verified && <ShieldCheck className="h-5 w-5 text-gold" />}</div><div className="mt-1 text-xs text-white/60">{producer.city} / {producer.handle}</div></div></div><div className="p-5"><p className="text-sm leading-relaxed text-muted-foreground">{producer.bio}</p><div className="mt-5 grid grid-cols-3 gap-2"><SpotlightStat value={formatCompactNumber(producer.sales)} label="Licenses" /><SpotlightStat value={formatCompactNumber(producer.followers)} label="Followers" /><SpotlightStat value={producer.rating > 0 ? `${producer.rating}` : "New"} label="Rating" /></div><div className="mt-5 label-hw text-gold/80">Featured beats</div><div className="mt-2 space-y-2">{beats.slice(0, 3).map((beat) => <button key={beat.id} type="button" onClick={() => onUseBeat(beat)} className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-white/10 bg-black/24 p-2.5 text-left"><span className="grid h-10 w-10 place-items-center rounded-lg border border-gold/20 text-[10px] font-semibold text-gold" style={{ background: beat.art }}>{beat.glyph}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{beat.title}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{beat.bpm} BPM / {beat.key}</span></span><ArrowRight className="h-4 w-4 text-gold" /></button>)}</div><button type="button" onClick={onSave} disabled={saved} className={cn("mt-5 min-h-12 w-full rounded-xl px-4 text-sm font-semibold", saved ? "border border-gold/25 bg-gold/8 text-gold" : "gold-seal text-black")}>{saved ? "Following" : "Follow producer"}</button></div></div>;
+function ProducerDetail({ selection, onUseBeat }: { selection: Extract<MarketSelection, { kind: "producer" }>; onUseBeat: (beat: MarketplaceBeat) => void }) {
+  const { producer, beats } = selection;
+  const storefrontHref = producerStorefrontHref(producer);
+  return <div><div className="relative h-52" style={{ background: producer.banner }}><div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.05),rgba(16,16,18,0.95))]" /><div className="absolute bottom-5 left-5 right-5"><div className="grid h-16 w-16 place-items-center rounded-2xl border border-gold/35 bg-black/25 text-base font-semibold text-gold">{producer.glyph}</div><div className="mt-3 flex items-center gap-2"><h2 className="text-3xl font-semibold">{producer.name}</h2>{producer.verified && <ShieldCheck className="h-5 w-5 text-gold" />}</div><div className="mt-1 text-xs text-white/60">{producer.city} / {producer.handle}</div></div></div><div className="p-5"><p className="text-sm leading-relaxed text-muted-foreground">{producer.bio}</p><div className="mt-5 grid grid-cols-3 gap-2"><SpotlightStat value={formatCompactNumber(producer.sales)} label="Licenses" /><SpotlightStat value={formatCompactNumber(producer.followers)} label="Followers" /><SpotlightStat value={producer.rating > 0 ? `${producer.rating}` : "New"} label="Rating" /></div><div className="mt-5 label-hw text-gold/80">Featured beats</div><div className="mt-2 space-y-2">{beats.slice(0, 3).map((beat) => <button key={beat.id} type="button" onClick={() => onUseBeat(beat)} className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-white/10 bg-black/24 p-2.5 text-left"><span className="grid h-10 w-10 place-items-center rounded-lg border border-gold/20 text-[10px] font-semibold text-gold" style={{ background: beat.art }}>{beat.glyph}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{beat.title}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{beat.bpm} BPM / {beat.key}</span></span><ArrowRight className="h-4 w-4 text-gold" /></button>)}</div>{storefrontHref && <a href={storefrontHref} className="gold-seal mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-black">Open full storefront<ArrowRight className="h-4 w-4" /></a>}</div></div>;
+}
+
+function producerStorefrontHref(producer: Producer) {
+  const handle = producer.handle.trim().replace(/^@+/, "");
+  if (!handle || handle === "producer") return null;
+  return `/producer/${encodeURIComponent(handle)}`;
 }
 
 function DetailStat({ icon: Icon, value, label }: { icon: ComponentType<{ className?: string }>; value: string; label: string }) {
