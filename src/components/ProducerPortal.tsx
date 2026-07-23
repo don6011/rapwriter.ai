@@ -40,6 +40,12 @@ import {
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useAuth } from "@/hooks/use-auth";
+import {
+  MEMBERSHIP_ACCESS_EVENT,
+  membershipAccessCopy,
+  notifyMembershipAccess,
+  type MembershipAccessNotice,
+} from "@/lib/client/membership-access";
 import { getProducerUploadDraftBlockers } from "@/lib/producer-release";
 import type { MembershipSnapshot, PlanDefinition } from "@/lib/membership";
 import { cn } from "@/lib/utils";
@@ -208,6 +214,26 @@ const catalogFilters: Array<{ id: CatalogFilter; label: string }> = [
   { id: "rejected", label: "Needs Work" },
   { id: "archived", label: "Archived" },
 ];
+
+function producerResponseError(payload: unknown, status: number, fallback: string) {
+  const notice = notifyMembershipAccess(payload, status);
+  if (notice) {
+    const error = new Error(membershipAccessCopy(notice));
+    error.name = "MembershipAccessError";
+    return error;
+  }
+  const message = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? (payload as Record<string, unknown>).error
+    : null;
+  return new Error(typeof message === "string" ? message : fallback);
+}
+
+function producerErrorStatus(error: unknown, fallback: string) {
+  return {
+    tone: error instanceof Error && error.name === "MembershipAccessError" ? "gold" as const : "red" as const,
+    message: error instanceof Error ? error.message : fallback,
+  };
+}
 
 export function ProducerPortal() {
   const auth = useAuth();
@@ -413,6 +439,17 @@ export function ProducerPortal() {
     return () => window.clearTimeout(timeout);
   }, [status.message, status.tone]);
 
+  useEffect(() => {
+    const handleMembershipAccess = (event: Event) => {
+      const notice = (event as CustomEvent<MembershipAccessNotice>).detail;
+      if (!notice || notice.audience !== "producer") return;
+      setActiveView("overview");
+      setStatus({ tone: "gold", message: membershipAccessCopy(notice) });
+    };
+    window.addEventListener(MEMBERSHIP_ACCESS_EVENT, handleMembershipAccess);
+    return () => window.removeEventListener(MEMBERSHIP_ACCESS_EVENT, handleMembershipAccess);
+  }, []);
+
   async function loadProducer() {
     setLoading(true);
     try {
@@ -423,7 +460,7 @@ export function ProducerPortal() {
         setStatus({ tone: "red", message: "Your producer session expired. Sign in again to continue." });
         return;
       }
-      if (!res.ok) throw new Error(data.error ?? "Could not load producer portal.");
+      if (!res.ok) throw producerResponseError(data, res.status, "Could not load producer portal.");
       setPayload({
         profile: data.profile,
         beats: data.beats ?? [],
@@ -461,7 +498,7 @@ export function ProducerPortal() {
       });
       const data = await res.json().catch(() => ({})) as { checkout_url?: string; portal_url?: string; error?: string };
       const destination = data.checkout_url ?? data.portal_url;
-      if (!res.ok || !destination) throw new Error(data.error ?? "Billing could not be opened.");
+      if (!res.ok || !destination) throw producerResponseError(data, res.status, "Billing could not be opened.");
       window.location.assign(destination);
     } catch (error) {
       setStatus({ tone: "red", message: error instanceof Error ? error.message : "Billing could not be opened." });
@@ -517,7 +554,7 @@ export function ProducerPortal() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not save profile.");
+      if (!res.ok) throw producerResponseError(data, res.status, "Could not save profile.");
       await loadProducer();
       setProfileEditMode(false);
       setStatus({ tone: "green", message: submit ? "Profile submitted for approval." : "Profile saved." });
@@ -570,7 +607,7 @@ export function ProducerPortal() {
     try {
       const res = await fetch("/api/producer/beats", { method: "POST", body: formData });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not upload beat.");
+      if (!res.ok) throw producerResponseError(data, res.status, "Could not upload beat.");
       await loadProducer();
       setBeatDraft((current) => ({ ...current, title: "" }));
       setAudioFile(null);
@@ -578,7 +615,7 @@ export function ProducerPortal() {
       setBeatValidationVisible(false);
       setStatus({ tone: "green", message: shouldSubmit ? "Beat submitted for Studio Store review." : "Beat uploaded as draft." });
     } catch (err) {
-      setStatus({ tone: "red", message: err instanceof Error ? err.message : "Could not upload beat." });
+      setStatus(producerErrorStatus(err, "Could not upload beat."));
     }
   }
 
@@ -630,7 +667,7 @@ export function ProducerPortal() {
     try {
       const res = await fetch(`/api/producer/beats/${editingBeat.id}`, { method: "PATCH", body: formData });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Beat could not be updated.");
+      if (!res.ok) throw producerResponseError(data, res.status, "Beat could not be updated.");
       const nextBeat = data.beat as ProducerBeatRow;
       setPayload((current) => ({ ...current, beats: current.beats.map((beat) => beat.id === nextBeat.id ? nextBeat : beat) }));
       setEditingBeat(nextBeat);
@@ -658,7 +695,7 @@ export function ProducerPortal() {
     try {
       const res = await fetch(`/api/producer/beats/${editingBeat.id}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Beat could not be deleted.");
+      if (!res.ok) throw producerResponseError(data, res.status, "Beat could not be deleted.");
       setPayload((current) => ({
         ...current,
         beats: current.beats.filter((beat) => beat.id !== editingBeat.id),
@@ -723,7 +760,7 @@ export function ProducerPortal() {
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Playlist could not be saved.");
+      if (!res.ok) throw producerResponseError(data, res.status, "Playlist could not be saved.");
       const nextPlaylist = data.playlist as ProducerPlaylistRow;
       setPayload((current) => ({
         ...current,
@@ -734,7 +771,7 @@ export function ProducerPortal() {
       setPlaylistComposerOpen(false);
       setStatus({ tone: "green", message: statusValue === "published" ? "Playlist published to your storefront." : statusValue === "archived" ? "Playlist archived." : "Playlist draft saved." });
     } catch (err) {
-      setStatus({ tone: "red", message: err instanceof Error ? err.message : "Playlist could not be saved." });
+      setStatus(producerErrorStatus(err, "Playlist could not be saved."));
     } finally {
       setCatalogBusy(false);
     }

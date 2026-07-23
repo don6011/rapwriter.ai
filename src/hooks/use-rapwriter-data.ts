@@ -7,6 +7,7 @@ import type { RoughTakeAnalysis } from "@/lib/booth-ready-v2";
 import type { License } from "@/lib/marketplace";
 import type { MembershipSnapshot } from "@/lib/membership";
 import type { BoothExportRecord, BoothExportSnapshot } from "@/lib/booth-export";
+import { notifyMembershipAccess } from "@/lib/client/membership-access";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 type BeatSnapshot = {
@@ -260,6 +261,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
+    notifyMembershipAccess(json, res.status);
     throw new RapWriterApiError(
       typeof json.error === "string" ? json.error : "Request failed",
       res.status,

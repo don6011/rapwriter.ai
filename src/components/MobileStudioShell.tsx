@@ -74,6 +74,12 @@ import {
   type SessionRow,
 } from "@/hooks/use-rapwriter-data";
 import type { BoothExportRecord, BoothExportSnapshot } from "@/lib/booth-export";
+import {
+  MEMBERSHIP_ACCESS_EVENT,
+  membershipAccessCopy,
+  notifyMembershipAccess,
+  type MembershipAccessNotice,
+} from "@/lib/client/membership-access";
 import { consumePendingBeat, type Beat, type Producer } from "@/lib/marketplace";
 import type { StarterBeat } from "@/lib/starter-beats";
 import type { WorkspaceMembership } from "@/lib/membership";
@@ -547,6 +553,22 @@ export function MobileStudioShell() {
     });
   }, [entitlementUnlocks, productUnlocks]);
   const unlockedProductIds = useMemo(() => new Set(mergedProductUnlocks.map((unlock) => unlock.id)), [mergedProductUnlocks]);
+
+  useEffect(() => {
+    const handleMembershipAccess = (event: Event) => {
+      const notice = (event as CustomEvent<MembershipAccessNotice>).detail;
+      if (!notice) return;
+      setScreen("home");
+      setActiveNav("profile");
+      setBeatSwitcherOpen(false);
+      setSyncMessage(membershipAccessCopy(notice));
+      window.setTimeout(() => {
+        document.getElementById("profile-membership")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 0);
+    };
+    window.addEventListener(MEMBERSHIP_ACCESS_EVENT, handleMembershipAccess);
+    return () => window.removeEventListener(MEMBERSHIP_ACCESS_EVENT, handleMembershipAccess);
+  }, []);
 
   const canUseStudioPack = useCallback((id: StudioPackId) => {
     return id === "midnight" || unlockedProductIds.has(getStudioRoomProductId(id));
@@ -1412,7 +1434,10 @@ export function MobileStudioShell() {
         }),
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error ?? "Producer Pass could not create a revision.");
+      if (!response.ok) {
+        notifyMembershipAccess(data, response.status);
+        throw new Error(data.error ?? "Producer Pass could not create a revision.");
+      }
 
       setProducerActionProposal(data.proposal as ProducerActionProposal);
       setProducerActionStatus("preview");
