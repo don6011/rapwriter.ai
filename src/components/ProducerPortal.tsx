@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import Link from "next/link";
 import {
   Archive,
@@ -20,6 +20,7 @@ import {
   FolderPlus,
   Globe2,
   Headphones,
+  Handshake,
   Loader2,
   LockKeyhole,
   Music,
@@ -124,8 +125,31 @@ type ProducerPayload = {
   plans: PlanDefinition[];
   metrics: ProducerMetricsRow;
   reviews: ProducerReleaseReview[];
+  services: ProducerServiceRow[];
+  collaborations: ProducerCollaborationRow[];
   release_readiness: ProducerReleaseReadiness;
   foundation_ready: boolean;
+};
+
+type ProducerServiceRow = {
+  id: string;
+  service_type: "custom_beat" | "co_production" | "song_feedback" | "writing_session";
+  title: string;
+  description: string;
+  starting_price_cents: number | null;
+  turnaround_days: number | null;
+  is_active: boolean;
+};
+
+type ProducerCollaborationRow = {
+  id: string;
+  title: string;
+  brief: string;
+  budget_cents: number | null;
+  status: "submitted" | "countered" | "accepted" | "declined" | "canceled" | "completed";
+  updated_at: string;
+  producer_services: { title: string } | null;
+  producer_beats: { title: string } | null;
 };
 
 type ProducerReleaseReview = {
@@ -237,7 +261,7 @@ function producerErrorStatus(error: unknown, fallback: string) {
 
 export function ProducerPortal() {
   const auth = useAuth();
-  const [payload, setPayload] = useState<ProducerPayload>({ profile: null, beats: [], playlists: [], business: null, billing: emptyBilling, membership: null, plans: [], metrics: emptyMetrics, reviews: [], release_readiness: emptyReleaseReadiness, foundation_ready: true });
+  const [payload, setPayload] = useState<ProducerPayload>({ profile: null, beats: [], playlists: [], business: null, billing: emptyBilling, membership: null, plans: [], metrics: emptyMetrics, reviews: [], services: [], collaborations: [], release_readiness: emptyReleaseReadiness, foundation_ready: true });
   const [membershipBusy, setMembershipBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<{ tone: "idle" | "gold" | "green" | "red"; message: string }>({ tone: "idle", message: "" });
@@ -297,6 +321,9 @@ export function ProducerPortal() {
   const [playlistDescription, setPlaylistDescription] = useState("");
   const [playlistBeatIds, setPlaylistBeatIds] = useState<string[]>([]);
   const [activeView, setActiveView] = useState<ProducerView>("overview");
+  const [serviceComposerOpen, setServiceComposerOpen] = useState(false);
+  const [serviceBusy, setServiceBusy] = useState(false);
+  const [serviceDraft, setServiceDraft] = useState({ service_type: "custom_beat" as ProducerServiceRow["service_type"], title: "", description: "", starting_price: "", turnaround_days: "" });
 
   const profile = payload.profile;
   const submittedCount = payload.beats.filter((beat) => beat.status === "submitted" || beat.status === "approved").length;
@@ -456,7 +483,7 @@ export function ProducerPortal() {
       const res = await fetch("/api/producer", { cache: "no-store", credentials: "same-origin" });
       const data = await res.json();
       if (res.status === 401) {
-        setPayload({ profile: null, beats: [], playlists: [], business: null, billing: emptyBilling, membership: null, plans: [], metrics: emptyMetrics, reviews: [], release_readiness: emptyReleaseReadiness, foundation_ready: true });
+        setPayload({ profile: null, beats: [], playlists: [], business: null, billing: emptyBilling, membership: null, plans: [], metrics: emptyMetrics, reviews: [], services: [], collaborations: [], release_readiness: emptyReleaseReadiness, foundation_ready: true });
         setStatus({ tone: "red", message: "Your producer session expired. Sign in again to continue." });
         return;
       }
@@ -471,6 +498,8 @@ export function ProducerPortal() {
         plans: data.plans ?? [],
         metrics: data.metrics ?? emptyMetrics,
         reviews: data.reviews ?? [],
+        services: data.services ?? [],
+        collaborations: data.collaborations ?? [],
         release_readiness: data.release_readiness ?? emptyReleaseReadiness,
         foundation_ready: data.foundation_ready !== false,
       });
@@ -478,6 +507,56 @@ export function ProducerPortal() {
       setStatus({ tone: "red", message: err instanceof Error ? err.message : "Could not load producer portal." });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function createService(event: FormEvent) {
+    event.preventDefault();
+    if (serviceBusy) return;
+    setServiceBusy(true);
+    try {
+      const res = await fetch("/api/producer/services", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          service_type: serviceDraft.service_type,
+          title: serviceDraft.title,
+          description: serviceDraft.description,
+          starting_price_cents: serviceDraft.starting_price ? Math.round(Number(serviceDraft.starting_price) * 100) : null,
+          turnaround_days: serviceDraft.turnaround_days ? Number(serviceDraft.turnaround_days) : null,
+          is_active: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw producerResponseError(data, res.status, "Could not publish this service.");
+      setServiceDraft({ service_type: "custom_beat", title: "", description: "", starting_price: "", turnaround_days: "" });
+      setServiceComposerOpen(false);
+      setStatus({ tone: "green", message: "Service published to your storefront." });
+      await loadProducer();
+    } catch (error) {
+      setStatus(producerErrorStatus(error, "Could not publish this service."));
+    } finally {
+      setServiceBusy(false);
+    }
+  }
+
+  async function toggleService(service: ProducerServiceRow) {
+    setServiceBusy(true);
+    try {
+      const res = await fetch(`/api/producer/services/${service.id}`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ is_active: !service.is_active }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw producerResponseError(data, res.status, "Could not update this service.");
+      await loadProducer();
+    } catch (error) {
+      setStatus(producerErrorStatus(error, "Could not update this service."));
+    } finally {
+      setServiceBusy(false);
     }
   }
 
@@ -840,7 +919,7 @@ export function ProducerPortal() {
 
         {!payload.foundation_ready && (
           <div className="rounded-2xl border border-gold/30 bg-gold/10 p-4 text-sm leading-relaxed text-gold">
-            Producer Economy migration is ready in the codebase and still needs to be applied to this Supabase project.
+            The latest Producer HQ foundation is ready in the codebase and still needs to be applied to this Supabase project.
           </div>
         )}
 
@@ -855,6 +934,21 @@ export function ProducerPortal() {
 
           {payload.release_readiness.phase !== "live" && (
             <ReleasePipeline readiness={payload.release_readiness} profile={profile} beats={payload.beats} latestReview={payload.reviews[0]} onEditProfile={() => { setProfileEditMode(true); changeView("setup"); }} />
+          )}
+
+          {profile && (
+            <ProducerCollaborationPanel
+              services={payload.services}
+              requests={payload.collaborations}
+              composerOpen={serviceComposerOpen}
+              setComposerOpen={setServiceComposerOpen}
+              draft={serviceDraft}
+              setDraft={setServiceDraft}
+              busy={serviceBusy}
+              onCreate={createService}
+              onToggle={toggleService}
+              onMembership={() => void openProducerMembership()}
+            />
           )}
 
           {profile && hasCatalogActivity && (
@@ -1539,6 +1633,54 @@ function ProducerHqNav({ activeView, onChange }: { activeView: ProducerView; onC
         })}
       </div>
     </nav>
+  );
+}
+
+function ProducerCollaborationPanel({
+  services,
+  requests,
+  composerOpen,
+  setComposerOpen,
+  draft,
+  setDraft,
+  busy,
+  onCreate,
+  onToggle,
+  onMembership,
+}: {
+  services: ProducerServiceRow[];
+  requests: ProducerCollaborationRow[];
+  composerOpen: boolean;
+  setComposerOpen: (value: boolean) => void;
+  draft: { service_type: ProducerServiceRow["service_type"]; title: string; description: string; starting_price: string; turnaround_days: string };
+  setDraft: Dispatch<SetStateAction<{ service_type: ProducerServiceRow["service_type"]; title: string; description: string; starting_price: string; turnaround_days: string }>>;
+  busy: boolean;
+  onCreate: (event: FormEvent) => void;
+  onToggle: (service: ProducerServiceRow) => void;
+  onMembership: () => void;
+}) {
+  const activeRequests = requests.filter((request) => ["submitted", "countered", "accepted"].includes(request.status));
+  return (
+    <section className="rounded-3xl border border-gold/18 bg-[linear-gradient(145deg,rgba(255,176,32,0.08),rgba(17,17,19,0.96)_52%)] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div><div className="label-hw text-gold/85">Producer services</div><h2 className="mt-1 text-xl font-semibold">Work with artists</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Publish what you offer. Requests stay private until you accept.</p></div>
+        <Handshake className="mt-1 h-5 w-5 shrink-0 text-gold" />
+      </div>
+
+      <Link href="/collaborations" className="mt-4 flex min-h-12 items-center justify-between rounded-2xl border border-white/10 bg-black/30 px-4">
+        <span><span className="block text-sm font-semibold">Artist requests</span><span className="mt-0.5 block text-[11px] text-muted-foreground">{activeRequests.length ? `${activeRequests.length} active` : "No active requests"}</span></span>
+        <span className="flex items-center gap-1 text-xs font-semibold text-gold">Open rooms<ChevronRight className="h-4 w-4" /></span>
+      </Link>
+
+      {services.length > 0 && <div className="mt-3 space-y-2">{services.map((service) => <div key={service.id} className="flex items-center gap-3 rounded-2xl border border-white/9 bg-black/24 p-3"><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{service.title}</div><div className="mt-1 text-[11px] text-muted-foreground">{service.starting_price_cents != null ? `From ${formatMoney(service.starting_price_cents)}` : "Quote after brief"}{service.turnaround_days ? ` - ${service.turnaround_days} day turnaround` : ""}</div></div><button type="button" onClick={() => void onToggle(service)} disabled={busy} className={cn("rounded-full border px-3 py-1.5 text-[10px] font-semibold", service.is_active ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-300" : "border-white/10 text-white/45")}>{service.is_active ? "Live" : "Paused"}</button></div>)}</div>}
+
+      {composerOpen ? <form onSubmit={onCreate} className="mt-4 space-y-3 border-t border-white/10 pt-4">
+        <div className="grid grid-cols-2 gap-2"><select value={draft.service_type} onChange={(event) => setDraft((value) => ({ ...value, service_type: event.target.value as ProducerServiceRow["service_type"] }))} className="min-h-11 rounded-xl border border-white/10 bg-black/40 px-3 text-xs"><option value="custom_beat">Custom beat</option><option value="co_production">Co-production</option><option value="song_feedback">Song feedback</option><option value="writing_session">Writing session</option></select><input required minLength={2} maxLength={80} value={draft.title} onChange={(event) => setDraft((value) => ({ ...value, title: event.target.value }))} placeholder="Service title" className="min-h-11 min-w-0 rounded-xl border border-white/10 bg-black/40 px-3 text-xs outline-none focus:border-gold/45" /></div>
+        <textarea rows={3} maxLength={600} value={draft.description} onChange={(event) => setDraft((value) => ({ ...value, description: event.target.value }))} placeholder="What does the artist receive?" className="w-full resize-none rounded-xl border border-white/10 bg-black/40 p-3 text-xs leading-relaxed outline-none focus:border-gold/45" />
+        <div className="grid grid-cols-2 gap-2"><input type="number" min="0" value={draft.starting_price} onChange={(event) => setDraft((value) => ({ ...value, starting_price: event.target.value }))} placeholder="Starting price" className="min-h-11 min-w-0 rounded-xl border border-white/10 bg-black/40 px-3 text-xs" /><input type="number" min="1" max="180" value={draft.turnaround_days} onChange={(event) => setDraft((value) => ({ ...value, turnaround_days: event.target.value }))} placeholder="Turnaround days" className="min-h-11 min-w-0 rounded-xl border border-white/10 bg-black/40 px-3 text-xs" /></div>
+        <div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setComposerOpen(false)} className="min-h-11 rounded-xl border border-white/10 text-xs font-semibold text-white/60">Cancel</button><button type="submit" disabled={busy} className="gold-seal min-h-11 rounded-xl text-xs font-semibold text-black disabled:opacity-50">{busy ? "Publishing..." : "Publish service"}</button></div>
+      </form> : <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => setComposerOpen(true)} className="min-h-11 rounded-xl border border-gold/25 bg-gold/8 text-xs font-semibold text-gold"><Plus className="mr-1 inline h-4 w-4" />Add service</button><button type="button" onClick={onMembership} className="min-h-11 rounded-xl border border-white/10 text-xs font-semibold text-white/55">Producer Pro</button></div>}
+    </section>
   );
 }
 

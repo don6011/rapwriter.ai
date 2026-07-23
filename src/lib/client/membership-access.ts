@@ -69,6 +69,8 @@ function featureLabel(feature: string | null) {
     private_beat_imports: "Private beat imports",
     beat_uploads: "Beat uploads",
     collections: "Producer collections",
+    producer_collaboration: "Private producer collaboration",
+    service_listings: "Producer service listings",
   };
   if (!feature) return "This feature";
   return labels[feature] ?? feature.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());

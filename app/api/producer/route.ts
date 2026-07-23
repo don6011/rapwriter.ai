@@ -56,19 +56,21 @@ export async function GET() {
 
   if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
 
-  const [beatsResult, playlistsResult, settingsResult, billingResult, metricsResult, reviewsResult] = await Promise.all([
+  const [beatsResult, playlistsResult, settingsResult, billingResult, metricsResult, reviewsResult, servicesResult, collaborationsResult] = await Promise.all([
     supabase.from("producer_beats").select("*").eq("owner_id", user.id).order("created_at", { ascending: false }),
     supabase.from("producer_playlists").select("*, producer_playlist_items(*)").eq("owner_id", user.id).order("created_at", { ascending: false }),
     supabase.from("producer_business_settings").select("*").eq("owner_id", user.id).maybeSingle(),
     supabase.from("producer_billing_accounts").select("*").eq("owner_id", user.id).maybeSingle(),
     supabase.from("producer_metrics").select("*").eq("owner_id", user.id).maybeSingle(),
     supabase.from("producer_release_reviews").select("*").eq("producer_owner_id", user.id).order("created_at", { ascending: false }).limit(20),
+    supabase.from("producer_services").select("id, service_type, title, description, starting_price_cents, turnaround_days, is_active, created_at, updated_at").eq("owner_id", user.id).order("created_at", { ascending: false }),
+    supabase.from("producer_collaboration_requests").select("id, artist_id, title, brief, budget_cents, status, response_note, counter_price_cents, created_at, updated_at, producer_services(title), producer_beats(title)").eq("producer_id", user.id).order("updated_at", { ascending: false }).limit(20),
   ]);
 
   if (beatsResult.error) return NextResponse.json({ error: beatsResult.error.message }, { status: 500 });
   if (playlistsResult.error) return NextResponse.json({ error: playlistsResult.error.message }, { status: 500 });
-  for (const result of [settingsResult, billingResult, metricsResult, reviewsResult]) {
-    if (result.error && result.error.code !== "42P01") return NextResponse.json({ error: result.error.message }, { status: 500 });
+  for (const result of [settingsResult, billingResult, metricsResult, reviewsResult, servicesResult, collaborationsResult]) {
+    if (result.error && !isMissingRelation(result.error)) return NextResponse.json({ error: result.error.message }, { status: 500 });
   }
 
   const signedBeats = await Promise.all((beatsResult.data ?? []).map((beat) => signProducerBeatAssets(supabase, beat)));
@@ -88,8 +90,10 @@ export async function GET() {
     plans: producerPlans ?? [],
     metrics: metricsResult.data ?? emptyProducerMetrics(),
     reviews: reviewsResult.data ?? [],
+    services: servicesResult.data ?? [],
+    collaborations: collaborationsResult.data ?? [],
     release_readiness: buildReleaseReadiness(profile, beatsResult.data ?? [], profileBlockers, beatReadiness),
-    foundation_ready: !settingsResult.error,
+    foundation_ready: !settingsResult.error && !servicesResult.error && !collaborationsResult.error,
   });
 }
 
@@ -240,6 +244,12 @@ export async function POST(request: Request) {
       profile_ready: profileBlockers.length === 0,
     },
   });
+}
+
+function isMissingRelation(error: { code?: string; message?: string }) {
+  return error.code === "42P01"
+    || error.code === "PGRST205"
+    || Boolean(error.message?.includes("Could not find the table") && error.message.includes("schema cache"));
 }
 
 function buildReleaseReadiness(

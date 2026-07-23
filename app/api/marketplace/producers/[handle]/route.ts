@@ -82,7 +82,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Producer storefront is not live." }, { status: 404 });
   }
 
-  const [beatsResult, playlistsResult, metricsResult, followCountResult, followingResult, avatarResult, bannerResult] = await Promise.all([
+  const [beatsResult, playlistsResult, servicesResult, metricsResult, followCountResult, followingResult, avatarResult, bannerResult] = await Promise.all([
     admin
       .from("producer_beats")
       .select("id, title, bpm, musical_key, genre, mood, region, tags, license_tiers, audio_path, artwork_path, duration_seconds, metadata")
@@ -94,6 +94,12 @@ export async function GET(_request: Request, { params }: RouteContext) {
       .select("id, title, description, producer_playlist_items(beat_id, position)")
       .eq("producer_profile_id", profile.id)
       .eq("status", "published")
+      .order("created_at", { ascending: false }),
+    admin
+      .from("producer_services")
+      .select("id, service_type, title, description, starting_price_cents, turnaround_days")
+      .eq("producer_profile_id", profile.id)
+      .eq("is_active", true)
       .order("created_at", { ascending: false }),
     admin
       .from("producer_metrics")
@@ -110,6 +116,12 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
   for (const result of [beatsResult, playlistsResult, metricsResult, followCountResult, followingResult]) {
     if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
+  }
+  if (servicesResult.error
+    && servicesResult.error.code !== "42P01"
+    && servicesResult.error.code !== "PGRST205"
+    && !(servicesResult.error.message.includes("Could not find the table") && servicesResult.error.message.includes("schema cache"))) {
+    return NextResponse.json({ error: servicesResult.error.message }, { status: 500 });
   }
 
   const beats = ((beatsResult.data ?? []) as BeatRow[]).map((beat) => serializeBeat(beat, profile));
@@ -149,6 +161,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     },
     beats,
     collections,
+    services: servicesResult.data ?? [],
     metrics: metricsResult.data ?? { profile_views: 0, beat_plays: 0, favorites: 0, beat_adds: 0, followers: 0, sales: 0 },
     followerCount: followCountResult.count ?? 0,
     following: Boolean(followingResult.data),

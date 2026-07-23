@@ -250,3 +250,34 @@ export const producerBeatUpdateSchema = z.object({
 export const producerFollowSchema = z.object({
   action: z.enum(["follow", "unfollow"]),
 });
+
+export const producerServiceSchema = z.object({
+  service_type: z.enum(["custom_beat", "co_production", "song_feedback", "writing_session"]),
+  title: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(600).default(""),
+  starting_price_cents: z.number().int().min(0).max(10_000_000).nullable().default(null),
+  turnaround_days: z.number().int().min(1).max(180).nullable().default(null),
+  is_active: z.boolean().default(true),
+});
+
+export const collaborationRequestSchema = z.object({
+  producer_profile_id: z.string().uuid(),
+  producer_service_id: z.string().uuid().nullable().optional(),
+  project_id: z.string().uuid().nullable().optional(),
+  song_id: z.string().uuid().nullable().optional(),
+  beat_id: z.string().uuid().nullable().optional(),
+  title: z.string().trim().min(2).max(120),
+  brief: z.string().trim().min(20).max(3000),
+  budget_cents: z.number().int().min(0).max(10_000_000).nullable().optional(),
+  requested_deadline: z.string().date().nullable().optional(),
+});
+
+export const collaborationDecisionSchema = z.object({
+  action: z.enum(["accept", "counter", "decline", "accept_counter", "cancel", "complete"]),
+  response_note: z.string().trim().max(1500).nullable().optional(),
+  counter_price_cents: z.number().int().min(0).max(10_000_000).nullable().optional(),
+});
+
+export const collaborationMessageSchema = z.object({
+  body: z.string().trim().min(1).max(3000),
+});
