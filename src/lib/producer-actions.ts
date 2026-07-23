@@ -2,6 +2,17 @@ export const producerActionTypes = ["hook", "rewrite", "commercial", "pocket"] a
 
 export type ProducerActionType = (typeof producerActionTypes)[number];
 
+export const producerActionEntitlements: Record<ProducerActionType, string> = {
+  hook: "hook_doctor",
+  rewrite: "rewrite",
+  commercial: "commercial_pass",
+  pocket: "ghostwriter",
+};
+
+export function producerActionEntitlement(actionType: ProducerActionType) {
+  return producerActionEntitlements[actionType];
+}
+
 export type ProducerActionInput = {
   actionType: ProducerActionType;
   sectionName: string;

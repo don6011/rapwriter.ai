@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api/auth";
 import { parseJson } from "@/lib/api/json";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
+import { producerActionEntitlement } from "@/lib/producer-actions";
 import { producerActionCreateSchema } from "@/lib/schemas";
 import { generateProducerActionWithProvider } from "@/lib/server/producer-action-provider";
 import { consumeMembershipUsage, membershipErrorResponse } from "@/lib/server/membership-access";
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
 
   try {
     await consumeMembershipUsage(supabase, user.id, "artist", {
-      entitlement: "ghostwriter",
+      entitlement: producerActionEntitlement(parsed.data.action_type),
       limitKey: "ghostwriter_actions_monthly",
       metric: "ghostwriter_actions",
     });

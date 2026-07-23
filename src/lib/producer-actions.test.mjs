@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { generateProducerAction } from "./producer-actions.ts";
+import { generateProducerAction, producerActionEntitlement } from "./producer-actions.ts";
 
 const lyrics = [
   "I think diamonds dancing in the dark and they know the vibes",
@@ -24,6 +24,13 @@ function generate(actionType, attempt = 0) {
 }
 
 describe("producer action engine", () => {
+  test("maps each action to its server-enforced membership capability", () => {
+    expect(producerActionEntitlement("pocket")).toBe("ghostwriter");
+    expect(producerActionEntitlement("hook")).toBe("hook_doctor");
+    expect(producerActionEntitlement("rewrite")).toBe("rewrite");
+    expect(producerActionEntitlement("commercial")).toBe("commercial_pass");
+  });
+
   test.each(["hook", "rewrite", "commercial", "pocket"])("builds a usable %s proposal", (actionType) => {
     const proposal = generate(actionType);
 

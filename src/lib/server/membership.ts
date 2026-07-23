@@ -67,6 +67,9 @@ export async function getMembershipForUser(supabase: ServerSupabaseClient, userI
   if ((roles.includes("artist") || roles.includes("admin")) && !membership.artist) {
     throw new Error("Artist plan configuration is unavailable.");
   }
+  if ((roles.includes("producer") || roles.includes("admin")) && !membership.producer) {
+    throw new Error("Producer plan configuration is unavailable.");
+  }
 
   return membership;
 }

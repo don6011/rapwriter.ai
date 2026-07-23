@@ -45,6 +45,14 @@ export async function requireMembershipLimit(
 ) {
   const workspace = await membershipWorkspace(supabase, userId, audience);
   const limit = numericLimit(workspace, limitKey);
+  if (limit === null) {
+    throw new MembershipAccessError(
+      "This membership limit is temporarily unavailable.",
+      "membership_unavailable",
+      503,
+      accessDetails(workspace, limitKey),
+    );
+  }
   if (limit >= 0 && currentQuantity >= limit) {
     throw new MembershipAccessError(
       "You have reached this plan's limit.",
@@ -64,6 +72,14 @@ export async function consumeMembershipUsage(
 ) {
   const workspace = await requireMembershipEntitlement(supabase, userId, audience, options.entitlement);
   const limit = numericLimit(workspace, options.limitKey);
+  if (limit === null) {
+    throw new MembershipAccessError(
+      "This membership allowance is temporarily unavailable.",
+      "membership_unavailable",
+      503,
+      accessDetails(workspace, options.limitKey),
+    );
+  }
   const amount = options.amount ?? 1;
 
   const admin = createAdminClient();
@@ -121,7 +137,7 @@ async function membershipWorkspace(
 
 function numericLimit(workspace: WorkspaceMembership, key: string) {
   const value = workspace.limits[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : -1;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function accessDetails(workspace: WorkspaceMembership, feature: string) {

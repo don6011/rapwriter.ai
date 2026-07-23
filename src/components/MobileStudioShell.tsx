@@ -48,6 +48,7 @@ import {
   type RoughTakeAnalysis,
 } from "@/lib/booth-ready-v2";
 import {
+  producerActionEntitlement,
   type ProducerActionProposal,
   type ProducerActionType,
 } from "@/lib/producer-actions";
@@ -2885,6 +2886,8 @@ function ProducerPassPanel({
   studioDna,
   environmentIntel,
   actions,
+  membership,
+  onUpgrade,
 }: {
   sectionName: string;
   sectionText: string;
@@ -2892,6 +2895,8 @@ function ProducerPassPanel({
   studioDna: StudioDna;
   environmentIntel: EnvironmentIntelligence;
   actions?: ProducerActionControls;
+  membership?: WorkspaceMembership | null;
+  onUpgrade?: () => void;
 }) {
   const [activePass, setActivePass] = useState<ProducerPassId>(() => passFromProducerMode(studioDna.producer));
   const [previewMode, setPreviewMode] = useState<"original" | "revision">("revision");
@@ -2907,23 +2912,28 @@ function ProducerPassPanel({
     { id: "commercial", label: "Commercial Pass" },
     { id: "pocket", label: "Pocket Adjustment" },
   ];
+  const activePassUnlocked = !actions || membership?.entitlements[producerActionEntitlement(activePass)] === true;
 
   return (
     <div className="space-y-3">
       <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {options.map((option) => (
-          <button
-            type="button"
-            key={option.id}
-            onClick={() => setActivePass(option.id)}
-            className={cn(
-              "min-h-9 shrink-0 rounded-full border px-3 text-[11px] font-semibold",
-              activePass === option.id ? "border-gold/40 bg-gold/12 text-gold" : "border-white/10 bg-black/24 text-muted-foreground",
-            )}
-          >
-            {option.label}
-          </button>
-        ))}
+        {options.map((option) => {
+          const unlocked = !actions || membership?.entitlements[producerActionEntitlement(option.id)] === true;
+          return (
+            <button
+              type="button"
+              key={option.id}
+              onClick={() => setActivePass(option.id)}
+              className={cn(
+                "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold",
+                activePass === option.id ? "border-gold/40 bg-gold/12 text-gold" : "border-white/10 bg-black/24 text-muted-foreground",
+              )}
+            >
+              {!unlocked && <LockKeyhole className="h-3 w-3" />}
+              {option.label}
+            </button>
+          );
+        })}
       </div>
 
       <div className="rounded-xl border border-gold/20 bg-gold/8 p-3">
@@ -2952,12 +2962,12 @@ function ProducerPassPanel({
       {actions && !actions.proposal && (
         <button
           type="button"
-          onClick={() => actions.onGenerate(activePass)}
-          disabled={actions.status === "generating" || actions.status === "applying" || linesFor(sectionText).length < 2}
+          onClick={() => activePassUnlocked ? actions.onGenerate(activePass) : onUpgrade?.()}
+          disabled={actions.status === "generating" || actions.status === "applying" || (activePassUnlocked && linesFor(sectionText).length < 2)}
           className="gold-seal flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold disabled:opacity-50"
         >
-          {actions.status === "generating" ? <RefreshCw className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}
-          {actions.status === "generating" ? "Building Revision..." : `Create ${report.title} Revision`}
+          {actions.status === "generating" ? <RefreshCw className="h-4 w-4 animate-spin" /> : activePassUnlocked ? <WandSparkles className="h-4 w-4" /> : <LockKeyhole className="h-4 w-4" />}
+          {actions.status === "generating" ? "Building Revision..." : activePassUnlocked ? `Create ${report.title} Revision` : `Unlock ${report.title}`}
         </button>
       )}
 
@@ -4801,6 +4811,8 @@ function MobileWriter({
         studioDna={studioDna}
         environmentIntel={environmentIntel}
         actions={producerActions}
+        membership={artistMembership}
+        onUpgrade={onUpgrade}
         onClose={() => setGhostwriterOpen(false)}
       />
     </div>
@@ -4916,6 +4928,8 @@ function GhostwriterSheet({
   studioDna,
   environmentIntel,
   actions,
+  membership,
+  onUpgrade,
   onClose,
 }: {
   open: boolean;
@@ -4925,6 +4939,8 @@ function GhostwriterSheet({
   studioDna: StudioDna;
   environmentIntel: EnvironmentIntelligence;
   actions: ProducerActionControls;
+  membership: WorkspaceMembership | null;
+  onUpgrade: () => void;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -4966,6 +4982,8 @@ function GhostwriterSheet({
             studioDna={studioDna}
             environmentIntel={environmentIntel}
             actions={actions}
+            membership={membership}
+            onUpgrade={onUpgrade}
           />
         </div>
       </section>

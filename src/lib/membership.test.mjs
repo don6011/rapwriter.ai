@@ -12,7 +12,14 @@ const plans = [
     monthly_price_cents: 0,
     annual_price_cents: 0,
     currency: "usd",
-    entitlements: { writing_pad: true, full_pen_view: false },
+    entitlements: {
+      writing_pad: true,
+      ghostwriter: true,
+      full_pen_view: false,
+      hook_doctor: false,
+      commercial_pass: false,
+      performance_coach: false,
+    },
     limits: { active_projects: 3, ghostwriter_actions_monthly: 3 },
     metadata: {},
   },
@@ -25,8 +32,35 @@ const plans = [
     monthly_price_cents: 1499,
     annual_price_cents: 14990,
     currency: "usd",
-    entitlements: { writing_pad: true, full_pen_view: true },
+    entitlements: {
+      writing_pad: true,
+      ghostwriter: true,
+      full_pen_view: true,
+      hook_doctor: true,
+      commercial_pass: true,
+      performance_coach: false,
+    },
     limits: { active_projects: -1, ghostwriter_actions_monthly: 80 },
+    metadata: {},
+  },
+  {
+    id: "artist_studio",
+    audience: "artist",
+    tier: 2,
+    name: "Prep Studio Elite",
+    tagline: "Build a professional creative practice.",
+    monthly_price_cents: 2999,
+    annual_price_cents: 29990,
+    currency: "usd",
+    entitlements: {
+      writing_pad: true,
+      ghostwriter: true,
+      full_pen_view: true,
+      hook_doctor: true,
+      commercial_pass: true,
+      performance_coach: true,
+    },
+    limits: { active_projects: -1, ghostwriter_actions_monthly: 250 },
     metadata: {},
   },
   {
@@ -40,6 +74,19 @@ const plans = [
     currency: "usd",
     entitlements: { producer_storefront: true, producer_intelligence: false },
     limits: { beat_uploads: 5 },
+    metadata: {},
+  },
+  {
+    id: "producer_pro",
+    audience: "producer",
+    tier: 1,
+    name: "Producer Pro",
+    tagline: "Build a serious business.",
+    monthly_price_cents: 2499,
+    annual_price_cents: 24990,
+    currency: "usd",
+    entitlements: { producer_storefront: true, producer_intelligence: true, collections: true },
+    limits: { beat_uploads: -1, collections: -1 },
     metadata: {},
   },
 ];
@@ -102,5 +149,35 @@ describe("membership resolution", () => {
   test("does not create a Producer membership without the role", () => {
     const result = resolveMembership({ roles: ["artist"], plans, now });
     expect(result.producer).toBeNull();
+  });
+
+  test("keeps capability boundaries distinct across Free, Pro, and Elite", () => {
+    const free = resolveMembership({ roles: ["artist"], plans, now });
+    const pro = resolveMembership({ roles: ["artist"], plans, subscriptions: [subscription()], now });
+    const elite = resolveMembership({
+      roles: ["artist"],
+      plans,
+      subscriptions: [subscription({ plan_id: "artist_studio" })],
+      now,
+    });
+
+    expect(hasEntitlement(free, "artist", "ghostwriter")).toBe(true);
+    expect(hasEntitlement(free, "artist", "hook_doctor")).toBe(false);
+    expect(hasEntitlement(pro, "artist", "hook_doctor")).toBe(true);
+    expect(hasEntitlement(pro, "artist", "performance_coach")).toBe(false);
+    expect(hasEntitlement(elite, "artist", "performance_coach")).toBe(true);
+  });
+
+  test("keeps Producer Pro separate from artist membership", () => {
+    const result = resolveMembership({
+      roles: ["artist", "producer"],
+      plans,
+      subscriptions: [subscription({ id: "producer-sub", audience: "producer", plan_id: "producer_pro" })],
+      now,
+    });
+
+    expect(result.artist?.plan.id).toBe("artist_free");
+    expect(result.producer?.plan.id).toBe("producer_pro");
+    expect(hasEntitlement(result, "producer", "producer_intelligence")).toBe(true);
   });
 });
