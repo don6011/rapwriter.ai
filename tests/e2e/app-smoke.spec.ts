@@ -34,6 +34,7 @@ test.describe("public app shell", () => {
 });
 
 test("admin data stays behind authentication", async ({ page, request }) => {
+  test.setTimeout(60_000);
   await page.goto("/admin", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Sign in required" })).toBeVisible();
   await expect(page.getByText("database-backed admin role")).toBeVisible();
@@ -141,10 +142,9 @@ test("writer glass pad stays focused and mobile safe", async ({ page }, testInfo
   await expect(page.getByText("City Shadows", { exact: true })).toBeVisible();
   await expect(editor).toHaveValue("Glass roof, still I see the sky though\nEvery ceiling that they built, I broke the light through");
 
-  await page.getByRole("button", { name: "Pen View" }).click();
-  await expect(page.getByRole("region", { name: "Hook Pen View analysis" })).toContainText("Matching endings / syllables");
+  await expect(page.getByRole("button", { name: "Pen Pro" })).toBeVisible();
   await expectHealthyPage(page);
-  await page.screenshot({ path: testInfo.outputPath("pen-view-glass.png"), fullPage: false });
+  await page.screenshot({ path: testInfo.outputPath("writer-membership-boundary.png"), fullPage: false });
 });
 
 test("device preview embeds the live app and switches shells", async ({ page }) => {

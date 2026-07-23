@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { isAppRole, type AppRole } from "@/lib/access-control";
+import { hasSupabaseSessionCookie } from "@/lib/supabase/auth-cookie";
 import { createClient } from "@/lib/supabase/server";
 
 export async function requireUser() {
   const supabase = await createClient();
+  const cookieStore = await cookies();
+  if (!hasSupabaseSessionCookie(cookieStore.getAll())) {
+    return { supabase, user: null, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  }
+
   const { data, error } = await supabase.auth.getClaims();
   const id = typeof data?.claims?.sub === "string" ? data.claims.sub : null;
   const email = typeof data?.claims?.email === "string" ? data.claims.email : null;

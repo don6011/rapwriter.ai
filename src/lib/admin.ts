@@ -1,8 +1,15 @@
+import { cookies } from "next/headers";
 import { isAppRole, type AppRole } from "@/lib/access-control";
+import { hasSupabaseSessionCookie } from "@/lib/supabase/auth-cookie";
 import { createClient } from "@/lib/supabase/server";
 
 export async function getAdminSession() {
   const supabase = await createClient();
+  const cookieStore = await cookies();
+  if (!hasSupabaseSessionCookie(cookieStore.getAll())) {
+    return { user: null, roles: [] as AppRole[], isAdmin: false, error: null };
+  }
+
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
   const id = typeof claimsData?.claims?.sub === "string" ? claimsData.claims.sub : null;
   const email = typeof claimsData?.claims?.email === "string" ? claimsData.claims.email : null;

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { hasValidRequestOrigin } from "./api/origin.ts";
 import { rateLimitIdentityHash } from "./api/rate-limit.ts";
+import { hasSupabaseSessionCookie } from "./supabase/auth-cookie.ts";
 
 describe("API request protection", () => {
   test("accepts same-origin mutations and rejects foreign browser origins", () => {
@@ -38,5 +39,12 @@ describe("API request protection", () => {
     expect(first).toBe(second);
     expect(first).toMatch(/^[0-9a-f]{64}$/);
     expect(first).not.toContain("artist");
+  });
+
+  test("recognizes only Supabase session cookies", () => {
+    expect(hasSupabaseSessionCookie([{ name: "sb-projectref-auth-token" }])).toBe(true);
+    expect(hasSupabaseSessionCookie([{ name: "sb-projectref-auth-token.0" }])).toBe(true);
+    expect(hasSupabaseSessionCookie([{ name: "sb-projectref-auth-token-code-verifier" }])).toBe(false);
+    expect(hasSupabaseSessionCookie([{ name: "theme" }])).toBe(false);
   });
 });

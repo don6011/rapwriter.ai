@@ -227,6 +227,3 @@ export function useAuth() {
     confirmServerSession,
   };
 }
-
-  };
-}
