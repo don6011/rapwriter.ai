@@ -50,7 +50,6 @@ import {
   useRapWriterData,
   isSessionConflictError,
   type BeatLockerRow,
-  type BoothExportCreateInput,
   type CommerceOrderRow,
   type HookLockerRow,
   type ProfileRow,
@@ -61,7 +60,6 @@ import {
   type SongLockerRow,
   type SessionRow,
 } from "@/hooks/use-rapwriter-data";
-import type { BoothExportRecord } from "@/lib/booth-export";
 import {
   MEMBERSHIP_ACCESS_EVENT,
   membershipAccessCopy,
@@ -178,6 +176,7 @@ import { BoothExportSheet } from "@/components/studio/sheets/BoothExportSheet";
 import { GhostwriterSheet } from "@/components/studio/sheets/GhostwriterSheet";
 import { MobileAuthDrawer } from "@/components/studio/sheets/MobileAuthDrawer";
 import { useAuthDrawer } from "@/components/studio/state/use-auth-drawer";
+import { useBoothExport } from "@/components/studio/state/use-booth-export";
 import { useBeatPlayback } from "@/components/studio/state/use-beat-playback";
 import { useMarketplaceFeed } from "@/components/studio/state/use-marketplace-feed";
 import { useRoughTake } from "@/components/studio/state/use-rough-take";
@@ -248,6 +247,7 @@ export function MobileStudioShell() {
     unlockedProductIds,
     saveSessionProductUnlock,
   } = useMarketplaceFeed(productEntitlements);
+  const boothExport = useBoothExport(createBoothExport);
   const { sheets, openSheet, closeSheet } = useSheetStack();
   const take = useRoughTake(roughTake);
   const {
@@ -298,10 +298,6 @@ export function MobileStudioShell() {
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [syncRetryNonce, setSyncRetryNonce] = useState(0);
   const [syncMessage, setSyncMessage] = useState("Saved on device");
-  const [boothExportDraft, setBoothExportDraft] = useState<BoothExportCreateInput | null>(null);
-  const [boothExportRecord, setBoothExportRecord] = useState<BoothExportRecord | null>(null);
-  const [boothExportStatus, setBoothExportStatus] = useState<"idle" | "saving" | "error">("idle");
-  const [boothExportError, setBoothExportError] = useState<string | null>(null);
   const [studioDna, setStudioDna] = useState<StudioDna>(defaultStudioDna);
   const [studioAirPlaying, setStudioAirPlaying] = useState(false);
   const [producerActionProposal, setProducerActionProposal] = useState<ProducerActionProposal | null>(null);
@@ -1624,9 +1620,7 @@ export function MobileStudioShell() {
       return;
     }
 
-    setBoothExportStatus("idle");
-    setBoothExportError(null);
-    setBoothExportRecord(null);
+    boothExport.beginPrepare();
     try {
       let projectId = activeProjectId ?? null;
       let songId = activeSongId ?? null;
@@ -1663,7 +1657,7 @@ export function MobileStudioShell() {
         });
       }
 
-      setBoothExportDraft({
+      boothExport.stageDraft({
         projectId,
         songId,
         sessionId: session?.song_id === songId ? session.id : null,
@@ -1708,10 +1702,8 @@ export function MobileStudioShell() {
     const lockerBoothReady = boothReadyFromLockerSnapshot(lockerSong.snapshot, sections, completion);
     const linkedRoughTake = roughTake?.song_id === lockerSong.song_id ? roughTake : null;
 
-    setBoothExportStatus("idle");
-    setBoothExportError(null);
-    setBoothExportRecord(null);
-    setBoothExportDraft({
+    boothExport.beginPrepare();
+    boothExport.stageDraft({
       projectId: lockerSong.project_id,
       songId: lockerSong.song_id,
       sessionId: session?.song_id === lockerSong.song_id ? session.id : null,
@@ -1732,20 +1724,6 @@ export function MobileStudioShell() {
     openSheet("boothExport");
   };
 
-  const freezeBoothExport = async () => {
-    if (!boothExportDraft) return;
-    setBoothExportStatus("saving");
-    setBoothExportError(null);
-    try {
-      const created = await createBoothExport(boothExportDraft);
-      if (!created) throw new Error("Sign in to create a Booth Ready export.");
-      setBoothExportRecord(created);
-      setBoothExportStatus("idle");
-    } catch (error) {
-      setBoothExportStatus("error");
-      setBoothExportError(error instanceof Error ? error.message : "Could not freeze this Booth Ready version.");
-    }
-  };
 
   if (!draftLoaded) {
     return (
@@ -2223,13 +2201,13 @@ export function MobileStudioShell() {
         />
         <BoothExportSheet
           open={sheets.boothExport}
-          draft={boothExportDraft}
-          exportRecord={boothExportRecord}
-          status={boothExportStatus}
-          error={boothExportError}
+          draft={boothExport.draft}
+          exportRecord={boothExport.record}
+          status={boothExport.status}
+          error={boothExport.error}
           premiumExports={membership?.artist?.entitlements.premium_exports === true}
           onClose={() => closeSheet("boothExport")}
-          onFreeze={() => void freezeBoothExport()}
+          onFreeze={() => void boothExport.freeze()}
           onUpgrade={() => {
             closeSheet("boothExport");
             setScreen("home");
