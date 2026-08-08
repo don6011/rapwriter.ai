@@ -179,6 +179,7 @@ import { useMarketplaceFeed } from "@/components/studio/state/use-marketplace-fe
 import { useRoughTake } from "@/components/studio/state/use-rough-take";
 import { useSheetStack } from "@/components/studio/state/use-sheet-stack";
 import { useStudioEnvironment } from "@/components/studio/state/use-studio-environment";
+import { useWritingPad } from "@/components/studio/state/use-writing-pad";
 import { NewSongSheet } from "@/components/studio/sheets/NewSongSheet";
 import { PrivateBeatImportSheet } from "@/components/studio/sheets/PrivateBeatImportSheet";
 import { StudioAirSheet } from "@/components/studio/sheets/StudioAirSheet";
@@ -285,6 +286,23 @@ export function MobileStudioShell() {
     hasSavedDna,
   } = useStudioEnvironment({ onNotice: setSyncMessage });
   const {
+    activeSection,
+    setActiveSection,
+    sectionContent,
+    setSectionContent,
+    section,
+    padActionStatus,
+    setPadActionStatus,
+    songSwitchStatus,
+    setSongSwitchStatus,
+    titleDraft,
+    setTitleDraft,
+    titleEditing,
+    setTitleEditing,
+    titleStatus,
+    setTitleStatus,
+  } = useWritingPad(activeSong?.title);
+  const {
     recording,
     recordingSeconds,
     error: recordError,
@@ -298,14 +316,7 @@ export function MobileStudioShell() {
     analyzing: roughTakeAnalyzing,
     analysis: roughTakeAnalysis,
   } = take.state;
-  const [activeSection, setActiveSection] = useState(0);
-  const [sectionContent, setSectionContent] = useState<Record<string, string>>(blankStarterLyrics);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
-  const [padActionStatus, setPadActionStatus] = useState<PadActionStatus>({ state: "idle", message: "" });
-  const [songSwitchStatus, setSongSwitchStatus] = useState<PadActionStatus>({ state: "idle", message: "" });
-  const [titleDraft, setTitleDraft] = useState("Untitled Song");
-  const [titleEditing, setTitleEditing] = useState(false);
-  const [titleStatus, setTitleStatus] = useState<PadActionStatus>({ state: "idle", message: "" });
   const [newSongTitle, setNewSongTitle] = useState("");
   const [newSongStartSection, setNewSongStartSection] = useState("Hook");
   const [newSongUseBeat, setNewSongUseBeat] = useState(true);
@@ -325,7 +336,6 @@ export function MobileStudioShell() {
   const userIdRef = useRef<string | null>(null);
   const activeProjectIdRef = useRef<string | null>(null);
   const activeSongIdRef = useRef<string | null>(null);
-  const section = mobileSections[activeSection];
   const activeProjectId = session?.project_id ?? activeSong?.project_id ?? projects[0]?.id;
   const activeSongId = session?.song_id ?? activeSong?.id;
   activeProjectIdRef.current = activeProjectId ?? null;
@@ -446,7 +456,7 @@ export function MobileStudioShell() {
     const url = new URL(window.location.href);
     url.searchParams.delete("checkout");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-  }, []);
+  }, [setPadActionStatus]);
 
   function changeStudioPack(id: StudioPackId) {
     if (!canUseStudioPack(id)) {
@@ -596,10 +606,6 @@ export function MobileStudioShell() {
   }
 
   useEffect(() => {
-    if (!titleEditing) setTitleDraft(activeSong?.title ?? "Untitled Song");
-  }, [activeSong?.title, titleEditing]);
-
-  useEffect(() => {
     // `params` is read once, before either branch calls replaceState, so both
     // branches still see the original query string.
     const params = new URLSearchParams(window.location.search);
@@ -640,7 +646,7 @@ export function MobileStudioShell() {
     }
 
     setDraftLoaded(true);
-  }, [loading, seekTo, selectBeatKeepingPreview, setActiveStudioPackId, setStudioDna, user?.id]);
+  }, [loading, seekTo, selectBeatKeepingPreview, setActiveSection, setActiveStudioPackId, setSectionContent, setStudioDna, user?.id]);
 
   useEffect(() => {
     if (!draftLoaded) return;
@@ -820,7 +826,7 @@ export function MobileStudioShell() {
     }
 
     setHydratedSessionId(session.id);
-  }, [activeSong, canUseStudioPack, draftLoaded, hydratedSessionId, persistDna, persistPack, seekTo, selectBeatKeepingPreview, session, setActiveStudioPackId, setStudioDna, user?.id]);
+  }, [activeSong, canUseStudioPack, draftLoaded, hydratedSessionId, persistDna, persistPack, seekTo, selectBeatKeepingPreview, session, setActiveSection, setActiveStudioPackId, setSectionContent, setStudioDna, user?.id]);
 
   useEffect(() => {
     if (loadingData || pendingBeatHandledRef.current) return;
