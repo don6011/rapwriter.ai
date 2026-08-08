@@ -139,12 +139,10 @@ import type {
   ProducerActionControls,
   ProducerActionStatus,
   ProductUnlock,
-  SectionVersion,
   SelectedBeat,
   StudioDna,
   StudioPack,
   StudioPackId,
-  VersionHistoryStatus,
 } from "@/lib/studio/types";
 import { LockerBeatCard } from "@/components/studio/locker/cards/LockerBeatCard";
 import { LockerDnaMetric } from "@/components/studio/locker/cards/LockerDnaMetric";
@@ -177,6 +175,7 @@ import { GhostwriterSheet } from "@/components/studio/sheets/GhostwriterSheet";
 import { MobileAuthDrawer } from "@/components/studio/sheets/MobileAuthDrawer";
 import { useAuthDrawer } from "@/components/studio/state/use-auth-drawer";
 import { useBoothExport } from "@/components/studio/state/use-booth-export";
+import { useVersionHistory } from "@/components/studio/state/use-version-history";
 import { useBeatPlayback } from "@/components/studio/state/use-beat-playback";
 import { useMarketplaceFeed } from "@/components/studio/state/use-marketplace-feed";
 import { useRoughTake } from "@/components/studio/state/use-rough-take";
@@ -248,6 +247,7 @@ export function MobileStudioShell() {
     saveSessionProductUnlock,
   } = useMarketplaceFeed(productEntitlements);
   const boothExport = useBoothExport(createBoothExport);
+  const versionHistory = useVersionHistory();
   const { sheets, openSheet, closeSheet } = useSheetStack();
   const take = useRoughTake(roughTake);
   const {
@@ -303,9 +303,6 @@ export function MobileStudioShell() {
   const [producerActionProposal, setProducerActionProposal] = useState<ProducerActionProposal | null>(null);
   const [producerActionStatus, setProducerActionStatus] = useState<ProducerActionStatus>("idle");
   const [producerActionError, setProducerActionError] = useState<string | null>(null);
-  const [sectionVersions, setSectionVersions] = useState<SectionVersion[]>([]);
-  const [versionHistoryStatus, setVersionHistoryStatus] = useState<VersionHistoryStatus>("idle");
-  const [versionHistoryError, setVersionHistoryError] = useState<string | null>(null);
   const studioAirEngineRef = useRef<{ context: AudioContext; source: AudioBufferSourceNode; gain: GainNode } | null>(null);
   const pendingBeatHandledRef = useRef(false);
   const localDraftRef = useRef<MobileDraftRecord | null>(null);
@@ -1167,56 +1164,19 @@ export function MobileStudioShell() {
     }
 
     openSheet("versionHistory");
-    setVersionHistoryStatus("loading");
-    setVersionHistoryError(null);
-    setSectionVersions([]);
-
-    if (!activeSongId) {
-      setVersionHistoryStatus("ready");
-      setVersionHistoryError("History begins after this song completes its first sync.");
-      return;
-    }
-
-    try {
-      const params = new URLSearchParams({
-        song_id: activeSongId,
-        section_key: sectionKeyFromTitle(section.name),
-      });
-      const response = await fetch(`/api/song-sections/versions?${params.toString()}`);
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error ?? "Revision history could not be loaded.");
-      setSectionVersions(Array.isArray(data.versions) ? data.versions : []);
-      setVersionHistoryStatus("ready");
-    } catch (error) {
-      setVersionHistoryError(error instanceof Error ? error.message : "Revision history could not be loaded.");
-      setVersionHistoryStatus("error");
-    }
+    await versionHistory.load(activeSongId, section.name);
   };
 
   const restoreSectionVersion = async (versionId: string) => {
-    setVersionHistoryStatus("restoring");
-    setVersionHistoryError(null);
-    try {
-      const response = await fetch("/api/song-sections/versions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ version_id: versionId }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error ?? "This version could not be restored.");
-
-      const nextSections = data.section_content as Record<string, string> | undefined;
-      if (nextSections) setSectionContent({ ...blankSections(), ...nextSections });
-      setProducerActionProposal(null);
-      setProducerActionStatus("idle");
-      setSaveStatus("saved");
-      setSyncMessage(`${section.name} restored from history`);
-      setVersionHistoryStatus("ready");
-      closeSheet("versionHistory");
-    } catch (error) {
-      setVersionHistoryError(error instanceof Error ? error.message : "This version could not be restored.");
-      setVersionHistoryStatus("error");
-    }
+    const result = await versionHistory.restore(versionId);
+    if (!result.ok) return;
+    if (result.sections) setSectionContent({ ...blankSections(), ...result.sections });
+    setProducerActionProposal(null);
+    setProducerActionStatus("idle");
+    setSaveStatus("saved");
+    setSyncMessage(`${section.name} restored from history`);
+    versionHistory.markRestored();
+    closeSheet("versionHistory");
   };
 
   const loadMobileSong = async (song: SongRow) => {
@@ -2193,9 +2153,9 @@ export function MobileStudioShell() {
           open={sheets.versionHistory}
           sectionName={section.name}
           currentContent={sectionContent[section.name] ?? ""}
-          versions={sectionVersions}
-          status={versionHistoryStatus}
-          error={versionHistoryError}
+          versions={versionHistory.versions}
+          status={versionHistory.status}
+          error={versionHistory.error}
           onClose={() => closeSheet("versionHistory")}
           onRestore={(versionId) => void restoreSectionVersion(versionId)}
         />
