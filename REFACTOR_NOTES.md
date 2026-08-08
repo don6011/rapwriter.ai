@@ -238,3 +238,81 @@ Two more asymmetries preserved as-is: the server-hydration effect clears `analys
 `beat` and `beatPosition` when there is no server take but leaves `url`, `duration` and
 `saved` standing; and `deleteRoughTake` leaves `recording`, `recordStartedAt` and `saving`
 untouched.
+
+---
+
+## Phase 6 notes, and where this stops
+
+### What landed
+
+The four nav destinations, the rough-take strip and the three onboarding surfaces are out.
+The screens are renamed to match their file names (`MobileHome` → `StudioScreen`, and so on);
+`MobileStudioShell` keeps its name as the spec requires.
+
+Two more orchestration groups followed the Phase 5 pattern out of the shell:
+`useStudioCommerce` (checkout paths + the return banner) and `useProducerPass`.
+
+### The shell is 1,879 lines, not under 300
+
+Root state hit its target — **12 `useState` calls, down from 67**, under the ≤15 ceiling.
+Line count did not, and the remaining distance is not more of the same work.
+
+What is still in the shell is one thing wearing four hats: session orchestration.
+
+| Block | Lines | Reads from | Writes to |
+|---|---|---|---|
+| `buildDraftRecord` + 6 sync effects | ~400 | writing pad, beat playback, environment, workspace, metrics | draft ref, save status, sync message, retry nonce |
+| `loadMobileSong` / `createMobileSong` | ~185 | all of the above | all of the above |
+| `saveRoughTake` + `runPadAction` + `padActions` | ~200 | rough take, writing pad, beat, environment, metrics | rough take, pad status |
+| booth export prep | ~110 | writing pad, beat, metrics, profile, locker | booth export |
+| JSX | ~520 | everything | — |
+
+`loadMobileSong` alone touches `take`, `stopBeatPreview`, `stopStudioAir`, `setSectionContent`,
+`setActiveSection`, `selectBeatKeepingPreview`, `setActiveStudioPackId`, `setStudioDna`,
+`seekTo`, `positionSeconds`, `canUseStudioPack`, `saveNow`, `loadLatestRoughTake`,
+`setHydratedSessionId`, `setSaveStatus`, `setSyncMessage`, `setSongSwitchStatus`, plus
+`completionPct`, `boothReady`, `totalBars`, `section`, `selectedBeat`, `activeStudioPack`,
+`sectionContent`, `activeProjectId`, `activeSongId` and `session`. Lifting it into a hook
+means threading ~26 values through a parameter object. The coupling does not go away; it
+becomes ceremony, and the call site gets harder to read, not easier. Rule 6 says not to
+invent an abstraction to get green, so these were left in place.
+
+**The decision this needs, which is yours to make:** the only way these orchestrators stop
+needing 26 parameters is if they can read session state without being handed it — a
+`StudioSessionContext` (or a store) that the hooks publish into and the orchestrators and
+screens subscribe to. That is precisely the "reach for context" move the spec deferred out
+of Phase 3, and Phase 5's brief never picked it back up. It is a real design change with a
+real behavior surface (re-render boundaries change when props become context reads), so it
+belongs in its own commit with its own review, not smuggled in under a line-count target.
+
+Everything up to that boundary is done. Pick the shape and the rest is mechanical.
+
+### Two screens over the ~400 budget
+
+`StudioScreen.tsx` is 457 and `WriterScreen.tsx` is 404. In both, roughly 60 lines are the
+props type and 240–300 are JSX. Splitting the JSX further means new sub-components that each
+need most of the same props — the same ceremony problem in miniature, for a soft number.
+Once the context decision above lands, both drop naturally. Left alone.
+
+### Wanted to fix, left alone
+
+- **`marketplaceFeedError` conflates empty and failed** (`use-marketplace-feed.ts`). Every
+  producer-feed failure reports "Producer drops will appear when the live feed reconnects.",
+  including a 500. Flagged in the spec as tracked separately; preserved verbatim with a
+  comment at the site.
+- **`createMobileSong` and `loadMobileSong` reset the take differently.** The former leaves
+  `analysis` and `analyzing` set, the latter clears them. Looks like a missed line rather
+  than intent, but changing it changes behavior. Kept as two distinct reducer actions so the
+  difference is visible instead of buried in setter order.
+- **`beatTimerRef` is dead.** It is cleared and nulled in `stopBeatPreview` and never
+  assigned a timer. Moved as-is into `use-beat-playback.ts`.
+- **Two sheets can be open at once.** Detailed under Phase 4. The two hand-written
+  exclusions in the codebase should become one invariant.
+- **`previewStudioPack` is gated on `process.env.NODE_ENV`** and silently no-ops in
+  production. Left exactly as found.
+
+### Verification
+
+`bun run typecheck`, `bun run lint` and `bun run test:unit` (102 tests) pass on every commit.
+`bun run test:e2e` cannot run in this sandbox as written — see the Phase 3 note for why and
+what was run instead.
