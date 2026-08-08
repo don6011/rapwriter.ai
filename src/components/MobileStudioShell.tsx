@@ -4,10 +4,6 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { PremiumMarketplace, type MarketCategory } from "@/components/PremiumMarketplace";
 import { analyzeLyrics } from "@/lib/booth-ready-v2";
 import {
-  type ProducerActionProposal,
-  type ProducerActionType,
-} from "@/lib/producer-actions";
-import {
   hasArtistWorkspace,
 } from "@/lib/account-role";
 import {
@@ -21,12 +17,10 @@ import {
 import {
   MEMBERSHIP_ACCESS_EVENT,
   membershipAccessCopy,
-  notifyMembershipAccess,
   type MembershipAccessNotice,
 } from "@/lib/client/membership-access";
 import { consumePendingBeat, type Beat } from "@/lib/marketplace";
 import { resolveBeatPreviewUrl } from "@/lib/beat-playback";
-import { studioRoomProducts } from "@/lib/product-catalog";
 import {
   defaultStudioRoomId,
   resolveStudioRoomAccess,
@@ -75,8 +69,6 @@ import type {
   MobileDraftRecord,
   MobileNavView,
   PadActions,
-  ProducerActionStatus,
-  ProductUnlock,
   SelectedBeat,
   StudioDna,
   StudioPackId,
@@ -96,6 +88,8 @@ import { useMarketplaceFeed } from "@/components/studio/state/use-marketplace-fe
 import { useRoughTake } from "@/components/studio/state/use-rough-take";
 import { useSheetStack } from "@/components/studio/state/use-sheet-stack";
 import { useStudioEnvironment } from "@/components/studio/state/use-studio-environment";
+import { useProducerPass } from "@/components/studio/state/use-producer-pass";
+import { useStudioCommerce } from "@/components/studio/state/use-studio-commerce";
 import { useWritingPad } from "@/components/studio/state/use-writing-pad";
 import { NewSongSheet } from "@/components/studio/sheets/NewSongSheet";
 import { StudioDnaSheet } from "@/components/studio/sheets/StudioDnaSheet";
@@ -222,6 +216,13 @@ export function MobileStudioShell() {
     titleStatus,
     setTitleStatus,
   } = useWritingPad(activeSong?.title);
+  const { unlockProduct, unlockStudioPack, licenseBeat } = useStudioCommerce({
+    user,
+    unlockProductEntitlement,
+    saveSessionProductUnlock,
+    requestAuth,
+    setPadActionStatus,
+  });
   const {
     recording,
     recordingSeconds,
@@ -243,9 +244,6 @@ export function MobileStudioShell() {
   const [hydratedSessionId, setHydratedSessionId] = useState<string | null>(null);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [syncRetryNonce, setSyncRetryNonce] = useState(0);
-  const [producerActionProposal, setProducerActionProposal] = useState<ProducerActionProposal | null>(null);
-  const [producerActionStatus, setProducerActionStatus] = useState<ProducerActionStatus>("idle");
-  const [producerActionError, setProducerActionError] = useState<string | null>(null);
   const pendingBeatHandledRef = useRef(false);
   const localDraftRef = useRef<MobileDraftRecord | null>(null);
   const skipNextDraftWriteRef = useRef(false);
@@ -366,18 +364,6 @@ export function MobileStudioShell() {
     };
   }, []);
 
-  useEffect(() => {
-    const checkout = new URLSearchParams(window.location.search).get("checkout");
-    if (!checkout) return;
-    setPadActionStatus({
-      state: checkout === "success" ? "saved" : "error",
-      message: checkout === "success" ? "Purchase complete. Your studio access is syncing." : "Checkout cancelled. Nothing was charged.",
-    });
-    const url = new URL(window.location.href);
-    url.searchParams.delete("checkout");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [setPadActionStatus]);
-
   function changeStudioPack(id: StudioPackId) {
     if (!canUseStudioPack(id)) {
       setSyncMessage(`${getStudioPack(id).label} is locked. Preview it in Studio Store first.`);
@@ -442,87 +428,6 @@ export function MobileStudioShell() {
     if (playBeat && !playing && selectedBeat.id !== EMPTY_BEAT.id && resolveBeatPreviewUrl(selectedBeat)) {
       toggleBeatPlayback();
     }
-  }
-
-  function unlockProduct(product: Omit<ProductUnlock, "unlockedAt">) {
-    if (!user) {
-      requestAuth("Sign in to sync this purchase across devices.");
-      setPadActionStatus({ state: "error", message: `${product.title} needs checkout before it unlocks.` });
-      return;
-    }
-
-    if (product.price === "$0") {
-      setPadActionStatus({ state: "saving", message: `Saving ${product.title}...` });
-      void unlockProductEntitlement(product.id)
-        .then(() => {
-          saveSessionProductUnlock(product);
-          setPadActionStatus({ state: "saved", message: `${product.title} saved.` });
-        })
-        .catch((err) => {
-          setPadActionStatus({ state: "error", message: err instanceof Error ? err.message : "Could not save this producer." });
-        });
-      return;
-    }
-
-    setPadActionStatus({ state: "saving", message: `Opening secure checkout for ${product.title}...` });
-    void fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ product_id: product.id }),
-    })
-      .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Checkout could not be started.");
-        if (!data.checkout_url) throw new Error("Stripe did not return a checkout link.");
-        window.location.assign(data.checkout_url);
-      })
-      .catch((err) => {
-        setPadActionStatus({ state: "error", message: err instanceof Error ? err.message : "Checkout could not be started." });
-      });
-  }
-
-  function unlockStudioPack(id: StudioPackId) {
-    const product = studioRoomProducts.find((item) => item.id === getStudioRoomProductId(id));
-    if (!product) {
-      setPadActionStatus({ state: "error", message: "This room is not available for purchase yet." });
-      return;
-    }
-    unlockProduct({
-      id: product.id,
-      title: product.title,
-      category: "Studio Room",
-      detail: product.detail,
-      price: product.price,
-    });
-  }
-
-  function licenseBeat(beat: Beat) {
-    if (!user) {
-      requestAuth("Sign in to license this beat and keep it in your Locker.");
-      return;
-    }
-
-    const tier = beat.prices[0];
-    if (!tier) {
-      setPadActionStatus({ state: "error", message: "No license is available for this beat." });
-      return;
-    }
-
-    setPadActionStatus({ state: "saving", message: `Opening secure checkout for ${beat.title}...` });
-    void fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ beat_id: beat.id, license: tier.license }),
-    })
-      .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Checkout could not be started.");
-        if (!data.checkout_url) throw new Error("Stripe did not return a checkout link.");
-        window.location.assign(data.checkout_url);
-      })
-      .catch((err) => {
-        setPadActionStatus({ state: "error", message: err instanceof Error ? err.message : "Checkout could not be started." });
-      });
   }
 
   useEffect(() => {
@@ -866,26 +771,22 @@ export function MobileStudioShell() {
     return () => window.clearInterval(timer);
   }, [playing, positionSeconds, queueUrgentSessionSync]);
 
-  const generateProducerRevision = async (actionType: ProducerActionType, attempt = 0) => {
-    if (!user) {
-      requestAuth("Sign in to run a Producer Pass and save its history.");
-      return;
-    }
-
-    const currentContent = sectionContent[section.name]?.trim() ?? "";
-    if (countBars(currentContent) < 2) {
-      setProducerActionError(`Write at least two lines in ${section.name} before running this pass.`);
-      setProducerActionStatus("error");
-      return;
-    }
-
-    setProducerActionStatus("generating");
-    setProducerActionError(null);
-    try {
+  const producerPass = useProducerPass({
+    signedIn: Boolean(user),
+    requestAuth,
+    sectionName: section.name,
+    sectionContent,
+    setSectionContent,
+    selectedBeat,
+    studioDna,
+    onNotice: setSyncMessage,
+    onSaved: () => setSaveStatus("saved"),
+    onEdit: () => {
+      conflictBlockedRef.current = false;
+    },
+    prepareSession: async () => {
       let projectId: string | undefined = activeProjectId;
       let songId: string | undefined = activeSongId;
-      let sessionId = session?.id;
-
       if (!projectId || !songId) {
         const created = await ensureWorkspace({
           title: "Untitled Project",
@@ -896,10 +797,11 @@ export function MobileStudioShell() {
         projectId = created?.project.id;
         songId = created?.song.id;
       }
-
-      if (!projectId || !songId) throw new Error("Could not prepare this writing session.");
-
-      const syncedSession = await saveNow({
+      if (!projectId || !songId) return null;
+      return { projectId, songId, sessionId: session?.id };
+    },
+    saveBeforePass: ({ projectId, songId, sessionId }) =>
+      saveNow({
         projectId,
         songId,
         sessionId,
@@ -912,97 +814,8 @@ export function MobileStudioShell() {
         completionPct,
         boothScore: boothReady.score,
         totalBars,
-      });
-      sessionId = syncedSession?.id ?? sessionId;
-
-      const response = await fetch("/api/producer-actions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          request_id: crypto.randomUUID(),
-          project_id: projectId,
-          song_id: songId,
-          session_id: sessionId ?? null,
-          action_type: actionType,
-          section_name: section.name,
-          section_content: currentContent,
-          attempt,
-          beat: selectedBeat,
-          studio_dna: studioDna,
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        notifyMembershipAccess(data, response.status);
-        throw new Error(data.error ?? "Producer Pass could not create a revision.");
-      }
-
-      setProducerActionProposal(data.proposal as ProducerActionProposal);
-      setProducerActionStatus("preview");
-      setSyncMessage("Revision ready to preview");
-    } catch (error) {
-      setProducerActionError(error instanceof Error ? error.message : "Producer Pass could not create a revision.");
-      setProducerActionStatus("error");
-    }
-  };
-
-  const resolveProducerRevision = async (decision: "accept" | "reject" | "revert") => {
-    if (!producerActionProposal) return;
-    setProducerActionStatus("applying");
-    setProducerActionError(null);
-    try {
-      const response = await fetch(`/api/producer-actions/${producerActionProposal.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ decision }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error ?? "Producer revision could not be updated.");
-
-      if (decision === "reject") {
-        setProducerActionProposal(null);
-        setProducerActionStatus("idle");
-        setSyncMessage("Revision rejected");
-        return;
-      }
-
-      const nextSections = data.section_content as Record<string, string> | undefined;
-      if (nextSections) setSectionContent({ ...blankSections(), ...nextSections });
-      setSaveStatus("saved");
-      setProducerActionProposal((current) => current ? { ...current, status: decision === "accept" ? "accepted" : "reverted" } : current);
-      setProducerActionStatus(decision === "accept" ? "accepted" : "reverted");
-      setSyncMessage(decision === "accept" ? "Producer revision saved" : "Original lyrics restored");
-    } catch (error) {
-      setProducerActionError(error instanceof Error ? error.message : "Producer revision could not be updated.");
-      setProducerActionStatus("error");
-    }
-  };
-
-  const tryAnotherProducerRevision = async () => {
-    const current = producerActionProposal;
-    if (!current) return;
-    try {
-      await fetch(`/api/producer-actions/${current.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ decision: "reject" }),
-      });
-    } catch {
-      // A fresh preview can still be generated if retiring the old preview fails.
-    }
-    setProducerActionProposal(null);
-    void generateProducerRevision(current.actionType, current.attempt + 1);
-  };
-
-  const changeActiveSectionContent = (value: string) => {
-    if (producerActionProposal) {
-      setProducerActionProposal(null);
-      setProducerActionStatus("idle");
-      setProducerActionError(null);
-    }
-    conflictBlockedRef.current = false;
-    setSectionContent((previous) => ({ ...previous, [section.name]: value }));
-  };
+      }),
+  });
 
   const openVersionHistory = async () => {
     if (!user) {
@@ -1024,8 +837,7 @@ export function MobileStudioShell() {
     const result = await versionHistory.restore(versionId);
     if (!result.ok) return;
     if (result.sections) setSectionContent({ ...blankSections(), ...result.sections });
-    setProducerActionProposal(null);
-    setProducerActionStatus("idle");
+    producerPass.discardProposal();
     setSaveStatus("saved");
     setSyncMessage(`${section.name} restored from history`);
     versionHistory.markRestored();
@@ -1900,7 +1712,7 @@ export function MobileStudioShell() {
             onOpenHistory={() => void openVersionHistory()}
             onSyncRequest={() => requestAuth("Sign in to protect this draft and sync it across devices.")}
             onSetActiveSection={setActiveSection}
-            onChange={changeActiveSectionContent}
+            onChange={producerPass.changeActiveSectionContent}
             onToggleBeat={toggleBeatPlayback}
             onSeekBeat={seekBeatPlayback}
             onCommitBeatSeek={queueUrgentSessionSync}
@@ -1921,14 +1733,14 @@ export function MobileStudioShell() {
               setSyncMessage("Choose the membership that fits your studio");
             }}
             producerActions={{
-              proposal: producerActionProposal,
-              status: producerActionStatus,
-              error: producerActionError,
-              onGenerate: (actionType, attempt) => void generateProducerRevision(actionType, attempt),
-              onAccept: () => void resolveProducerRevision("accept"),
-              onReject: () => void resolveProducerRevision("reject"),
-              onRetry: () => void tryAnotherProducerRevision(),
-              onUndo: () => void resolveProducerRevision("revert"),
+              proposal: producerPass.proposal,
+              status: producerPass.status,
+              error: producerPass.error,
+              onGenerate: (actionType, attempt) => void producerPass.generate(actionType, attempt),
+              onAccept: () => void producerPass.resolve("accept"),
+              onReject: () => void producerPass.resolve("reject"),
+              onRetry: () => void producerPass.retry(),
+              onUndo: () => void producerPass.resolve("revert"),
             }}
           />
         )}
