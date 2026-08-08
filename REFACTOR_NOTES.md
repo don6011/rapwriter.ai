@@ -192,3 +192,49 @@ instead of reporting an unresolved name, so the missing import surfaced as
 `'History' cannot be used as a JSX component` rather than `Cannot find name`. Any future
 extraction should watch for icon names that collide with DOM globals; `History` is the only
 one in this file's import list.
+
+---
+
+## Phase 5b — the discriminated union the spec asked for is not achievable
+
+The spec says the thirteen rough-take values are mutually exclusive
+(`idle → recording → captured → analyzing → saved`) and that a discriminated union on
+`status` would make illegal combinations unrepresentable. The first half of that is not
+true of this code, and acting on it would change behavior.
+
+`startRecording` does **not** clear the previous take. It clears `analysis` and
+`analyzing`, sets `beat`/`beatPosition` for the new attempt, and starts the recorder — but
+`url`, `blob`, `duration` and `saved` all survive until `recorder.onstop` replaces them.
+So while a retake is in progress the app is genuinely both `recording` **and** holding a
+`captured`/`saved` take, and that overlap is load-bearing in two places:
+
+- `boothReady` scores off `roughTakeExists: Boolean(roughTakeUrl)` and `roughTakeSaved`, so
+  the previous take keeps counting toward the score for the whole duration of the retake.
+- `RoughTakeStrip` renders `recording ? … : roughTakeUrl ? …`, which only reads as a
+  precedence choice because both can be true at once.
+
+A union where the `recording` arm carries no take payload would drop the score mid-retake
+and change what the strip shows. A union where every arm carries the same payload is not a
+discriminated union — it is the current object with a redundant tag.
+
+What was built instead: `useReducer` over a single state object with twenty named actions.
+That removes the setter soup the spec was actually aiming at — transitions that were 8
+separate `setState` calls are now one atomic dispatch — and makes illegal combinations
+unreachable *through the action API*, without changing a single observable value. Rule 6
+says not to invent an abstraction to get green, so the union was not forced.
+
+Two reset paths that look like duplicates are deliberately kept as separate actions,
+because they are not the same:
+
+- `take/reset-for-song-switch` (from `loadMobileSong`) clears blob, url, duration, saved,
+  analysis and analyzing.
+- `take/reset-for-new-song` (from `createMobileSong`) clears only blob, url, duration and
+  saved — it leaves `analysis` and `analyzing` alone.
+
+Whether that asymmetry is intentional or a missed line in `createMobileSong` is a real
+question, but answering it would change behavior, so both are preserved exactly.
+
+Two more asymmetries preserved as-is: the server-hydration effect clears `analysis`,
+`beat` and `beatPosition` when there is no server take but leaves `url`, `duration` and
+`saved` standing; and `deleteRoughTake` leaves `recording`, `recordStartedAt` and `saving`
+untouched.

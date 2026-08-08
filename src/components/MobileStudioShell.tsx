@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Award,
   Briefcase,
@@ -35,11 +35,7 @@ import {
 import { BrandLogo } from "@/components/BrandLogo";
 import { MembershipCard } from "@/components/MembershipCard";
 import { PremiumMarketplace, type MarketCategory } from "@/components/PremiumMarketplace";
-import {
-  analyzeLyrics,
-  analyzeRoughTakeAudio,
-  type RoughTakeAnalysis,
-} from "@/lib/booth-ready-v2";
+import { analyzeLyrics, type RoughTakeAnalysis } from "@/lib/booth-ready-v2";
 import {
   type ProducerActionProposal,
   type ProducerActionType,
@@ -99,7 +95,6 @@ import {
 import {
   boothReadyFromLockerSnapshot,
   getSongState,
-  isRoughTakeAnalysis,
   scoreBoothReady,
 } from "@/lib/studio/booth-ready";
 import {
@@ -185,6 +180,7 @@ import { BoothExportSheet } from "@/components/studio/sheets/BoothExportSheet";
 import { GhostwriterSheet } from "@/components/studio/sheets/GhostwriterSheet";
 import { MobileAuthDrawer } from "@/components/studio/sheets/MobileAuthDrawer";
 import { useAuthDrawer } from "@/components/studio/state/use-auth-drawer";
+import { useRoughTake } from "@/components/studio/state/use-rough-take";
 import { NewSongSheet } from "@/components/studio/sheets/NewSongSheet";
 import { PrivateBeatImportSheet } from "@/components/studio/sheets/PrivateBeatImportSheet";
 import { StudioAirSheet } from "@/components/studio/sheets/StudioAirSheet";
@@ -246,19 +242,21 @@ export function MobileStudioShell() {
   const [beatDuration, setBeatDuration] = useState(getBeatDurationSeconds(EMPTY_BEAT));
   const [beatError, setBeatError] = useState<string | null>(null);
   const [selectedBeat, setSelectedBeat] = useState<SelectedBeat>(EMPTY_BEAT);
-  const [recording, setRecording] = useState(false);
-  const [recordStartedAt, setRecordStartedAt] = useState<number | null>(null);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [roughTakeUrl, setRoughTakeUrl] = useState<string | null>(null);
-  const [roughTakeBlob, setRoughTakeBlob] = useState<Blob | null>(null);
-  const [roughTakeDuration, setRoughTakeDuration] = useState(0);
-  const [roughTakeBeat, setRoughTakeBeat] = useState<SelectedBeat | null>(null);
-  const [roughTakeBeatPosition, setRoughTakeBeatPosition] = useState(0);
-  const [roughTakeSaved, setRoughTakeSaved] = useState(false);
-  const [roughTakeSaving, setRoughTakeSaving] = useState(false);
-  const [roughTakeAnalyzing, setRoughTakeAnalyzing] = useState(false);
-  const [roughTakeAnalysis, setRoughTakeAnalysis] = useState<RoughTakeAnalysis | null>(null);
-  const [recordError, setRecordError] = useState<string | null>(null);
+  const take = useRoughTake(roughTake);
+  const {
+    recording,
+    recordingSeconds,
+    error: recordError,
+    url: roughTakeUrl,
+    blob: roughTakeBlob,
+    duration: roughTakeDuration,
+    beat: roughTakeBeat,
+    beatPosition: roughTakeBeatPosition,
+    saved: roughTakeSaved,
+    saving: roughTakeSaving,
+    analyzing: roughTakeAnalyzing,
+    analysis: roughTakeAnalysis,
+  } = take.state;
   const [activeSection, setActiveSection] = useState(0);
   const [sectionContent, setSectionContent] = useState<Record<string, string>>(blankStarterLyrics);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
@@ -298,13 +296,6 @@ export function MobileStudioShell() {
   const [sectionVersions, setSectionVersions] = useState<SectionVersion[]>([]);
   const [versionHistoryStatus, setVersionHistoryStatus] = useState<VersionHistoryStatus>("idle");
   const [versionHistoryError, setVersionHistoryError] = useState<string | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const recorderChunksRef = useRef<BlobPart[]>([]);
-  const recorderStreamRef = useRef<MediaStream | null>(null);
-  const roughTakeAnalysisRunRef = useRef(0);
-  const roughTakeUrlRef = useRef<string | null>(null);
-  const recordBeatRef = useRef<SelectedBeat | null>(null);
-  const recordBeatPositionRef = useRef(0);
   const beatAudioRef = useRef<HTMLAudioElement | null>(null);
   const beatStartedAtRef = useRef<number | null>(null);
   const beatOffsetRef = useRef(0);
@@ -882,9 +873,6 @@ export function MobileStudioShell() {
 
   useEffect(() => {
     return () => {
-      recorderRef.current?.stop();
-      recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
-      if (roughTakeUrlRef.current) URL.revokeObjectURL(roughTakeUrlRef.current);
       stopBeatPreview({ reset: false });
       stopStudioAir();
     };
@@ -907,34 +895,6 @@ export function MobileStudioShell() {
     setBeatDuration(getBeatDurationSeconds(selectedBeat));
     setBeatError(null);
   }, [selectedBeat, stopBeatPreview]);
-
-  useEffect(() => {
-    if (!recording || !recordStartedAt) return;
-    const timer = window.setInterval(() => {
-      setRecordingSeconds(Math.max(0, Math.floor((Date.now() - recordStartedAt) / 1000)));
-    }, 250);
-    return () => window.clearInterval(timer);
-  }, [recordStartedAt, recording]);
-
-  useEffect(() => {
-    if (roughTakeBlob) return;
-    if (!roughTake) {
-      setRoughTakeAnalysis(null);
-      setRoughTakeBeat(null);
-      setRoughTakeBeatPosition(0);
-      return;
-    }
-    if (roughTakeUrlRef.current) {
-      URL.revokeObjectURL(roughTakeUrlRef.current);
-      roughTakeUrlRef.current = null;
-    }
-    setRoughTakeUrl(roughTake.signed_url);
-    setRoughTakeDuration(roughTake.duration_seconds);
-    setRoughTakeBeat(beatSnapshotFromRecord(roughTake.beat_snapshot) ?? null);
-    setRoughTakeBeatPosition(Math.max(0, Number(roughTake.beat_position_seconds) || 0));
-    setRoughTakeSaved(true);
-    setRoughTakeAnalysis(isRoughTakeAnalysis(roughTake.analysis) ? roughTake.analysis : null);
-  }, [roughTake, roughTakeBlob]);
 
   useEffect(() => {
     if (loading) return;
@@ -1515,12 +1475,7 @@ export function MobileStudioShell() {
       stopStudioAir();
       setSectionContent(nextSections);
       setActiveSection(nextSectionIndex >= 0 ? nextSectionIndex : 0);
-      setRoughTakeBlob(null);
-      setRoughTakeUrl(null);
-      setRoughTakeDuration(0);
-      setRoughTakeSaved(false);
-      setRoughTakeAnalysis(null);
-      setRoughTakeAnalyzing(false);
+      take.resetForSongSwitch();
       skipNextBeatResetRef.current = true;
       setSelectedBeat(nextBeat);
       setActiveStudioPackId(nextPack);
@@ -1625,10 +1580,7 @@ export function MobileStudioShell() {
 
       setSectionContent(nextSections);
       setActiveSection(nextSectionIndex);
-      setRoughTakeBlob(null);
-      setRoughTakeUrl(null);
-      setRoughTakeDuration(0);
-      setRoughTakeSaved(false);
+      take.resetForNewSong();
       stopBeatPreview({ reset: true });
       stopStudioAir();
       skipNextBeatResetRef.current = true;
@@ -1696,111 +1648,34 @@ export function MobileStudioShell() {
     }
   };
 
-  const stopRecording = () => {
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state !== "inactive") recorder.stop();
-  };
-
   const startRecording = async () => {
-    setRecordError(null);
     stopStudioAir();
-    roughTakeAnalysisRunRef.current += 1;
-    setRoughTakeAnalysis(null);
-    setRoughTakeAnalyzing(false);
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      setRecordError("Recording is not available in this browser.");
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      recorderStreamRef.current = stream;
-      recorderChunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
-      const startedAt = Date.now();
-      const beatAtStart = { ...selectedBeat };
-      const beatPositionAtStart = Math.max(0, beatCurrentTimeRef.current);
-      recorderRef.current = recorder;
-      recordBeatRef.current = beatAtStart;
-      recordBeatPositionRef.current = beatPositionAtStart;
-      setRoughTakeBeat(beatAtStart);
-      setRoughTakeBeatPosition(beatPositionAtStart);
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) recorderChunksRef.current.push(event.data);
-      };
-
-      recorder.onstop = async () => {
-        const analysisRunId = roughTakeAnalysisRunRef.current;
-        const duration = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-        const blob = new Blob(recorderChunksRef.current, { type: recorder.mimeType || "audio/webm" });
-        const url = URL.createObjectURL(blob);
-        if (roughTakeUrlRef.current) URL.revokeObjectURL(roughTakeUrlRef.current);
-        roughTakeUrlRef.current = url;
-        setRoughTakeBlob(blob);
-        setRoughTakeUrl(url);
-        setRoughTakeDuration(duration);
-        setRoughTakeSaved(false);
-        setRoughTakeAnalyzing(true);
-        setRecording(false);
-        setRecordStartedAt(null);
-        setRecordingSeconds(0);
-        recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
-        recorderStreamRef.current = null;
-        try {
-          const analysis = await analyzeRoughTakeAudio(blob);
-          if (roughTakeAnalysisRunRef.current === analysisRunId) setRoughTakeAnalysis(analysis);
-        } catch {
-          if (roughTakeAnalysisRunRef.current === analysisRunId) {
-            setRoughTakeAnalysis(null);
-            setRecordError("Take recorded. Performance analysis was unavailable in this browser.");
-          }
-        } finally {
-          if (roughTakeAnalysisRunRef.current === analysisRunId) setRoughTakeAnalyzing(false);
-        }
-      };
-
-      if (!playing) {
+    await take.startRecording({
+      captureBeat: () => ({
+        beat: { ...selectedBeat },
+        beatPosition: Math.max(0, beatCurrentTimeRef.current),
+      }),
+      beforeStart: async (beatAtStart) => {
+        if (playing) return;
         try {
           await startBeatPreview(beatAtStart);
         } catch {
           setBeatError("The beat could not start, but recording is still available.");
         }
-      }
-      recorder.start();
-      setRecording(true);
-      setRecordingSeconds(0);
-      setRecordStartedAt(startedAt);
-    } catch {
-      setRecordError("Microphone permission was blocked.");
-      setRecording(false);
-      setRecordStartedAt(null);
-    }
+      },
+    });
   };
 
   const toggleRecording = () => {
     if (recording) {
-      stopRecording();
+      take.stopRecording();
       return;
     }
     void startRecording();
   };
 
   const deleteRoughTake = () => {
-    roughTakeAnalysisRunRef.current += 1;
-    if (roughTakeUrlRef.current) URL.revokeObjectURL(roughTakeUrlRef.current);
-    roughTakeUrlRef.current = null;
-    setRoughTakeBlob(null);
-    setRoughTakeUrl(null);
-    setRoughTakeDuration(0);
-    setRoughTakeBeat(null);
-    setRoughTakeBeatPosition(0);
-    recordBeatRef.current = null;
-    recordBeatPositionRef.current = 0;
-    setRoughTakeSaved(false);
-    setRoughTakeAnalysis(null);
-    setRoughTakeAnalyzing(false);
-    setRecordError(null);
+    take.deleteTake();
   };
 
   const saveRoughTake = async () => {
@@ -1809,16 +1684,15 @@ export function MobileStudioShell() {
       return;
     }
     if (!roughTakeBlob) {
-      setRecordError(roughTakeSaved ? "This take is already saved." : "Record a take before saving.");
+      take.blockSave(roughTakeSaved ? "This take is already saved." : "Record a take before saving.");
       return;
     }
     if (roughTakeAnalyzing) {
-      setRecordError("Let the delivery read finish before keeping this take.");
+      take.blockSave("Let the delivery read finish before keeping this take.");
       return;
     }
 
-    setRoughTakeSaving(true);
-    setRecordError(null);
+    take.saveStarted();
     try {
       let projectId: string | undefined = activeProjectId;
       let songId: string | undefined = activeSongId;
@@ -1860,15 +1734,14 @@ export function MobileStudioShell() {
         sectionName: section.name,
         durationSeconds: roughTakeDuration,
         analysis: roughTakeAnalysis,
-        beat: roughTakeBeat ?? recordBeatRef.current ?? selectedBeat,
-        beatPositionSeconds: roughTakeBeatPosition || recordBeatPositionRef.current,
+        beat: roughTakeBeat ?? take.recordBeatRef.current ?? selectedBeat,
+        beatPositionSeconds: roughTakeBeatPosition || take.recordBeatPositionRef.current,
       });
-      setRoughTakeSaved(true);
-      setRoughTakeBlob(null);
+      take.saveSucceeded();
     } catch (err) {
-      setRecordError(err instanceof Error ? err.message : "Could not save rough take.");
+      take.saveFailed(err instanceof Error ? err.message : "Could not save rough take.");
     } finally {
-      setRoughTakeSaving(false);
+      take.saveSettled();
     }
   };
 
