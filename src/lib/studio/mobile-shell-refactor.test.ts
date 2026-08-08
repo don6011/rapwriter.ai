@@ -1,0 +1,113 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { roughTakeReducer, type RoughTakeState } from "@/components/studio/state/use-rough-take";
+import { readMobileDraftRecord, writeMobileDraftRecord } from "@/lib/studio/draft-storage";
+import { defaultStudioDna } from "@/lib/studio/dna";
+import { EMPTY_BEAT } from "@/lib/studio/beat-snapshot";
+
+describe("mobile studio shell refactor contracts", () => {
+  test("keeps the saved take and Booth Ready analysis visible during a retake", () => {
+    const analysis = {
+      version: 2 as const,
+      durationSeconds: 12,
+      rms: 0.22,
+      peak: 0.71,
+      dynamicRange: 0.49,
+      clippingRatio: 0,
+      silenceRatio: 0.05,
+      onsetCount: 18,
+      wordsPerMinuteEstimate: 96,
+      presenceScore: 78,
+      controlScore: 74,
+      energyScore: 81,
+      timingScore: 77,
+      notes: [],
+    };
+    const savedTake = {
+      recording: false,
+      recordStartedAt: null,
+      recordingSeconds: 0,
+      error: "old error",
+      url: "blob:existing-take",
+      blob: null,
+      duration: 12,
+      beat: EMPTY_BEAT,
+      beatPosition: 34,
+      saved: true,
+      saving: false,
+      analyzing: false,
+      analysis,
+    } satisfies RoughTakeState;
+
+    const armed = roughTakeReducer(savedTake, { type: "record/arm" });
+    const recording = roughTakeReducer(armed, { type: "record/started", startedAt: 1000 });
+
+    expect(recording.recording).toBe(true);
+    expect(recording.url).toBe(savedTake.url);
+    expect(recording.duration).toBe(savedTake.duration);
+    expect(recording.saved).toBe(true);
+    expect(recording.analysis).toBe(analysis);
+    expect(recording.error).toBeNull();
+  });
+
+  test("restores an owner-scoped draft and active section after storage reload", () => {
+    const values = new Map<string, string>();
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        localStorage: {
+          getItem: (key: string) => values.get(key) ?? null,
+          setItem: (key: string, value: string) => values.set(key, value),
+        },
+      },
+    });
+
+    writeMobileDraftRecord({
+      version: 3,
+      ownerId: "artist-1",
+      updatedAt: "2026-08-08T12:00:00.000Z",
+      syncedAt: null,
+      unsynced: true,
+      projectId: "project-1",
+      songId: "song-1",
+      sessionId: "session-1",
+      baseRevision: 4,
+      sections: { Hook: "Keep this hook", "Verse 1": "Keep this verse", "Verse 2": "", Bridge: "", Outro: "" },
+      activeSection: "Verse 1",
+      beat: EMPTY_BEAT,
+      studioPackId: "midnight",
+      studioDna: defaultStudioDna,
+      playbackPositionSeconds: 19,
+    });
+
+    const restored = readMobileDraftRecord("artist-1");
+    expect(restored?.sections.Hook).toBe("Keep this hook");
+    expect(restored?.sections["Verse 1"]).toBe("Keep this verse");
+    expect(restored?.activeSection).toBe("Verse 1");
+    expect(restored?.playbackPositionSeconds).toBe(19);
+    expect(readMobileDraftRecord("artist-2")).toBeNull();
+
+    if (previousWindow) Object.defineProperty(globalThis, "window", previousWindow);
+    else Reflect.deleteProperty(globalThis, "window");
+  });
+
+  test("keeps auth above Studio Pack and replaces coupled state when songs switch", () => {
+    const authDrawer = readFileSync(new URL("../../components/studio/sheets/MobileAuthDrawer.tsx", import.meta.url), "utf8");
+    const packSheet = readFileSync(new URL("../../components/studio/sheets/StudioPackSheet.tsx", import.meta.url), "utf8");
+    const shell = readFileSync(new URL("../../components/MobileStudioShell.tsx", import.meta.url), "utf8");
+
+    expect(authDrawer).toContain("z-[60]");
+    expect(packSheet).toContain("z-50");
+    expect(packSheet).toContain("onClick={() => onUnlock(previewPack.id)}");
+    expect(shell).toContain("setSectionContent(nextSections)");
+    expect(shell).toContain("setActiveSection(nextSectionIndex >= 0 ? nextSectionIndex : 0)");
+    expect(shell).toContain("take.resetForSongSwitch()");
+    expect(shell).toContain("selectBeatKeepingPreview(nextBeat)");
+    expect(shell).toContain("setActiveStudioPackId(nextPack)");
+    expect(shell).toContain("setStudioDna({ ...nextDna, environment: nextPack })");
+    expect(shell).toContain("seekTo(nextPlaybackPosition)");
+    expect(shell).toContain("projectId: song.project_id");
+    expect(shell).toContain("songId: song.id");
+  });
+});
