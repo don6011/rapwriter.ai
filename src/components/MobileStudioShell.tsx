@@ -69,7 +69,7 @@ import {
   type MembershipAccessNotice,
 } from "@/lib/client/membership-access";
 import { consumePendingBeat, type Beat } from "@/lib/marketplace";
-import { clampBeatSeekTime, resolveBeatPreviewUrl } from "@/lib/beat-playback";
+import { resolveBeatPreviewUrl } from "@/lib/beat-playback";
 import { studioRoomProducts } from "@/lib/product-catalog";
 import type { StarterBeat } from "@/lib/starter-beats";
 import type { MembershipSnapshot, WorkspaceMembership } from "@/lib/membership";
@@ -180,6 +180,7 @@ import { BoothExportSheet } from "@/components/studio/sheets/BoothExportSheet";
 import { GhostwriterSheet } from "@/components/studio/sheets/GhostwriterSheet";
 import { MobileAuthDrawer } from "@/components/studio/sheets/MobileAuthDrawer";
 import { useAuthDrawer } from "@/components/studio/state/use-auth-drawer";
+import { useBeatPlayback } from "@/components/studio/state/use-beat-playback";
 import { useRoughTake } from "@/components/studio/state/use-rough-take";
 import { NewSongSheet } from "@/components/studio/sheets/NewSongSheet";
 import { PrivateBeatImportSheet } from "@/components/studio/sheets/PrivateBeatImportSheet";
@@ -237,12 +238,26 @@ export function MobileStudioShell() {
   const [readinessLaunchToken, setReadinessLaunchToken] = useState(0);
   const [marketFocusCategory, setMarketFocusCategory] = useState<MarketCategory | null>(null);
   const [activeStudioPackId, setActiveStudioPackId] = useState<StudioPackId>(defaultStudioRoomId);
-  const [playing, setPlaying] = useState(false);
-  const [beatCurrentTime, setBeatCurrentTime] = useState(0);
-  const [beatDuration, setBeatDuration] = useState(getBeatDurationSeconds(EMPTY_BEAT));
-  const [beatError, setBeatError] = useState<string | null>(null);
-  const [selectedBeat, setSelectedBeat] = useState<SelectedBeat>(EMPTY_BEAT);
   const take = useRoughTake(roughTake);
+  const {
+    playing,
+    beatCurrentTime,
+    beatDuration,
+    beatError,
+    selectedBeat,
+    setSelectedBeat,
+    setBeatError,
+    selectBeatKeepingPreview,
+    seekTo,
+    stopPreviewAndRewind,
+    resetTransport,
+    positionSeconds,
+    stopBeatPreview,
+    startBeatPreview,
+    toggleBeatPlayback,
+    seekBeatPlayback,
+    previewMarketplaceBeat,
+  } = useBeatPlayback({ onPause: () => queueUrgentSessionSync() });
   const {
     recording,
     recordingSeconds,
@@ -296,16 +311,8 @@ export function MobileStudioShell() {
   const [sectionVersions, setSectionVersions] = useState<SectionVersion[]>([]);
   const [versionHistoryStatus, setVersionHistoryStatus] = useState<VersionHistoryStatus>("idle");
   const [versionHistoryError, setVersionHistoryError] = useState<string | null>(null);
-  const beatAudioRef = useRef<HTMLAudioElement | null>(null);
-  const beatStartedAtRef = useRef<number | null>(null);
-  const beatOffsetRef = useRef(0);
-  const beatTimerRef = useRef<number | null>(null);
-  const beatCurrentTimeRef = useRef(0);
-  const beatDurationRef = useRef(getBeatDurationSeconds(EMPTY_BEAT));
   const studioAirEngineRef = useRef<{ context: AudioContext; source: AudioBufferSourceNode; gain: GainNode } | null>(null);
   const pendingBeatHandledRef = useRef(false);
-  const activePreviewBeatIdRef = useRef<string | null>(null);
-  const skipNextBeatResetRef = useRef(false);
   const localDraftRef = useRef<MobileDraftRecord | null>(null);
   const skipNextDraftWriteRef = useRef(false);
   const retryUrgentRef = useRef(false);
@@ -388,9 +395,9 @@ export function MobileStudioShell() {
       beat: { ...selectedBeat },
       studioPackId: activeStudioPack.id,
       studioDna: { ...studioDna, environment: activeStudioPack.id },
-      playbackPositionSeconds: Math.max(0, beatCurrentTimeRef.current),
+      playbackPositionSeconds: Math.max(0, positionSeconds()),
     };
-  }, [activeStudioPack.id, section.name, sectionContent, selectedBeat, studioDna]);
+  }, [activeStudioPack.id, positionSeconds, section.name, sectionContent, selectedBeat, studioDna]);
 
   const queueUrgentSessionSync = useCallback(() => {
     if (!draftLoaded || conflictBlockedRef.current) return;
@@ -480,15 +487,7 @@ export function MobileStudioShell() {
     if (!user) return;
     retryUrgentRef.current = true;
     setSyncRetryNonce((value) => value + 1);
-  }, [buildDraftRecord, user]);
-
-  useEffect(() => {
-    beatCurrentTimeRef.current = beatCurrentTime;
-  }, [beatCurrentTime]);
-
-  useEffect(() => {
-    beatDurationRef.current = beatDuration;
-  }, [beatDuration]);
+  }, [buildDraftRecord, setSelectedBeat, user]);
 
   useEffect(() => {
     userIdRef.current = user?.id ?? null;
@@ -743,114 +742,6 @@ export function MobileStudioShell() {
       });
   }
 
-  const stopBeatPreview = useCallback(({ reset = false }: { reset?: boolean } = {}) => {
-    if (beatTimerRef.current) window.clearInterval(beatTimerRef.current);
-    beatTimerRef.current = null;
-    activePreviewBeatIdRef.current = null;
-    const elapsed = beatStartedAtRef.current ? (performance.now() - beatStartedAtRef.current) / 1000 : 0;
-    const audioTime = beatAudioRef.current?.currentTime;
-    const duration = beatDurationRef.current;
-    beatOffsetRef.current = reset
-      ? 0
-      : typeof audioTime === "number" && Number.isFinite(audioTime)
-        ? Math.min(duration, audioTime)
-        : Math.min(duration, beatOffsetRef.current + elapsed);
-    beatStartedAtRef.current = null;
-
-    if (beatAudioRef.current) {
-      beatAudioRef.current.pause();
-      beatAudioRef.current = null;
-    }
-    setPlaying(false);
-    if (reset) setBeatCurrentTime(0);
-  }, []);
-
-  async function startBeatPreview(beat: SelectedBeat = selectedBeat) {
-    activePreviewBeatIdRef.current = beat.id;
-    const duration = getBeatDurationSeconds(beat);
-    setBeatDuration(duration);
-    setBeatError(null);
-
-    const previewUrl = resolveBeatPreviewUrl(beat);
-    if (previewUrl) {
-      const audio = new Audio(previewUrl);
-      audio.preload = "metadata";
-      beatAudioRef.current = audio;
-      audio.ontimeupdate = () => setBeatCurrentTime(audio.currentTime);
-      audio.onended = () => stopBeatPreview({ reset: true });
-
-      await new Promise<void>((resolve, reject) => {
-        const handleLoadedMetadata = () => resolve();
-        const handleError = () => reject(new Error("Beat preview could not load."));
-
-        if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
-          resolve();
-          return;
-        }
-
-        audio.addEventListener("loadedmetadata", handleLoadedMetadata, { once: true });
-        audio.addEventListener("error", handleError, { once: true });
-        audio.load();
-      });
-
-      if (beatAudioRef.current !== audio) return;
-
-      const mediaDuration = Number.isFinite(audio.duration) ? audio.duration : duration;
-      const resumeAt = clampBeatSeekTime(beatOffsetRef.current, mediaDuration);
-      setBeatDuration(mediaDuration);
-      audio.currentTime = resumeAt;
-      setBeatCurrentTime(resumeAt);
-      await audio.play();
-      trackMarketplaceEvent("beat_play", beat.id);
-      setPlaying(true);
-      return;
-    }
-
-    activePreviewBeatIdRef.current = null;
-    setBeatError(beat.id === EMPTY_BEAT.id ? "Choose an approved beat from Studio Store." : "This beat has no playable preview.");
-  }
-
-  const toggleBeatPlayback = () => {
-    if (playing) {
-      stopBeatPreview();
-      queueUrgentSessionSync();
-      return;
-    }
-    void startBeatPreview().catch(() => {
-      setBeatError("Could not start beat preview.");
-      stopBeatPreview();
-    });
-  };
-
-  const seekBeatPlayback = useCallback((requestedTime: number) => {
-    const audio = beatAudioRef.current;
-    const audioDuration = audio && Number.isFinite(audio.duration) ? audio.duration : 0;
-    const duration = Math.max(audioDuration, beatDurationRef.current, 0);
-    const nextTime = clampBeatSeekTime(requestedTime, duration);
-
-    beatOffsetRef.current = nextTime;
-    beatCurrentTimeRef.current = nextTime;
-    if (audio) audio.currentTime = nextTime;
-    setBeatCurrentTime(nextTime);
-    setBeatError(null);
-  }, []);
-
-  const previewMarketplaceBeat = (beat: Beat) => {
-    const snapshot = toBeatSnapshot(beat);
-    if (selectedBeat.id === snapshot.id) {
-      toggleBeatPlayback();
-      return;
-    }
-
-    stopBeatPreview({ reset: true });
-    beatOffsetRef.current = 0;
-    setSelectedBeat(snapshot);
-    void startBeatPreview(snapshot).catch(() => {
-      setBeatError("Could not start beat preview.");
-      stopBeatPreview({ reset: true });
-    });
-  };
-
   useEffect(() => {
     if (!titleEditing) setTitleDraft(activeSong?.title ?? "Untitled Song");
   }, [activeSong?.title, titleEditing]);
@@ -873,28 +764,14 @@ export function MobileStudioShell() {
 
   useEffect(() => {
     return () => {
-      stopBeatPreview({ reset: false });
       stopStudioAir();
     };
-  }, [stopBeatPreview, stopStudioAir]);
+  }, [stopStudioAir]);
 
   useEffect(() => {
     if (activeNav === "studio") return;
     stopStudioAir();
   }, [activeNav, stopStudioAir]);
-
-  useEffect(() => {
-    if (skipNextBeatResetRef.current) {
-      skipNextBeatResetRef.current = false;
-      setBeatDuration(getBeatDurationSeconds(selectedBeat));
-      setBeatError(null);
-      return;
-    }
-    if (activePreviewBeatIdRef.current === selectedBeat.id) return;
-    stopBeatPreview({ reset: true });
-    setBeatDuration(getBeatDurationSeconds(selectedBeat));
-    setBeatError(null);
-  }, [selectedBeat, stopBeatPreview]);
 
   useEffect(() => {
     if (loading) return;
@@ -906,20 +783,17 @@ export function MobileStudioShell() {
       setSectionContent({ ...blankSections(), ...draft.sections });
       const sectionIndex = mobileSections.findIndex((item) => item.name === draft.activeSection);
       if (sectionIndex >= 0) setActiveSection(sectionIndex);
-      skipNextBeatResetRef.current = true;
-      setSelectedBeat(draft.beat);
+      selectBeatKeepingPreview(draft.beat);
       const pack = getStudioPack(draft.studioPackId).id;
       setActiveStudioPackId(pack);
       setStudioDna({ ...draft.studioDna, environment: pack });
-      setBeatCurrentTime(draft.playbackPositionSeconds);
-      beatCurrentTimeRef.current = draft.playbackPositionSeconds;
-      beatOffsetRef.current = draft.playbackPositionSeconds;
+      seekTo(draft.playbackPositionSeconds);
       setSaveStatus(draft.unsynced ? "error" : "saved");
       setSyncMessage(draft.unsynced ? "Recovered on device. Sync pending" : "Saved on device");
     }
 
     setDraftLoaded(true);
-  }, [loading, user?.id]);
+  }, [loading, seekTo, selectBeatKeepingPreview, user?.id]);
 
   useEffect(() => {
     if (!draftLoaded) return;
@@ -951,7 +825,7 @@ export function MobileStudioShell() {
     const persistBeforeExit = () => {
       const previous = localDraftRef.current;
       if (!previous) return;
-      const playbackDirty = Math.abs(previous.playbackPositionSeconds - beatCurrentTimeRef.current) >= 1;
+      const playbackDirty = Math.abs(previous.playbackPositionSeconds - positionSeconds()) >= 1;
       if (!previous.unsynced && !playbackDirty) return;
       const draft = buildDraftRecord(true);
       localDraftRef.current = draft;
@@ -971,7 +845,7 @@ export function MobileStudioShell() {
       window.removeEventListener("pagehide", persistBeforeExit);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [buildDraftRecord]);
+  }, [buildDraftRecord, positionSeconds]);
 
   const completionPct = useMemo(() => {
     const written = mobileSections.reduce((sum, item) => {
@@ -1045,15 +919,12 @@ export function MobileStudioShell() {
       setSectionContent({ ...blankSections(), ...localDraft.sections });
       const sectionIndex = mobileSections.findIndex((item) => item.name === localDraft.activeSection);
       if (sectionIndex >= 0) setActiveSection(sectionIndex);
-      skipNextBeatResetRef.current = true;
-      setSelectedBeat(localDraft.beat);
+      selectBeatKeepingPreview(localDraft.beat);
       const localPack = canUseStudioPack(localDraft.studioPackId) ? localDraft.studioPackId : defaultStudioRoomId;
       const localDna = normalizeStudioDna(localDraft.studioDna, localPack);
       setActiveStudioPackId(localPack);
       setStudioDna({ ...localDna, environment: localPack });
-      setBeatCurrentTime(localDraft.playbackPositionSeconds);
-      beatCurrentTimeRef.current = localDraft.playbackPositionSeconds;
-      beatOffsetRef.current = localDraft.playbackPositionSeconds;
+      seekTo(localDraft.playbackPositionSeconds);
       conflictBlockedRef.current = false;
       retryUrgentRef.current = true;
       setSyncRetryNonce((value) => value + 1);
@@ -1070,13 +941,10 @@ export function MobileStudioShell() {
       skipNextDraftWriteRef.current = true;
       setSectionContent(nextSections);
       if (nextSectionIndex >= 0) setActiveSection(nextSectionIndex);
-      skipNextBeatResetRef.current = true;
-      setSelectedBeat(nextBeat);
+      selectBeatKeepingPreview(nextBeat);
       setActiveStudioPackId(remotePack);
       setStudioDna({ ...remoteDna, environment: remotePack });
-      setBeatCurrentTime(playbackPosition);
-      beatCurrentTimeRef.current = playbackPosition;
-      beatOffsetRef.current = playbackPosition;
+      seekTo(playbackPosition);
       window.localStorage.setItem(MOBILE_STUDIO_PACK_KEY, remotePack);
       window.localStorage.setItem(MOBILE_STUDIO_DNA_KEY, JSON.stringify({ ...remoteDna, environment: remotePack }));
 
@@ -1105,7 +973,7 @@ export function MobileStudioShell() {
     }
 
     setHydratedSessionId(session.id);
-  }, [activeSong, canUseStudioPack, draftLoaded, hydratedSessionId, session, user?.id]);
+  }, [activeSong, canUseStudioPack, draftLoaded, hydratedSessionId, seekTo, selectBeatKeepingPreview, session, user?.id]);
 
   useEffect(() => {
     if (loadingData || pendingBeatHandledRef.current) return;
@@ -1116,10 +984,9 @@ export function MobileStudioShell() {
     setSelectedBeat(toBeatSnapshot(pendingBeat));
     setActiveNav("studio");
     setScreen("writer");
-    setPlaying(false);
-    setBeatCurrentTime(0);
+    resetTransport();
     setSyncMessage(`${pendingBeat.title} loaded from Studio Store`);
-  }, [loadingData]);
+  }, [loadingData, resetTransport, setSelectedBeat]);
 
   useEffect(() => {
     if (!user || loading || loadingData || !draftLoaded) return;
@@ -1158,7 +1025,7 @@ export function MobileStudioShell() {
           completionPct,
           boothScore: boothReady.score,
           totalBars,
-          playbackPositionSeconds: beatCurrentTimeRef.current,
+          playbackPositionSeconds: positionSeconds(),
           studioDna: { ...studioDna, environment: activeStudioPack.id },
           clientUpdatedAt: localDraftRef.current?.updatedAt,
         });
@@ -1195,6 +1062,7 @@ export function MobileStudioShell() {
   }, [
     activeProjectId,
     activeSongId,
+    positionSeconds,
     activeStudioPack.id,
     boothReady.score,
     buildDraftRecord,
@@ -1219,11 +1087,11 @@ export function MobileStudioShell() {
     queueUrgentSessionSync();
     const timer = window.setInterval(() => {
       const currentDraft = localDraftRef.current;
-      if (currentDraft && Math.abs(currentDraft.playbackPositionSeconds - beatCurrentTimeRef.current) < 5) return;
+      if (currentDraft && Math.abs(currentDraft.playbackPositionSeconds - positionSeconds()) < 5) return;
       queueUrgentSessionSync();
     }, 15000);
     return () => window.clearInterval(timer);
-  }, [playing, queueUrgentSessionSync]);
+  }, [playing, positionSeconds, queueUrgentSessionSync]);
 
   const generateProducerRevision = async (actionType: ProducerActionType, attempt = 0) => {
     if (!user) {
@@ -1466,7 +1334,7 @@ export function MobileStudioShell() {
           completionPct,
           boothScore: boothReady.score,
           totalBars,
-          playbackPositionSeconds: beatCurrentTimeRef.current,
+          playbackPositionSeconds: positionSeconds(),
           studioDna: { ...studioDna, environment: activeStudioPack.id },
         });
       }
@@ -1476,13 +1344,10 @@ export function MobileStudioShell() {
       setSectionContent(nextSections);
       setActiveSection(nextSectionIndex >= 0 ? nextSectionIndex : 0);
       take.resetForSongSwitch();
-      skipNextBeatResetRef.current = true;
-      setSelectedBeat(nextBeat);
+      selectBeatKeepingPreview(nextBeat);
       setActiveStudioPackId(nextPack);
       setStudioDna({ ...nextDna, environment: nextPack });
-      setBeatCurrentTime(nextPlaybackPosition);
-      beatCurrentTimeRef.current = nextPlaybackPosition;
-      beatOffsetRef.current = nextPlaybackPosition;
+      seekTo(nextPlaybackPosition);
 
       await saveNow({
         projectId: song.project_id,
@@ -1551,7 +1416,7 @@ export function MobileStudioShell() {
           completionPct,
           boothScore: boothReady.score,
           totalBars,
-          playbackPositionSeconds: beatCurrentTimeRef.current,
+          playbackPositionSeconds: positionSeconds(),
           studioDna: { ...studioDna, environment: activeStudioPack.id },
         });
       }
@@ -1583,11 +1448,8 @@ export function MobileStudioShell() {
       take.resetForNewSong();
       stopBeatPreview({ reset: true });
       stopStudioAir();
-      skipNextBeatResetRef.current = true;
-      setSelectedBeat(songBeat ?? EMPTY_BEAT);
-      setBeatCurrentTime(0);
-      beatCurrentTimeRef.current = 0;
-      beatOffsetRef.current = 0;
+      selectBeatKeepingPreview(songBeat ?? EMPTY_BEAT);
+      seekTo(0);
       await saveNow({
         projectId: project.id,
         songId: createdSong.id,
@@ -1653,7 +1515,7 @@ export function MobileStudioShell() {
     await take.startRecording({
       captureBeat: () => ({
         beat: { ...selectedBeat },
-        beatPosition: Math.max(0, beatCurrentTimeRef.current),
+        beatPosition: Math.max(0, positionSeconds()),
       }),
       beforeStart: async (beatAtStart) => {
         if (playing) return;
@@ -2168,10 +2030,7 @@ export function MobileStudioShell() {
                 }}
                 onUseStarterBeat={(beat) => {
                   const snapshot = beatSnapshotFromStarterBeat(beat);
-                  stopBeatPreview({ reset: true });
-                  beatOffsetRef.current = 0;
-                  beatCurrentTimeRef.current = 0;
-                  setBeatCurrentTime(0);
+                  stopPreviewAndRewind();
                   selectBeatForSession(snapshot);
                   setActiveNav("studio");
                   setScreen("writer");
@@ -2234,10 +2093,7 @@ export function MobileStudioShell() {
                 starterBeats={starterBeats}
                 onUseStarterBeat={(beat) => {
                   const snapshot = beatSnapshotFromStarterBeat(beat);
-                  stopBeatPreview({ reset: true });
-                  beatOffsetRef.current = 0;
-                  beatCurrentTimeRef.current = 0;
-                  setBeatCurrentTime(0);
+                  stopPreviewAndRewind();
                   selectBeatForSession(snapshot);
                   setActiveNav("studio");
                   setScreen("writer");
@@ -2376,20 +2232,14 @@ export function MobileStudioShell() {
           }}
           onUseBeat={(beat) => {
             const snapshot = beatSnapshotFromLockerBeat(beat);
-            stopBeatPreview({ reset: true });
-            beatOffsetRef.current = 0;
-            beatCurrentTimeRef.current = 0;
-            setBeatCurrentTime(0);
+            stopPreviewAndRewind();
             selectBeatForSession(snapshot);
             setBeatSwitcherOpen(false);
             setSyncMessage(`${beat.title} loaded. Saving session...`);
           }}
           onUseStarterBeat={(beat) => {
             const snapshot = beatSnapshotFromStarterBeat(beat);
-            stopBeatPreview({ reset: true });
-            beatOffsetRef.current = 0;
-            beatCurrentTimeRef.current = 0;
-            setBeatCurrentTime(0);
+            stopPreviewAndRewind();
             selectBeatForSession(snapshot);
             setBeatSwitcherOpen(false);
             setSyncMessage(`${beat.title} loaded. Saving session...`);
