@@ -75,10 +75,10 @@ type RoughTakeAction =
   | { type: "save/failed"; message: string }
   | { type: "save/settled" };
 
-function reducer(state: RoughTakeState, action: RoughTakeAction): RoughTakeState {
+export function roughTakeReducer(state: RoughTakeState, action: RoughTakeAction): RoughTakeState {
   switch (action.type) {
     case "record/arm":
-      return { ...state, error: null, analysis: null, analyzing: false };
+      return { ...state, error: null, analyzing: false };
     case "record/armed":
       return { ...state, beat: action.beat, beatPosition: action.beatPosition };
     case "record/started":
@@ -157,7 +157,7 @@ export type StartRecordingOptions = {
 };
 
 export function useRoughTake(serverTake: RoughTakeRow | null) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(roughTakeReducer, initialState);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recorderChunksRef = useRef<BlobPart[]>([]);
   const recorderStreamRef = useRef<MediaStream | null>(null);

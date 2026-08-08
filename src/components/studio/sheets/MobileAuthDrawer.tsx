@@ -39,7 +39,7 @@ export function MobileAuthDrawer({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/68 px-4 pb-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/68 px-4 pb-4 backdrop-blur-sm">
       <form onSubmit={onSubmit} className="w-full max-w-[430px] rounded-3xl border border-white/10 bg-[#111113] p-5 shadow-[0_-24px_80px_rgba(0,0,0,0.55)]">
         <div className="flex items-start justify-between gap-4">
           <div>
