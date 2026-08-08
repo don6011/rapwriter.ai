@@ -181,6 +181,7 @@ import { useAuthDrawer } from "@/components/studio/state/use-auth-drawer";
 import { useBeatPlayback } from "@/components/studio/state/use-beat-playback";
 import { useMarketplaceFeed } from "@/components/studio/state/use-marketplace-feed";
 import { useRoughTake } from "@/components/studio/state/use-rough-take";
+import { useSheetStack } from "@/components/studio/state/use-sheet-stack";
 import { NewSongSheet } from "@/components/studio/sheets/NewSongSheet";
 import { PrivateBeatImportSheet } from "@/components/studio/sheets/PrivateBeatImportSheet";
 import { StudioAirSheet } from "@/components/studio/sheets/StudioAirSheet";
@@ -233,7 +234,6 @@ export function MobileStudioShell() {
   const { requestAuth, drawerProps: authDrawerProps } = useAuthDrawer(workspace);
   const [screen, setScreen] = useState<"home" | "writer">("home");
   const [activeNav, setActiveNav] = useState<MobileNavView>("studio");
-  const [studioAccessOpen, setStudioAccessOpen] = useState(false);
   const [readinessLaunchToken, setReadinessLaunchToken] = useState(0);
   const [marketFocusCategory, setMarketFocusCategory] = useState<MarketCategory | null>(null);
   const [activeStudioPackId, setActiveStudioPackId] = useState<StudioPackId>(defaultStudioRoomId);
@@ -248,6 +248,7 @@ export function MobileStudioShell() {
     unlockedProductIds,
     saveSessionProductUnlock,
   } = useMarketplaceFeed(productEntitlements);
+  const { sheets, openSheet, closeSheet } = useSheetStack();
   const take = useRoughTake(roughTake);
   const {
     playing,
@@ -290,7 +291,6 @@ export function MobileStudioShell() {
   const [titleDraft, setTitleDraft] = useState("Untitled Song");
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleStatus, setTitleStatus] = useState<PadActionStatus>({ state: "idle", message: "" });
-  const [newSongOpen, setNewSongOpen] = useState(false);
   const [newSongTitle, setNewSongTitle] = useState("");
   const [newSongStartSection, setNewSongStartSection] = useState("Hook");
   const [newSongUseBeat, setNewSongUseBeat] = useState(true);
@@ -298,19 +298,15 @@ export function MobileStudioShell() {
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [syncRetryNonce, setSyncRetryNonce] = useState(0);
   const [syncMessage, setSyncMessage] = useState("Saved on device");
-  const [beatSwitcherOpen, setBeatSwitcherOpen] = useState(false);
-  const [boothExportOpen, setBoothExportOpen] = useState(false);
   const [boothExportDraft, setBoothExportDraft] = useState<BoothExportCreateInput | null>(null);
   const [boothExportRecord, setBoothExportRecord] = useState<BoothExportRecord | null>(null);
   const [boothExportStatus, setBoothExportStatus] = useState<"idle" | "saving" | "error">("idle");
   const [boothExportError, setBoothExportError] = useState<string | null>(null);
   const [studioDna, setStudioDna] = useState<StudioDna>(defaultStudioDna);
   const [studioAirPlaying, setStudioAirPlaying] = useState(false);
-  const [studioDnaOpen, setStudioDnaOpen] = useState(false);
   const [producerActionProposal, setProducerActionProposal] = useState<ProducerActionProposal | null>(null);
   const [producerActionStatus, setProducerActionStatus] = useState<ProducerActionStatus>("idle");
   const [producerActionError, setProducerActionError] = useState<string | null>(null);
-  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [sectionVersions, setSectionVersions] = useState<SectionVersion[]>([]);
   const [versionHistoryStatus, setVersionHistoryStatus] = useState<VersionHistoryStatus>("idle");
   const [versionHistoryError, setVersionHistoryError] = useState<string | null>(null);
@@ -336,13 +332,13 @@ export function MobileStudioShell() {
     const handleMembershipAccess = (event: Event) => {
       const notice = (event as CustomEvent<MembershipAccessNotice>).detail;
       if (!notice) return;
-      setBeatSwitcherOpen(false);
+      closeSheet("beatSwitcher");
       setSyncMessage(membershipAccessCopy(notice));
-      setStudioAccessOpen(true);
+      openSheet("studioAccess");
     };
     window.addEventListener(MEMBERSHIP_ACCESS_EVENT, handleMembershipAccess);
     return () => window.removeEventListener(MEMBERSHIP_ACCESS_EVENT, handleMembershipAccess);
-  }, []);
+  }, [closeSheet, openSheet]);
 
   useEffect(() => {
     const artist = membership?.artist;
@@ -352,8 +348,8 @@ export function MobileStudioShell() {
     const storageKey = `rapwriter:membership-announced:${user.id}`;
     if (window.localStorage.getItem(storageKey) === accessIdentity) return;
     window.localStorage.setItem(storageKey, accessIdentity);
-    setStudioAccessOpen(true);
-  }, [membership?.artist, membership?.producer, user]);
+    openSheet("studioAccess");
+  }, [membership?.artist, membership?.producer, openSheet, user]);
 
   const getStudioPackAccess = useCallback((id: StudioPackId) => {
     const accessPlanId = hasAllAccessMembership(membership)
@@ -568,14 +564,14 @@ export function MobileStudioShell() {
     if (!canUseStudioPack(normalized.environment)) {
       setSyncMessage(`${getStudioPack(normalized.environment).label} is locked. Preview it in Studio Store first.`);
       setActiveNav("market");
-      setStudioDnaOpen(false);
+      closeSheet("studioDna");
       return;
     }
     setStudioDna(normalized);
     setActiveStudioPackId(normalized.environment);
     window.localStorage.setItem(MOBILE_STUDIO_PACK_KEY, normalized.environment);
     window.localStorage.setItem(MOBILE_STUDIO_DNA_KEY, JSON.stringify(normalized));
-    setStudioDnaOpen(false);
+    closeSheet("studioDna");
     setScreen("writer");
     setSyncMessage("Studio DNA loaded");
   }
@@ -583,7 +579,7 @@ export function MobileStudioShell() {
   function continueWriterFlow(playBeat = false) {
     const hasSavedStudioDna = Boolean(window.localStorage.getItem(MOBILE_STUDIO_DNA_KEY));
     if (!hasSavedStudioDna) {
-      setStudioDnaOpen(true);
+      openSheet("studioDna");
       return;
     }
     setScreen("writer");
@@ -824,11 +820,11 @@ export function MobileStudioShell() {
   );
 
   useEffect(() => {
-    if (!newSongOpen) return;
+    if (!sheets.newSong) return;
     setNewSongTitle(`${beatIntel.titleSeed} ${songs.length + 1}`);
     setNewSongStartSection("Hook");
     setNewSongUseBeat(true);
-  }, [beatIntel.titleSeed, newSongOpen, songs.length]);
+  }, [beatIntel.titleSeed, sheets.newSong, songs.length]);
 
   useEffect(() => {
     if (!draftLoaded || !session || session.id === hydratedSessionId) return;
@@ -1174,7 +1170,7 @@ export function MobileStudioShell() {
       return;
     }
 
-    setVersionHistoryOpen(true);
+    openSheet("versionHistory");
     setVersionHistoryStatus("loading");
     setVersionHistoryError(null);
     setSectionVersions([]);
@@ -1220,7 +1216,7 @@ export function MobileStudioShell() {
       setSaveStatus("saved");
       setSyncMessage(`${section.name} restored from history`);
       setVersionHistoryStatus("ready");
-      setVersionHistoryOpen(false);
+      closeSheet("versionHistory");
     } catch (error) {
       setVersionHistoryError(error instanceof Error ? error.message : "This version could not be restored.");
       setVersionHistoryStatus("error");
@@ -1401,7 +1397,7 @@ export function MobileStudioShell() {
       setSaveStatus("saved");
       setSyncMessage("New song ready");
       setTitleDraft(cleanTitle);
-      setNewSongOpen(false);
+      closeSheet("newSong");
       setScreen("writer");
       setSongSwitchStatus({ state: "saved", message: "New song created." });
     } catch (err) {
@@ -1685,7 +1681,7 @@ export function MobileStudioShell() {
           roughTake: roughTake?.song_id === songId ? roughTake : null,
         }),
       });
-      setBoothExportOpen(true);
+      openSheet("boothExport");
     } catch (error) {
       setSyncMessage(error instanceof Error ? error.message : "Could not prepare Booth Ready export");
     }
@@ -1733,7 +1729,7 @@ export function MobileStudioShell() {
         roughTake: linkedRoughTake,
       }),
     });
-    setBoothExportOpen(true);
+    openSheet("boothExport");
   };
 
   const freezeBoothExport = async () => {
@@ -1781,38 +1777,38 @@ export function MobileStudioShell() {
         <MobileHeader
           signedIn={Boolean(user)}
           membership={membership}
-          onOpenAccess={() => setStudioAccessOpen(true)}
+          onOpenAccess={() => openSheet("studioAccess")}
           onAuthRequired={() => requestAuth("Sign in to open your studio activity.")}
         />
         <StudioAccessHub
-          open={studioAccessOpen}
+          open={sheets.studioAccess}
           membership={membership}
-          onClose={() => setStudioAccessOpen(false)}
+          onClose={() => closeSheet("studioAccess")}
           onStartWriting={() => {
-            setStudioAccessOpen(false);
+            closeSheet("studioAccess");
             setActiveNav("studio");
             setScreen("writer");
           }}
           onOpenReadiness={() => {
-            setStudioAccessOpen(false);
+            closeSheet("studioAccess");
             setActiveNav("studio");
             setScreen("writer");
             setReadinessLaunchToken((current) => current + 1);
           }}
           onChooseRoom={() => {
-            setStudioAccessOpen(false);
+            closeSheet("studioAccess");
             setActiveNav("studio");
             setScreen("home");
-            setStudioDnaOpen(true);
+            openSheet("studioDna");
           }}
           onBrowseProducers={() => {
-            setStudioAccessOpen(false);
+            closeSheet("studioAccess");
             setMarketFocusCategory("producer");
             setActiveNav("market");
             setScreen("home");
           }}
           onManage={() => {
-            setStudioAccessOpen(false);
+            closeSheet("studioAccess");
             setActiveNav("profile");
             setScreen("home");
             window.requestAnimationFrame(() => document.getElementById("profile-membership")?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -1864,7 +1860,7 @@ export function MobileStudioShell() {
                 onToggleBeat={toggleBeatPlayback}
                 onSeekBeat={seekBeatPlayback}
                 onCommitBeatSeek={queueUrgentSessionSync}
-                onChangeBeat={() => setBeatSwitcherOpen(true)}
+                onChangeBeat={() => openSheet("beatSwitcher")}
                 onContinue={() => continueWriterFlow(true)}
                 songs={songs}
                 projects={projects}
@@ -1876,7 +1872,7 @@ export function MobileStudioShell() {
                     requestAuth("Sign in to create and switch between songs.");
                     return;
                   }
-                  setNewSongOpen(true);
+                  openSheet("newSong");
                 }}
                 studioPack={activeStudioPack}
                 studioPacks={studioPacks}
@@ -1890,7 +1886,7 @@ export function MobileStudioShell() {
                 }}
                 onStudioPack={changeStudioPack}
                 onPreviewStudioPack={previewStudioPack}
-                onStudioDna={() => setStudioDnaOpen(true)}
+                onStudioDna={() => openSheet("studioDna")}
                 onToggleStudioAir={toggleStudioAir}
                 onStudioAirVolume={changeStudioAirVolume}
               />
@@ -2117,7 +2113,7 @@ export function MobileStudioShell() {
             onToggleBeat={toggleBeatPlayback}
             onSeekBeat={seekBeatPlayback}
             onCommitBeatSeek={queueUrgentSessionSync}
-            onChangeBeat={() => setBeatSwitcherOpen(true)}
+            onChangeBeat={() => openSheet("beatSwitcher")}
             onToggleRecording={toggleRecording}
             onDeleteRoughTake={deleteRoughTake}
             onSaveRoughTake={saveRoughTake}
@@ -2146,7 +2142,7 @@ export function MobileStudioShell() {
           />
         )}
         <BeatSwitcherSheet
-          open={beatSwitcherOpen}
+          open={sheets.beatSwitcher}
           signedIn={Boolean(user)}
           currentBeat={selectedBeat}
           starterBeats={starterBeats}
@@ -2154,25 +2150,25 @@ export function MobileStudioShell() {
           marketplaceBeats={marketplaceFeed.beats}
           marketplaceLoading={marketplaceFeedLoading}
           marketplaceError={marketplaceFeedError}
-          onClose={() => setBeatSwitcherOpen(false)}
+          onClose={() => closeSheet("beatSwitcher")}
           onPreviewStart={() => stopBeatPreview()}
           onImportBeat={importPrivateBeat}
           onAuthRequired={() => {
-            setBeatSwitcherOpen(false);
+            closeSheet("beatSwitcher");
             requestAuth("Sign in to import a private beat into your Locker.");
           }}
           onUseBeat={(beat) => {
             const snapshot = beatSnapshotFromLockerBeat(beat);
             stopPreviewAndRewind();
             selectBeatForSession(snapshot);
-            setBeatSwitcherOpen(false);
+            closeSheet("beatSwitcher");
             setSyncMessage(`${beat.title} loaded. Saving session...`);
           }}
           onUseStarterBeat={(beat) => {
             const snapshot = beatSnapshotFromStarterBeat(beat);
             stopPreviewAndRewind();
             selectBeatForSession(snapshot);
-            setBeatSwitcherOpen(false);
+            closeSheet("beatSwitcher");
             setSyncMessage(`${beat.title} loaded. Saving session...`);
           }}
         />
@@ -2188,16 +2184,16 @@ export function MobileStudioShell() {
         )}
         <MobileAuthDrawer {...authDrawerProps} />
         <StudioDnaSheet
-          open={studioDnaOpen}
+          open={sheets.studioDna}
           dna={studioDna}
           studioPacks={studioPacks}
           canUseStudioPack={canUseStudioPack}
           onChange={updateStudioDna}
-          onClose={() => setStudioDnaOpen(false)}
+          onClose={() => closeSheet("studioDna")}
           onStart={startStudioDnaSession}
         />
         <NewSongSheet
-          open={newSongOpen}
+          open={sheets.newSong}
           title={newSongTitle}
           startSection={newSongStartSection}
           useCurrentBeat={newSongUseBeat}
@@ -2206,7 +2202,7 @@ export function MobileStudioShell() {
           onTitle={setNewSongTitle}
           onStartSection={setNewSongStartSection}
           onUseCurrentBeat={setNewSongUseBeat}
-          onClose={() => setNewSongOpen(false)}
+          onClose={() => closeSheet("newSong")}
           onCreate={() =>
             void createMobileSong({
               title: newSongTitle,
@@ -2216,26 +2212,26 @@ export function MobileStudioShell() {
           }
         />
         <VersionHistorySheet
-          open={versionHistoryOpen}
+          open={sheets.versionHistory}
           sectionName={section.name}
           currentContent={sectionContent[section.name] ?? ""}
           versions={sectionVersions}
           status={versionHistoryStatus}
           error={versionHistoryError}
-          onClose={() => setVersionHistoryOpen(false)}
+          onClose={() => closeSheet("versionHistory")}
           onRestore={(versionId) => void restoreSectionVersion(versionId)}
         />
         <BoothExportSheet
-          open={boothExportOpen}
+          open={sheets.boothExport}
           draft={boothExportDraft}
           exportRecord={boothExportRecord}
           status={boothExportStatus}
           error={boothExportError}
           premiumExports={membership?.artist?.entitlements.premium_exports === true}
-          onClose={() => setBoothExportOpen(false)}
+          onClose={() => closeSheet("boothExport")}
           onFreeze={() => void freezeBoothExport()}
           onUpgrade={() => {
-            setBoothExportOpen(false);
+            closeSheet("boothExport");
             setScreen("home");
             setActiveNav("profile");
             setSyncMessage("Prep Studio Pro unlocks the full Booth package");
