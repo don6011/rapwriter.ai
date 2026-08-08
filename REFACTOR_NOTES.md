@@ -57,3 +57,39 @@ _(checked in Phase 5e)_
 ## Wanted to fix, left alone
 
 _(running list)_
+
+---
+
+## Phase 1 notes
+
+### Extra files beyond the spec's list
+
+- `src/lib/studio/ambient-audio.ts` — `createAmbientBuffer`. The spec mentions it twice:
+  Phase 1 says to keep it in `src/lib/studio/`, Phase 3 says to move it alongside
+  `StudioAirPanel.tsx`. Phase 1 wins, because the only caller is `toggleStudioAir` in the
+  root component, not `StudioAirPanel`. Putting it in `waveform.ts` would have been
+  semantically wrong, so it got its own module.
+
+### Functions moved that the spec's list did not name
+
+The spec describes "~50 pure utility functions" but enumerates fewer. These were moved to
+the obvious neighbour rather than left stranded in the shell:
+
+- `toBeatSnapshot` → `beat-snapshot.ts` (marketplace `Beat` → `SelectedBeat`)
+- `buildTakeWaveBars` → `waveform.ts` (sibling of `buildSyntheticWaveBars`)
+- `ProducerActionStatus` → `types.ts` in Phase 2 (`ProducerActionControls` needs it)
+
+### `"use client"` on library modules
+
+Rule 5 says every extracted file touching browser APIs starts with `"use client"`. Applied
+to the five lib modules that reach for browser globals: `draft-storage.ts` (localStorage),
+`waveform.ts` (`Audio`, `URL`), `export-snapshot.ts` (`document`), `telemetry.ts` (`fetch`
+with `keepalive`), `ambient-audio.ts` (`AudioContext`). The rest are environment-agnostic
+and were left without the directive.
+
+### `intelligence.ts` is 394 lines
+
+Just under the ~400 budget, and ~220 of those are the `environmentNotes` copy table inside
+`buildEnvironmentIntelligence`. It is data, not logic, and could be split into its own
+module later. Left alone here — splitting it is not required to meet the budget and every
+extra file is another chance to get a move wrong.

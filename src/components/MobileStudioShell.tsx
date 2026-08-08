@@ -95,6 +95,67 @@ import {
   type StudioRoomAccess,
 } from "@/lib/studio-room-access";
 import { cn } from "@/lib/utils";
+import { createAmbientBuffer } from "@/lib/studio/ambient-audio";
+import { blankSections, countBars, countTotalBars, sectionKeyFromTitle } from "@/lib/studio/bars";
+import {
+  beatSnapshotFromLockerBeat,
+  beatSnapshotFromRecord,
+  beatSnapshotFromSong,
+  beatSnapshotFromStarterBeat,
+  EMPTY_BEAT,
+  getBeatDurationSeconds,
+  getStudioRoomProductId,
+  lockerSnapshotBeat,
+  toBeatSnapshot,
+} from "@/lib/studio/beat-snapshot";
+import {
+  boothReadyFromLockerSnapshot,
+  clampScore,
+  getRecordReadiness,
+  getSongState,
+  isRoughTakeAnalysis,
+  scoreBoothReady,
+} from "@/lib/studio/booth-ready";
+import {
+  MOBILE_STUDIO_DNA_KEY,
+  MOBILE_STUDIO_PACK_KEY,
+  normalizeStudioDna,
+  readMobileDraftRecord,
+  writeMobileDraftRecord,
+} from "@/lib/studio/draft-storage";
+import { buildBoothExportSnapshot, downloadBoothFile } from "@/lib/studio/export-snapshot";
+import {
+  artistDisplayName,
+  formatDuration,
+  formatFileSize,
+  formatShortDate,
+  formatVersionTime,
+  getProgressPct,
+  getProjectTitle,
+  hasAllAccessMembership,
+  membershipAccessLabel,
+  productUnlockFromEntitlement,
+  versionSourceLabel,
+} from "@/lib/studio/format";
+import {
+  buildBeatIntelligence,
+  buildEnvironmentIntelligence,
+  findAnchorWord,
+  getWritingMomentum,
+  studioDnaCue,
+} from "@/lib/studio/intelligence";
+import {
+  lockerBeatArt,
+  lockerSnapshotNumber,
+  lockerSongBarCount,
+  lockerSongProgress,
+  mostFrequent,
+  sectionsFromLockerSnapshot,
+  starterBeatArt,
+} from "@/lib/studio/locker-snapshot";
+import { analyzePenLines, linesFor } from "@/lib/studio/prosody";
+import { trackMarketplaceEvent } from "@/lib/studio/telemetry";
+import { buildSyntheticWaveBars, buildTakeWaveBars, readAudioFileDuration } from "@/lib/studio/waveform";
 import { getStudioPack, studioPacks } from "@/lib/studio/packs";
 import { blankStarterLyrics, mobileSections } from "@/lib/studio/sections";
 import { artistGoals, defaultStudioDna, producerModes, sessionMoods, writingStyles } from "@/lib/studio/dna";
@@ -130,22 +191,6 @@ const navItems: { id: MobileNavView; label: string; icon: typeof Home }[] = [
   { id: "market", label: "Market", icon: ShoppingCart },
   { id: "profile", label: "Profile", icon: UserCircle },
 ];
-
-const MOBILE_DRAFT_KEY = "rapwriter:v4:mobile-shell-draft";
-const MOBILE_STUDIO_PACK_KEY = "rapwriter:v2:studio-pack";
-const MOBILE_STUDIO_DNA_KEY = "rapwriter:v3:studio-dna";
-const PRODUCER_BEAT_ID = /^producer-beat-([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
-const RAW_BEAT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-const EMPTY_BEAT = {
-  id: "no-beat",
-  title: "No beat selected",
-  producer: "Choose from Studio Store",
-  bpm: 0,
-  key: "",
-  mood: "",
-  duration: "0:00",
-};
 
 export function MobileStudioShell() {
   const workspace = useRapWriterData();
@@ -2835,232 +2880,6 @@ function StudioDnaChoice({
   );
 }
 
-function studioDnaCue(dna: StudioDna, pack: StudioPack) {
-  return `${pack.label} will bias the session toward ${dna.mood.toLowerCase()} energy, ${dna.style.toLowerCase()} writing, and ${dna.producer} feedback for a ${dna.goal.toLowerCase()}.`;
-}
-
-function buildEnvironmentIntelligence(pack: StudioPack, dna: StudioDna, sectionName: string): EnvironmentIntelligence {
-  const environmentNotes: Record<StudioPackId, EnvironmentIntelligence> = {
-    midnight: {
-      passTitle: "Late-Night Producer Pass",
-      missionCue: "Keep the writing cinematic: one scene, one emotion, and a hook line that feels like the room went quiet.",
-      producerNotes: [
-        "Use fewer words on the strongest lines so the pocket feels expensive.",
-        "Add one visual detail that places the listener inside the room.",
-        "Let the last line of the section point back to the title idea.",
-      ],
-      boothFocusTitle: "Tonight's Booth Focus",
-      boothFocusBody: "Prioritize control, mood, and clean breath points before chasing extra bars.",
-      focusMetrics: ["Control", "Mood", "Replay"],
-    },
-    "trap-house": {
-      passTitle: "Trap Pressure Pass",
-      missionCue: "Shorten the setup and make every fourth bar hit harder. This room rewards pressure, cadence, and direct language.",
-      producerNotes: [
-        "Start the section with action, not explanation.",
-        "Keep punch lines close together so the bounce never drops.",
-        "Use sharper verbs and leave a breath before the flex lands.",
-      ],
-      boothFocusTitle: "Street-Ready Focus",
-      boothFocusBody: "The draft needs pocket discipline: cadence first, then aggression, then replay value.",
-      focusMetrics: ["Cadence", "Punch", "Energy"],
-    },
-    bedroom: {
-      passTitle: "Honesty Pass",
-      missionCue: "Write like the door is closed and the headphones are loud. Specific details matter more than polish here.",
-      producerNotes: [
-        "Keep one imperfect line if it sounds emotionally true.",
-        "Name a real object, place, or memory instead of summarizing the feeling.",
-        "Let melody guide the hook before tightening the rhyme.",
-      ],
-      boothFocusTitle: "First-Take Focus",
-      boothFocusBody: "Protect the feeling. Get the section complete, then record a rough take before over-editing.",
-      focusMetrics: ["Emotion", "Detail", "Take"],
-    },
-    penthouse: {
-      passTitle: "Commercial Producer Pass",
-      missionCue: "Make the hook feel inevitable. Every section should support the title, replay value, and clean transitions.",
-      producerNotes: [
-        "Trim any line that does not make the record feel bigger.",
-        "Repeat the strongest phrase with intention instead of adding more ideas.",
-        "Check whether the first listen already tells people what to remember.",
-      ],
-      boothFocusTitle: "Record-Ready Focus",
-      boothFocusBody: "Polish the song shape: hook payoff, section movement, and a saved rough take.",
-      focusMetrics: ["Hook", "Replay", "Structure"],
-    },
-    cypher: {
-      passTitle: "Pure Pen Pass",
-      missionCue: "No filler. Set up, turn the phrase, then land clean. The room is judging breath control and bars.",
-      producerNotes: [
-        "Add internal rhyme before adding more lines.",
-        "Cut any bar that only explains the previous bar.",
-        "Make the strongest punchline easy to hear on the first take.",
-      ],
-      boothFocusTitle: "Mic Check Focus",
-      boothFocusBody: "Make the writing performable: breath points, punchline spacing, and originality.",
-      focusMetrics: ["Bars", "Breath", "Originality"],
-    },
-    afterglow: {
-      passTitle: "After-Hours Pass",
-      missionCue: "Keep the ambition visible without over-writing it. The room rewards finish lines, polish, and controlled energy.",
-      producerNotes: [
-        "Trim the setup until the strongest image arrives sooner.",
-        "Let one ambitious line carry the section instead of stacking flexes.",
-        "Finish the thought cleanly before opening a new idea.",
-      ],
-      boothFocusTitle: "After-Hours Focus",
-      boothFocusBody: "Finish with control: remove filler, protect the mood, and save a polished rough take.",
-      focusMetrics: ["Focus", "Polish", "Finish"],
-    },
-    "bedroom-diaries": {
-      passTitle: "Private Page Pass",
-      missionCue: "Specific memories matter more than perfect lines. Let the section sound private, melodic, and emotionally exact.",
-      producerNotes: [
-        "Replace one general feeling with a real object or memory.",
-        "Keep the melody natural before tightening every rhyme.",
-        "Protect the line that feels hardest to say out loud.",
-      ],
-      boothFocusTitle: "Diary-Take Focus",
-      boothFocusBody: "Prioritize emotional truth, concrete details, and a first take that still feels close to the original idea.",
-      focusMetrics: ["Truth", "Detail", "Melody"],
-    },
-    "red-light": {
-      passTitle: "Performance Pass",
-      missionCue: "Write for delivery. Every line needs a breath plan, a clear landing, and enough conviction to survive the booth.",
-      producerNotes: [
-        "Mark the breath before the longest line.",
-        "Strengthen the last word so the bar lands in the room.",
-        "Read the section aloud and cut anything the mouth fights.",
-      ],
-      boothFocusTitle: "Take-Ready Focus",
-      boothFocusBody: "Commit to the delivery: clean breath points, controlled volume, and endings that sound intentional.",
-      focusMetrics: ["Delivery", "Breath", "Conviction"],
-    },
-    "main-room": {
-      passTitle: "Club Record Pass",
-      missionCue: "Make the hook register through movement. This room rewards immediate titles, physical rhythm, and repeatable crowd moments.",
-      producerNotes: [
-        "Move the title phrase closer to the first strong downbeat.",
-        "Leave a clean response pocket after the line people should repeat.",
-        "Cut any setup that lowers the energy before the hook lands.",
-      ],
-      boothFocusTitle: "Main-Room Focus",
-      boothFocusBody: "Prioritize hook recognition, energy control, and a delivery that stays clear over a loud system.",
-      focusMetrics: ["Energy", "Replay", "Response"],
-    },
-    "skyline-loft": {
-      passTitle: "Big Record Pass",
-      missionCue: "Open the record up. This room favors a clear title, commercial lift, and sections that move without extra explanation.",
-      producerNotes: [
-        "Make the title phrase easier to recognize on the first listen.",
-        "Give the chorus more open vowels and fewer competing ideas.",
-        "Let the verse build upward instead of resetting every four bars.",
-      ],
-      boothFocusTitle: "Skyline Focus",
-      boothFocusBody: "Prioritize lift, hook clarity, and a structure that makes the record feel larger without making it busier.",
-      focusMetrics: ["Lift", "Hook", "Clarity"],
-    },
-    "soft-life": {
-      passTitle: "Open-Air Melody Pass",
-      missionCue: "Let the lines breathe. The room rewards warm melody, simple language, and confident space between ideas.",
-      producerNotes: [
-        "Open the vowels where the melody wants to stretch.",
-        "Remove one line so the strongest phrase has more space.",
-        "Keep the emotion light without making the writing vague.",
-      ],
-      boothFocusTitle: "Easy-Take Focus",
-      boothFocusBody: "Aim for melody, space, and a relaxed delivery that still keeps every word easy to understand.",
-      focusMetrics: ["Melody", "Space", "Ease"],
-    },
-    "desert-sessions": {
-      passTitle: "Story Horizon Pass",
-      missionCue: "Slow the scene down and let the detail do the work. This room rewards patience, place, and a clear emotional payoff.",
-      producerNotes: [
-        "Name the place before explaining what it meant.",
-        "Carry one image through the section instead of changing scenes early.",
-        "Make the final line reveal what the scene cost you.",
-      ],
-      boothFocusTitle: "Story-Take Focus",
-      boothFocusBody: "Prioritize scene clarity, patient delivery, and a payoff the listener can see before they fully understand it.",
-      focusMetrics: ["Scene", "Patience", "Payoff"],
-    },
-    "rooftop-sessions": {
-      passTitle: "City Anthem Pass",
-      missionCue: "Write for scale. The hook should be easy to shout back while the verse keeps the ambition specific.",
-      producerNotes: [
-        "Turn the strongest line into a repeatable chorus phrase.",
-        "Keep the city image concrete instead of using generic success language.",
-        "Raise the cadence energy before the section changes.",
-      ],
-      boothFocusTitle: "Anthem Focus",
-      boothFocusBody: "Build energy without crowding the record: strong chorus scale, clean cadence, and immediate replay value.",
-      focusMetrics: ["Energy", "Scale", "Replay"],
-    },
-    "radio-room": {
-      passTitle: "First-Listen Pass",
-      missionCue: "Make the record easy to understand without making it predictable. The title and hook should register immediately.",
-      producerNotes: [
-        "Put the title idea closer to the start of the hook.",
-        "Replace one clever phrase with a cleaner emotional statement.",
-        "Repeat the best line before introducing another concept.",
-      ],
-      boothFocusTitle: "Broadcast Focus",
-      boothFocusBody: "Prioritize first-listen clarity, hook recognition, and a take that sounds confident at low volume.",
-      focusMetrics: ["Clarity", "Hook", "Replay"],
-    },
-    "bando-sessions": {
-      passTitle: "Survival Pass",
-      missionCue: "Keep the truth hard and concise. This room rewards pressure, lived detail, and a voice that does not ask permission.",
-      producerNotes: [
-        "Use the real consequence instead of summarizing the struggle.",
-        "Cut the line that softens the strongest moment.",
-        "Let the delivery stay conversational until the punch lands.",
-      ],
-      boothFocusTitle: "Raw-Take Focus",
-      boothFocusBody: "Prioritize truth, pressure, and a distinct voice. The section should feel lived in before it feels polished.",
-      focusMetrics: ["Truth", "Pressure", "Voice"],
-    },
-  };
-
-  const base = environmentNotes[pack.id];
-  const producerCue =
-    dna.producer === "Hook Doctor"
-      ? "Hook Doctor note: make the hook simpler, stickier, and easier to repeat."
-      : dna.producer === "Battle Coach"
-        ? "Battle Coach note: raise the threat level and make every setup earn the punchline."
-        : dna.producer === "Story Coach"
-          ? "Story Coach note: connect the scene, pressure, and consequence before adding new ideas."
-          : dna.producer === "Southern Producer"
-            ? "Southern Producer note: keep the pocket loose, conversational, and heavy on bounce."
-            : dna.producer === "Ghostwriter"
-              ? "Ghostwriter note: protect the artist voice and make the strongest line sound effortless."
-              : "Commercial Producer note: keep only what improves replay value.";
-
-  const goalCue =
-    dna.goal === "Battle" || dna.goal === "Freestyle"
-      ? "Aim for fast recognition: clear setups, clean turns, and lines that survive without explanation."
-      : dna.goal === "Album" || dna.goal === "Mixtape"
-        ? "Think sequence: make this section deepen the world instead of only chasing a single moment."
-        : "Aim for a record people can remember after one listen.";
-
-  const styleCue =
-    dna.style === "Storytelling" || dna.style === "Conscious"
-      ? "Push one concrete detail into the next four bars."
-      : dna.style === "Melodic" || dna.style === "Mainstream"
-        ? "Leave vowel space for melody and repeat the cleanest phrase."
-        : dna.style === "Southern" || dna.style === "Street"
-          ? "Let the cadence talk first, then make the image hit."
-          : "Keep the pen sharp and avoid over-explaining the bar.";
-
-  return {
-    ...base,
-    missionCue: `${base.missionCue} ${styleCue}`,
-    producerNotes: [producerCue, goalCue, ...base.producerNotes.slice(0, sectionName === "Hook" ? 2 : 3)],
-    boothFocusBody: `${base.boothFocusBody} ${goalCue}`,
-  };
-}
-
 function ProducerPassPanel({
   sectionName,
   sectionText,
@@ -3243,10 +3062,6 @@ function ProducerPassPanel({
   );
 }
 
-function linesFor(value: string) {
-  return value.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-}
-
 function passFromProducerMode(mode: string): ProducerPassId {
   if (mode === "Hook Doctor") return "hook";
   if (mode === "Commercial Producer") return "commercial";
@@ -3321,16 +3136,6 @@ function buildProducerPassReport(
       `Record one rough take of ${sectionName}; the pocket is easier to hear than to read.`,
     ] : [emptyAction],
   };
-}
-
-function findAnchorWord(text: string) {
-  const ignored = new Set(["that", "this", "with", "from", "your", "have", "they", "been", "when", "what", "just", "into", "like", "yeah", "i'm", "you", "the", "and", "for"]);
-  const counts = text.toLowerCase().match(/[a-z0-9']{3,}/g)?.reduce<Record<string, number>>((acc, word) => {
-    if (!ignored.has(word)) acc[word] = (acc[word] ?? 0) + 1;
-    return acc;
-  }, {}) ?? {};
-  const [word, count] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] ?? [];
-  return count >= 2 ? word : null;
 }
 
 function MobileHeader({
@@ -3499,24 +3304,6 @@ function AccessLaunchRow({
       <span className="shrink-0 text-[10px] font-semibold text-gold">{action}</span>
     </button>
   );
-}
-
-function membershipAccessLabel(membership: MembershipSnapshot | null) {
-  const artistPlan = `${membership?.artist?.plan.id ?? ""} ${membership?.artist?.plan.name ?? ""}`.toLowerCase();
-  const producerPlan = `${membership?.producer?.plan.id ?? ""} ${membership?.producer?.plan.name ?? ""}`.toLowerCase();
-  const hasArtistElite = /\belite\b/.test(artistPlan);
-  const hasArtistPro = /\bpro\b/.test(artistPlan);
-  const hasProducerPro = /\bpro\b/.test(producerPlan);
-  if (hasArtistElite && hasProducerPro) return "All Access";
-  if (hasArtistElite) return "Elite";
-  if (hasArtistPro) return "Pro";
-  if (hasProducerPro) return "Producer Pro";
-  return null;
-}
-
-function hasAllAccessMembership(membership: MembershipSnapshot | null) {
-  return membership?.artist?.plan.id === "artist_studio"
-    && membership?.producer?.plan.id === "producer_pro";
 }
 
 function BeatSwitcherSheet({
@@ -4136,15 +3923,6 @@ function ExportMetric({ label, value }: { label: string; value: string }) {
 
 function ExportReviewRow({ label, value, ready }: { label: string; value: string; ready: boolean }) {
   return <div className="flex items-start gap-2"><span className={cn("mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border", ready ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-300" : "border-white/12 text-muted-foreground")}>{ready && <Check className="h-2.5 w-2.5" />}</span><span className="min-w-0"><span className="font-semibold text-white/82">{label}</span><span className="ml-1 text-muted-foreground">/ {value}</span></span></div>;
-}
-
-function downloadBoothFile(id: string, format: "txt" | "pdf" | "zip" | "rough-take") {
-  const anchor = document.createElement("a");
-  anchor.href = format === "rough-take" ? `/api/booth-exports/${encodeURIComponent(id)}/rough-take` : `/api/booth-exports/${encodeURIComponent(id)}?format=${format}`;
-  anchor.rel = "noopener";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
 }
 
 function MobileHome({
@@ -4863,34 +4641,6 @@ function StudioAirPanel({
   );
 }
 
-function createAmbientBuffer(context: AudioContext, key: string) {
-  const durationSeconds = 6;
-  const frameCount = context.sampleRate * durationSeconds;
-  const buffer = context.createBuffer(1, frameCount, context.sampleRate);
-  const samples = buffer.getChannelData(0);
-  const lower = key.toLowerCase();
-  let smoothed = 0;
-
-  for (let index = 0; index < frameCount; index += 1) {
-    const noise = Math.random() * 2 - 1;
-    smoothed = smoothed * 0.985 + noise * 0.015;
-    const time = index / context.sampleRate;
-    if (lower.includes("rain")) {
-      const drop = Math.random() > 0.9994 ? (Math.random() * 2 - 1) * 0.55 : 0;
-      samples[index] = noise * 0.17 + smoothed * 0.2 + drop;
-    } else if (lower.includes("vinyl") || lower.includes("analog")) {
-      const crackle = Math.random() > 0.9991 ? (Math.random() * 2 - 1) * 0.72 : 0;
-      samples[index] = smoothed * 0.42 + noise * 0.025 + crackle;
-    } else if (lower.includes("city") || lower.includes("street")) {
-      samples[index] = Math.sin(time * Math.PI * 2 * 55) * 0.08 + Math.sin(time * Math.PI * 2 * 91) * 0.025 + smoothed * 0.22;
-    } else {
-      samples[index] = smoothed * 0.36 + noise * 0.045;
-    }
-  }
-
-  return buffer;
-}
-
 function MobileProjectRail({
   projects,
   songs,
@@ -5420,41 +5170,6 @@ function PenView({ sectionName, text }: { sectionName: string; text: string }) {
   );
 }
 
-function analyzePenLines(text: string) {
-  const lines = text
-    .split("\n")
-    .map((line, index) => ({ number: index + 1, text: line.trimEnd() }))
-    .filter((line) => line.text.trim());
-  const keys = lines.map((line) => getPenRhymeKey(line.text));
-  const keyCounts = keys.reduce<Map<string, number>>((counts, key) => {
-    if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
-    return counts;
-  }, new Map());
-  const analyzed = lines.map((line, index) => {
-    const words = line.text.match(/[A-Za-z0-9']+/g) ?? [];
-    const syllables = words.reduce((total, word) => total + estimateSyllables(word), 0);
-    const rhymeKey = keys[index];
-    return { ...line, syllables, rhymeKey, rhymeCount: rhymeKey ? keyCounts.get(rhymeKey) ?? 0 : 0 };
-  });
-  return {
-    lines: analyzed,
-    totalSyllables: analyzed.reduce((total, line) => total + line.syllables, 0),
-  };
-}
-
-function getPenRhymeKey(line: string) {
-  const ending = (line.match(/[A-Za-z0-9']+(?=[^A-Za-z0-9']*$)/)?.[0] ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (!ending) return "";
-  return ending.match(/[aeiouy]+[^aeiouy]*$/)?.[0] ?? ending.slice(-3);
-}
-
-function estimateSyllables(word: string) {
-  const normalized = word.toLowerCase().replace(/[^a-z]/g, "");
-  if (!normalized) return 0;
-  const groups = normalized.replace(/(?:[^l]e|ed|es)$/i, "").match(/[aeiouy]+/g)?.length ?? 1;
-  return Math.max(1, groups);
-}
-
 function GhostwriterSheet({
   open,
   sectionName,
@@ -5524,37 +5239,6 @@ function GhostwriterSheet({
       </section>
     </div>
   );
-}
-
-function getWritingMomentum(sectionName: string, sectionBars: number, target: number, boothReady: BoothReadyResult) {
-  const analysis = boothReady.lyricAnalysis;
-
-  if (sectionBars >= target) {
-    return { label: "Section locked", detail: `${sectionBars} bars drafted. Run it against the beat.` };
-  }
-  if (sectionName === "Hook" && analysis.hookReplay >= 55 && sectionBars >= 4) {
-    return { label: "Replay value increased", detail: "The hook has a repeatable anchor." };
-  }
-  if (analysis.cadenceConsistency >= 65 && analysis.totalLines >= 4) {
-    return { label: "Cadence is holding", detail: "Your line lengths are landing in one pocket." };
-  }
-  if (analysis.endRhymePct >= 40 && analysis.totalLines >= 4) {
-    return { label: "Rhyme pocket connected", detail: "Your line endings are reinforcing each other." };
-  }
-  if (analysis.uniqueWordPct >= 72 && analysis.totalWords >= 20) {
-    return { label: "Original voice showing", detail: "The vocabulary is staying distinct." };
-  }
-  if (sectionBars >= 4) {
-    return { label: "Momentum building", detail: `${sectionBars} of ${target} bars are in place.` };
-  }
-
-  const checkpoint = Math.min(target, 4);
-  return {
-    label: sectionBars ? "Idea forming" : "Pocket ready",
-    detail: sectionBars
-      ? `${Math.max(1, checkpoint - sectionBars)} ${checkpoint - sectionBars === 1 ? "bar" : "bars"} to the first checkpoint.`
-      : "Start with one image and let the beat set the pace.",
-  };
 }
 
 function MobileSectionTabs({
@@ -6885,49 +6569,6 @@ function LockerOwnedCard({ unlock }: { unlock: ProductUnlock }) {
   );
 }
 
-function lockerSongProgress(song: SongLockerRow) {
-  const stored = lockerSnapshotNumber(song.snapshot, "completionPct", "completion_pct");
-  if (stored !== null) return clampScore(stored);
-  const sections = sectionsFromLockerSnapshot(song.snapshot);
-  if (!sections) return song.booth_ready ? 100 : 0;
-  const writtenBars = Object.values(sections).reduce((total, content) => total + content.split(/\r?\n/).filter((line) => line.trim()).length, 0);
-  const targetBars = mobileSections.reduce((total, section) => total + section.target, 0);
-  return clampScore((writtenBars / targetBars) * 100);
-}
-
-function lockerSongBarCount(song: SongLockerRow) {
-  const sections = sectionsFromLockerSnapshot(song.snapshot);
-  if (!sections) return 0;
-  return Object.values(sections).reduce((total, content) => total + content.split(/\r?\n/).filter((line) => line.trim()).length, 0);
-}
-
-function mostFrequent(values: string[]) {
-  if (values.length === 0) return null;
-  const counts = new Map<string, number>();
-  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
-  return [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? null;
-}
-
-function lockerSnapshotNumber(snapshot: Record<string, unknown>, ...keys: string[]) {
-  for (const key of keys) {
-    const value = snapshot[key];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-  }
-  return null;
-}
-
-function lockerBeatArt(beat: BeatLockerRow) {
-  const art = beat.beat_snapshot.art;
-  if (typeof art === "string" && art.includes("gradient")) return art;
-  return "linear-gradient(145deg, #211407 0%, #0c0c0d 55%, #6b4510 125%)";
-}
-
-function starterBeatArt(beat: StarterBeat) {
-  if (beat.artworkUrl) return `center / cover no-repeat url('${beat.artworkUrl}')`;
-  if (beat.genre?.toLowerCase().includes("trap")) return "linear-gradient(145deg, #25110b 0%, #100d12 55%, #6f2f0d 125%)";
-  return "linear-gradient(145deg, #112126 0%, #0c0d10 56%, #6b5418 125%)";
-}
-
 function LockerEmpty({ title, body, actionLabel, onAction }: { title: string; body: string; actionLabel?: string; onAction?: () => void }) {
   return (
     <div className="mt-5 rounded-2xl border border-white/10 bg-[#111113] p-5">
@@ -7771,817 +7412,4 @@ function MobileAuthDrawer({
       </form>
     </div>
   );
-}
-
-function countBars(value = "") {
-  return value.split("\n").filter((line) => line.trim()).length;
-}
-
-function blankSections() {
-  return mobileSections.reduce<Record<string, string>>((acc, item) => {
-    acc[item.name] = "";
-    return acc;
-  }, {});
-}
-
-function mobileDraftStorageKey(ownerId: string | null) {
-  return `${MOBILE_DRAFT_KEY}:${ownerId ?? "guest"}`;
-}
-
-function readMobileDraftRecord(ownerId: string | null): MobileDraftRecord | null {
-  try {
-    const ownerKey = mobileDraftStorageKey(ownerId);
-    const guestKey = mobileDraftStorageKey(null);
-    const raw = window.localStorage.getItem(ownerKey)
-      ?? (ownerId ? window.localStorage.getItem(guestKey) : null)
-      ?? window.localStorage.getItem(MOBILE_DRAFT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-    const candidate = parsed as Record<string, unknown>;
-    if (typeof candidate.ownerId === "string" && candidate.ownerId !== ownerId) return null;
-
-    if (candidate.version === 3 && candidate.sections && typeof candidate.sections === "object" && !Array.isArray(candidate.sections)) {
-      const sections = normalizeDraftSections(candidate.sections);
-      const activeSection = mobileSections.some((item) => item.name === candidate.activeSection)
-        ? String(candidate.activeSection)
-        : "Hook";
-      const studioPackId = getStudioPack(typeof candidate.studioPackId === "string" ? candidate.studioPackId : null).id;
-      const studioDna = normalizeStudioDna(candidate.studioDna, studioPackId);
-      const beat = candidate.beat && typeof candidate.beat === "object" && !Array.isArray(candidate.beat)
-        ? beatSnapshotFromRecord(candidate.beat as Record<string, unknown>) ?? EMPTY_BEAT
-        : EMPTY_BEAT;
-      const updatedAt = validIsoDate(candidate.updatedAt) ?? new Date().toISOString();
-
-      return {
-        version: 3,
-        ownerId: typeof candidate.ownerId === "string" ? candidate.ownerId : null,
-        updatedAt,
-        syncedAt: validIsoDate(candidate.syncedAt),
-        unsynced: candidate.unsynced === true,
-        projectId: typeof candidate.projectId === "string" ? candidate.projectId : null,
-        songId: typeof candidate.songId === "string" ? candidate.songId : null,
-        sessionId: typeof candidate.sessionId === "string" ? candidate.sessionId : null,
-        baseRevision: typeof candidate.baseRevision === "number" && Number.isInteger(candidate.baseRevision)
-          ? candidate.baseRevision
-          : null,
-        sections,
-        activeSection,
-        beat,
-        studioPackId,
-        studioDna,
-        playbackPositionSeconds: typeof candidate.playbackPositionSeconds === "number" && Number.isFinite(candidate.playbackPositionSeconds)
-          ? Math.max(0, candidate.playbackPositionSeconds)
-          : 0,
-      };
-    }
-
-    const legacySections = normalizeDraftSections(candidate);
-    const hasLegacyLyrics = mobileSections.some((item) => typeof candidate[item.name] === "string");
-    if (!hasLegacyLyrics) return null;
-    return {
-      version: 3,
-      ownerId: null,
-      updatedAt: new Date().toISOString(),
-      syncedAt: null,
-      unsynced: true,
-      projectId: null,
-      songId: null,
-      sessionId: null,
-      baseRevision: null,
-      sections: legacySections,
-      activeSection: "Hook",
-      beat: EMPTY_BEAT,
-      studioPackId: defaultStudioRoomId,
-      studioDna: defaultStudioDna,
-      playbackPositionSeconds: 0,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeMobileDraftRecord(draft: MobileDraftRecord) {
-  try {
-    window.localStorage.setItem(mobileDraftStorageKey(draft.ownerId), JSON.stringify(draft));
-  } catch {
-    // The editor remains usable even if browser storage is unavailable.
-  }
-}
-
-function normalizeDraftSections(value: object) {
-  const record = value as Record<string, unknown>;
-  return mobileSections.reduce<Record<string, string>>((sections, item) => {
-    const content = record[item.name];
-    sections[item.name] = typeof content === "string" ? content : "";
-    return sections;
-  }, {});
-}
-
-function normalizeStudioDna(value: unknown, fallbackEnvironment: StudioPackId): StudioDna {
-  const candidate = value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-  const airCandidate = candidate.studioAir && typeof candidate.studioAir === "object" && !Array.isArray(candidate.studioAir)
-    ? candidate.studioAir as Record<string, unknown>
-    : {};
-  const activeIndex = typeof airCandidate.activeIndex === "number" && Number.isInteger(airCandidate.activeIndex)
-    ? Math.max(0, Math.min(2, airCandidate.activeIndex))
-    : defaultStudioDna.studioAir.activeIndex;
-  const volume = typeof airCandidate.volume === "number" && Number.isFinite(airCandidate.volume)
-    ? Math.max(4, Math.min(32, airCandidate.volume))
-    : defaultStudioDna.studioAir.volume;
-  return {
-    environment: getStudioPack(typeof candidate.environment === "string" ? candidate.environment : fallbackEnvironment).id,
-    goal: typeof candidate.goal === "string" ? candidate.goal : defaultStudioDna.goal,
-    style: typeof candidate.style === "string" ? candidate.style : defaultStudioDna.style,
-    mood: typeof candidate.mood === "string" ? candidate.mood : defaultStudioDna.mood,
-    producer: typeof candidate.producer === "string" ? candidate.producer : defaultStudioDna.producer,
-    studioAir: { activeIndex, volume },
-  };
-
-}
-
-function validIsoDate(value: unknown) {
-  if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) return null;
-  return new Date(value).toISOString();
-}
-
-function sectionKeyFromTitle(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-}
-
-function countTotalBars(sections: Record<string, string>) {
-  return mobileSections.reduce((sum, item) => sum + countBars(sections[item.name]), 0);
-}
-
-function buildBeatIntelligence({
-  beat,
-  sectionName,
-  sectionText,
-  sections,
-  completionPct,
-  boothReady,
-  roughTakeSaved,
-}: {
-  beat: SelectedBeat;
-  sectionName: string;
-  sectionText: string;
-  sections: Record<string, string>;
-  completionPct: number;
-  boothReady: BoothReadyResult;
-  roughTakeSaved: boolean;
-}): BeatIntelligence {
-  const bpm = typeof beat.bpm === "number" ? beat.bpm : null;
-  const key = typeof beat.key === "string" ? beat.key : null;
-  const mood = typeof beat.mood === "string" ? beat.mood : null;
-  const region = typeof beat.region === "string" ? beat.region : null;
-  const genre = typeof beat.genre === "string" ? beat.genre : typeof beat.tag === "string" ? beat.tag : null;
-  const sectionBars = countBars(sectionText);
-  const hookBars = countBars(sections.Hook);
-  const verse1Bars = countBars(sections["Verse 1"]);
-  const totalBars = countTotalBars(sections);
-  const tempoWord = bpm ? (bpm < 78 ? "slow pocket" : bpm > 96 ? "high-energy bounce" : "mid-tempo pocket") : "open pocket";
-  const moodWord = mood ?? "late-night";
-  const regionWord = region ? `${region} edge` : "cinematic edge";
-
-  const beatTags = [
-    bpm ? `${bpm} BPM` : null,
-    key,
-    mood,
-    region,
-    genre,
-  ].filter((tag): tag is string => Boolean(tag)).slice(0, 4);
-
-  const beatBrief = `${beat.title} wants a ${tempoWord}: keep the delivery controlled, leave space after strong lines, and lean into the ${moodWord.toLowerCase()} tone${region ? ` with a ${regionWord}` : ""}.`;
-  const sectionCue = getSectionCue(sectionName, sectionBars, beat, tempoWord);
-  const titleSeed = getSmartTitleSeed(beat);
-
-  if (hookBars < 4) {
-    return {
-      beatBrief,
-      beatTags: beatTags.length ? beatTags : ["Writing pocket"],
-      nextMoveTitle: "Lock the hook idea",
-      nextMoveBody: `Write ${4 - hookBars} more strong hook bars around one central image before expanding the verses.`,
-      sectionCue,
-      titleSeed,
-    };
-  }
-
-  if (verse1Bars < 12) {
-    return {
-      beatBrief,
-      beatTags: beatTags.length ? beatTags : ["Writing pocket"],
-      nextMoveTitle: "Build Verse 1 momentum",
-      nextMoveBody: `Add ${12 - verse1Bars} more bars to Verse 1. Keep the rhyme pocket steady and make every fourth line land harder.`,
-      sectionCue,
-      titleSeed,
-    };
-  }
-
-  if (completionPct >= 45 && !roughTakeSaved) {
-    return {
-      beatBrief,
-      beatTags: beatTags.length ? beatTags : ["Writing pocket"],
-      nextMoveTitle: "Record a rough take",
-      nextMoveBody: `The draft has ${totalBars} bars. Record ${sectionName} over ${beat.title} to hear what is actually Booth Ready.`,
-      sectionCue,
-      titleSeed,
-    };
-  }
-
-  if (!boothReady.locked && boothReady.score >= 70) {
-    return {
-      beatBrief,
-      beatTags: beatTags.length ? beatTags : ["Writing pocket"],
-      nextMoveTitle: "Run Booth Ready pass",
-      nextMoveBody: "You are close. Tighten the weakest section, then save a full rough take before moving to rehearsal.",
-      sectionCue,
-      titleSeed,
-    };
-  }
-
-  return {
-    beatBrief,
-    beatTags: beatTags.length ? beatTags : ["Writing pocket"],
-    nextMoveTitle: "Keep the session moving",
-    nextMoveBody: "Stay in the pocket: finish the active section, then listen back before adding more ideas.",
-    sectionCue,
-    titleSeed,
-  };
-}
-
-function getSectionCue(sectionName: string, bars: number, beat: SelectedBeat, tempoWord: string) {
-  const mood = typeof beat.mood === "string" ? beat.mood.toLowerCase() : "the beat";
-  if (sectionName === "Hook") {
-    return bars < 4
-      ? `Make the hook simple enough to repeat: one image, one emotion, one phrase that fits the ${tempoWord}.`
-      : `Now sharpen the hook payoff. The last line should feel like the title belongs there.`;
-  }
-  if (sectionName.startsWith("Verse")) {
-    return `Use the verse for detail: scene, pressure, flex, consequence. Keep line lengths close so the ${mood} pocket stays clean.`;
-  }
-  if (sectionName === "Bridge") {
-    return "Change the angle here. Pull back the drums in your head and write the line that reveals what the song is really about.";
-  }
-  return "Close with a clean landing. Repeat the core image or leave one memorable final bar.";
-}
-
-function getSmartTitleSeed(beat: SelectedBeat) {
-  const mood = typeof beat.mood === "string" ? beat.mood : "";
-  const region = typeof beat.region === "string" ? beat.region : "";
-  const genre = typeof beat.genre === "string" ? beat.genre : "";
-  const source = [region, mood, genre].filter(Boolean).join(" ").trim() || beat.title;
-  const words = source
-    .replace(/[^a-zA-Z0-9 ]+/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 3);
-  return words.length ? `${words.join(" ")} Draft` : "Untitled Draft";
-}
-
-function beatSnapshotFromSong(song: SongRow | null) {
-  return song ? beatSnapshotFromRecord(song.beat_snapshot) : null;
-}
-
-function beatSnapshotFromRecord(snapshot: Record<string, unknown>) {
-  if (typeof snapshot?.id !== "string" || typeof snapshot.title !== "string") return null;
-  return {
-    ...snapshot,
-    id: snapshot.id,
-    title: snapshot.title,
-    producer: typeof snapshot.producer === "string" ? snapshot.producer : undefined,
-    bpm: typeof snapshot.bpm === "number" ? snapshot.bpm : undefined,
-    key: typeof snapshot.key === "string" ? snapshot.key : undefined,
-    mood: typeof snapshot.mood === "string" ? snapshot.mood : undefined,
-  };
-}
-
-function sectionsFromLockerSnapshot(snapshot: Record<string, unknown>) {
-  const rawSections = snapshot.sections;
-  if (!rawSections || typeof rawSections !== "object" || Array.isArray(rawSections)) return null;
-  return Object.entries(rawSections).reduce<Record<string, string>>((acc, [key, value]) => {
-    if (typeof value === "string") acc[key] = value;
-    return acc;
-  }, {});
-}
-
-function lockerSnapshotBeat(snapshot: Record<string, unknown>) {
-  const beat = snapshot.beat;
-  if (!beat || typeof beat !== "object" || Array.isArray(beat)) return null;
-  return beatSnapshotFromRecord(beat as Record<string, unknown>);
-}
-
-function boothReadyFromLockerSnapshot(snapshot: Record<string, unknown>, sections: Record<string, string>, completionPct: number) {
-  const analysis = analyzeLyrics(sections);
-  const fallback = scoreBoothReady(sections, completionPct, analysis, {
-    activeSection: "Hook",
-    roughTakeDuration: 0,
-    roughTakeSaved: false,
-    roughTakeSection: null,
-    roughTakeExists: false,
-    roughTakeAnalyzing: false,
-    roughTakeAnalysis: null,
-  });
-  const stored = snapshot.boothReady;
-  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return fallback;
-  const record = stored as Record<string, unknown>;
-  const number = (key: string, current: number) => typeof record[key] === "number" && Number.isFinite(record[key]) ? clampScore(record[key] as number) : current;
-  const string = (key: string, current: string) => typeof record[key] === "string" ? (record[key] as string).slice(0, 300) : current;
-  const checklist = Array.isArray(record.checklist)
-    ? record.checklist.filter((item): item is { label: string; detail: string; complete: boolean } => Boolean(item && typeof item === "object" && typeof (item as Record<string, unknown>).label === "string" && typeof (item as Record<string, unknown>).detail === "string" && typeof (item as Record<string, unknown>).complete === "boolean")).slice(0, 12)
-    : fallback.checklist;
-  const improvements = Array.isArray(record.improvements) ? record.improvements.filter((item): item is string => typeof item === "string").slice(0, 12) : fallback.improvements;
-  const rawMetrics = record.metrics && typeof record.metrics === "object" && !Array.isArray(record.metrics) ? record.metrics as Record<string, unknown> : {};
-  return {
-    ...fallback,
-    score: number("score", fallback.score),
-    lyricScore: number("lyricScore", fallback.lyricScore),
-    performanceScore: number("performanceScore", fallback.performanceScore),
-    nextAction: string("nextAction", fallback.nextAction),
-    checklist,
-    improvements,
-    metrics: {
-      structure: typeof rawMetrics.structure === "number" ? clampScore(rawMetrics.structure) : fallback.metrics.structure,
-      completion: typeof rawMetrics.completion === "number" ? clampScore(rawMetrics.completion) : fallback.metrics.completion,
-      cadence: typeof rawMetrics.cadence === "number" ? clampScore(rawMetrics.cadence) : fallback.metrics.cadence,
-      hook: typeof rawMetrics.hook === "number" ? clampScore(rawMetrics.hook) : fallback.metrics.hook,
-      originality: typeof rawMetrics.originality === "number" ? clampScore(rawMetrics.originality) : fallback.metrics.originality,
-      replay: typeof rawMetrics.replay === "number" ? clampScore(rawMetrics.replay) : fallback.metrics.replay,
-    },
-  };
-}
-
-function buildBoothExportSnapshot({
-  projectTitle,
-  artistName,
-  activeSection,
-  sections,
-  beat,
-  boothReady,
-  completionPct,
-  totalBars,
-  roughTake,
-}: {
-  projectTitle: string;
-  artistName: string;
-  activeSection: string;
-  sections: Record<string, string>;
-  beat: Record<string, unknown>;
-  boothReady: BoothReadyResult;
-  completionPct: number;
-  totalBars: number;
-  roughTake: RoughTakeRow | null;
-}): BoothExportSnapshot {
-  return {
-    projectTitle,
-    artistName,
-    activeSection,
-    sections: { ...sections },
-    beat: { ...beat },
-    boothReady: {
-      score: boothReady.score,
-      lyricScore: boothReady.lyricScore,
-      performanceScore: boothReady.performanceScore,
-      nextAction: boothReady.nextAction,
-      checklist: boothReady.checklist.map((item) => ({ ...item })),
-      improvements: [...boothReady.improvements],
-      metrics: { ...boothReady.metrics },
-    },
-    completionPct,
-    totalBars,
-    roughTake: roughTake ? {
-      id: roughTake.id,
-      sectionName: roughTake.section_name,
-      durationSeconds: roughTake.duration_seconds,
-      analysis: roughTake.analysis,
-    } : null,
-  };
-}
-
-function artistDisplayName(profile: ProfileRow | null, email?: string | null) {
-  return profile?.artist_name?.trim() || profile?.display_name?.trim() || email?.split("@")[0] || "Artist";
-}
-
-function productUnlockFromEntitlement(entitlement: ProductEntitlementRow): ProductUnlock {
-  const detail = typeof entitlement.metadata.detail === "string" ? entitlement.metadata.detail : "Studio Store product unlocked.";
-  const price = typeof entitlement.metadata.price === "string" ? entitlement.metadata.price : `$${Math.round(entitlement.price_cents / 100)}`;
-  return {
-    id: entitlement.product_id,
-    title: entitlement.title,
-    category: productCategoryLabel(entitlement.product_type),
-    detail,
-    price,
-    unlockedAt: entitlement.created_at,
-  };
-}
-
-function productCategoryLabel(type: ProductEntitlementRow["product_type"]): ProductUnlock["category"] {
-  if (type === "ai_style") return "Producer Style";
-  if (type === "vocal_chain") return "Vocal Chain";
-  if (type === "writing_pack") return "Writing Pack";
-  if (type === "ambient_pack") return "Ambient Pack";
-  if (type === "theme") return "Theme";
-  if (type === "bundle") return "Bundle";
-  if (type === "producer_profile") return "Producer Profile";
-  if (type === "studio_room") return "Studio Room";
-  return "Beat License";
-}
-
-function getStudioRoomProductId(id: StudioPackId) {
-  return `studio-room-${id}`;
-}
-
-function beatSnapshotFromLockerBeat(beat: BeatLockerRow): SelectedBeat {
-  const savedSnapshot = beatSnapshotFromRecord(beat.beat_snapshot);
-  return {
-    ...(savedSnapshot ?? {}),
-    id: beat.beat_id,
-    title: beat.title,
-    producer: beat.producer ?? savedSnapshot?.producer,
-    bpm: beat.bpm ?? savedSnapshot?.bpm,
-    key: beat.musical_key ?? savedSnapshot?.key,
-    mood: beat.mood ?? savedSnapshot?.mood,
-  };
-}
-
-function beatSnapshotFromStarterBeat(beat: StarterBeat): SelectedBeat {
-  return {
-    id: `starter-beat-${beat.id}`,
-    title: beat.title,
-    producer: beat.producer,
-    bpm: beat.bpm ?? undefined,
-    key: beat.key ?? undefined,
-    mood: beat.mood ?? beat.genre ?? undefined,
-    genre: beat.genre ?? undefined,
-    duration: beat.duration,
-    previewUrl: beat.previewUrl,
-    source: "starter",
-    starterBeatId: beat.id,
-    licenseScope: beat.licenseScope,
-    attribution: beat.attribution,
-  };
-}
-
-function getProjectTitle(song: SongRow | null) {
-  const project = song?.projects;
-  if (!project || typeof project !== "object") return null;
-  const title = "title" in project ? project.title : null;
-  const type = "project_type" in project ? project.project_type : null;
-  if (typeof title !== "string") return null;
-  return typeof type === "string" && type ? `${title} - ${type}` : title;
-}
-
-function scoreBoothReady(
-  sections: Record<string, string>,
-  completionPct: number,
-  lyricAnalysis: LyricAnalysis,
-  performanceInput: {
-    activeSection: string;
-    roughTakeDuration: number;
-    roughTakeSaved: boolean;
-    roughTakeSection: string | null;
-    roughTakeExists: boolean;
-    roughTakeAnalyzing: boolean;
-    roughTakeAnalysis: RoughTakeAnalysis | null;
-  },
-): BoothReadyResult {
-  const hookBars = countBars(sections.Hook);
-  const verse1Bars = countBars(sections["Verse 1"]);
-  const verse2Bars = countBars(sections["Verse 2"]);
-  const bridgeBars = countBars(sections.Bridge);
-
-  const structure = clampScore(
-    (hookBars >= 4 ? 24 : hookBars * 6) +
-      (verse1Bars >= 12 ? 34 : verse1Bars * 2.8) +
-      (verse2Bars >= 8 ? 22 : verse2Bars * 2.7) +
-      (bridgeBars > 0 ? 10 : 0) +
-      (countBars(sections.Outro) > 0 ? 10 : 0),
-  );
-  const completion = clampScore(completionPct);
-  const cadence = lyricAnalysis.cadenceConsistency;
-  const hook = clampScore(hookBars * 8 + lyricAnalysis.hookReplay * 0.55);
-  const originality = clampScore(lyricAnalysis.uniqueWordPct * 1.2 - lyricAnalysis.fillerPct * 1.5);
-  const replay = clampScore(lyricAnalysis.hookReplay * 0.75 + lyricAnalysis.endRhymePct * 0.25);
-  const lyricScore = clampScore(structure * 0.2 + completion * 0.24 + cadence * 0.14 + hook * 0.18 + originality * 0.12 + replay * 0.12);
-  const takeExists = performanceInput.roughTakeExists;
-  const takeSaved = performanceInput.roughTakeSaved;
-  const sectionMatched = !performanceInput.roughTakeSection || performanceInput.roughTakeSection === performanceInput.activeSection;
-  const durationScore = clampScore((performanceInput.roughTakeDuration / 60) * 100);
-  const audioAnalysis = performanceInput.roughTakeAnalysis;
-  const performanceScore = audioAnalysis
-    ? clampScore(
-        audioAnalysis.deliveryScore * 0.55 +
-          audioAnalysis.vocalPresence * 0.15 +
-          audioAnalysis.consistency * 0.15 +
-          (takeSaved ? 10 : 3) +
-          (sectionMatched ? 5 : 1),
-      )
-    : clampScore((takeExists ? 25 : 0) + (takeSaved ? 20 : 0) + (sectionMatched ? 10 : 4) + durationScore * 0.25);
-  const score = clampScore(lyricScore * 0.72 + performanceScore * 0.28);
-
-  const blockers: string[] = [];
-  if (hookBars < 4) blockers.push("Hook needs at least 4 strong bars.");
-  if (verse1Bars < 12) blockers.push("Verse 1 needs more complete thought and momentum.");
-  if (completionPct < 45) blockers.push("Song needs more sections before a booth check.");
-  if (cadence < 45) blockers.push("Line lengths are uneven; tighten the flow.");
-  if (lyricAnalysis.endRhymePct < 30 && lyricAnalysis.totalLines >= 4) blockers.push("More line endings need to connect through rhyme.");
-  if (lyricAnalysis.hookReplay < 45 && hookBars >= 4) blockers.push("The hook needs one repeatable anchor phrase.");
-  if (!takeExists && completionPct >= 45) blockers.push(`Record a rough take for ${performanceInput.activeSection}.`);
-  if (takeExists && !takeSaved) blockers.push("Save the rough take so it stays attached to the session.");
-  if (takeSaved && performanceInput.roughTakeDuration < 20) blockers.push("Record a longer take to judge delivery.");
-  if (audioAnalysis && audioAnalysis.deliveryScore < 75) blockers.push(...audioAnalysis.findings);
-
-  const locked = completionPct < 45 || hookBars < 4 || verse1Bars < 8;
-  const nextAction = locked
-    ? blockers[0] ?? "Keep writing to unlock Booth Ready."
-    : !takeExists
-      ? `Record a rough take for ${performanceInput.activeSection}.`
-      : !takeSaved
-        ? "Save the rough take so Booth Ready can remember it."
-        : score >= 75
-      ? "Booth Ready certified. Rehearse once more, then prepare the studio handoff."
-      : blockers[0] ?? "Strengthen the hook or finish another section.";
-  const primaryAction: BoothReadyResult["primaryAction"] = locked
-    ? "write"
-    : !takeExists
-      ? "record"
-      : !takeSaved
-        ? "save_take"
-        : "review";
-  const primaryActionLabel =
-    primaryAction === "record"
-      ? `Record ${performanceInput.activeSection}`
-      : primaryAction === "save_take"
-        ? "Keep Rough Take"
-        : primaryAction === "review"
-          ? score >= 75
-            ? "Prepare for Booth"
-            : "Open Producer Pass"
-          : hookBars < 4
-            ? `Write ${Math.max(1, 4 - hookBars)} Hook Bars`
-            : `Write ${Math.max(1, 12 - verse1Bars)} Verse Bars`;
-  const lockedReason = locked ? blockers[0] ?? "Keep writing to unlock Booth Ready." : "Booth Ready preview is unlocked.";
-  const checklist = [
-    {
-      label: "Hook foundation",
-      detail: hookBars >= 4 ? `${hookBars} hook bars drafted.` : `${Math.max(1, 4 - hookBars)} more hook bars needed.`,
-      complete: hookBars >= 4,
-    },
-    {
-      label: "Verse 1 momentum",
-      detail: verse1Bars >= 12 ? `${verse1Bars} verse bars drafted.` : `${Math.max(1, 12 - verse1Bars)} more verse bars needed.`,
-      complete: verse1Bars >= 12,
-    },
-    {
-      label: "Song completion",
-      detail: completionPct >= 45 ? `${completionPct}% complete.` : `Reach 45% completion. Current: ${completionPct}%.`,
-      complete: completionPct >= 45,
-    },
-    {
-      label: "Rough take",
-      detail: takeSaved ? "Saved to this session." : takeExists ? "Recorded, but not kept yet." : "Record a take to judge delivery.",
-      complete: takeSaved,
-    },
-    {
-      label: "Cadence control",
-      detail: cadence >= 55 ? "Line lengths are in a usable pocket." : "Tighten line length before recording.",
-      complete: cadence >= 55,
-    },
-  ];
-  const improvements = [
-    hookBars >= 4 ? `Hook structure unlocked at ${hookBars} bars.` : `Hook is forming: ${hookBars}/4 unlock bars.`,
-    lyricAnalysis.actions[0] ?? (verse1Bars >= 8 ? "Verse 1 has enough shape to evaluate." : `Verse 1 needs ${Math.max(1, 8 - verse1Bars)} more bars before scoring opens up.`),
-    audioAnalysis
-      ? `Delivery analysis is active at ${audioAnalysis.deliveryScore}/100.`
-      : takeSaved
-        ? "The take is saved; record a fresh pass to add detailed delivery analysis."
-        : takeExists
-          ? "Rough take recorded. Save it to keep performance progress."
-          : "Lyrics are being scored; performance unlocks after a rough take.",
-  ];
-
-  return {
-    score,
-    lyricScore,
-    performanceScore,
-    locked,
-    nextAction,
-    primaryAction,
-    primaryActionLabel,
-    lockedReason,
-    checklist,
-    improvements,
-    metrics: { structure, completion, cadence, hook, originality, replay },
-    performance: {
-      takeExists,
-      takeSaved,
-      duration: performanceInput.roughTakeDuration,
-      sectionMatched,
-      analyzing: performanceInput.roughTakeAnalyzing,
-      analysis: audioAnalysis,
-    },
-    lyricAnalysis,
-    blockers: [...new Set(blockers)].slice(0, 5),
-  };
-}
-
-function isRoughTakeAnalysis(value: unknown): value is RoughTakeAnalysis {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<RoughTakeAnalysis>;
-  return (
-    candidate.version === "booth-ready-v2" &&
-    typeof candidate.deliveryScore === "number" &&
-    typeof candidate.vocalPresence === "number" &&
-    typeof candidate.consistency === "number" &&
-    Array.isArray(candidate.findings)
-  );
-}
-
-function clampScore(value: number) {
-  return Math.max(0, Math.min(100, Math.round(Number.isFinite(value) ? value : 0)));
-}
-
-function getRecordReadiness(result: BoothReadyResult): RecordReadiness {
-  const stages: RecordReadinessStage[] = [
-    { id: "draft", label: "Draft" },
-    { id: "session_ready", label: "Session Ready" },
-    { id: "producer_pass", label: "Producer Pass" },
-    { id: "booth_ready", label: "Booth Ready" },
-  ];
-  const sessionReady = !result.locked && result.metrics.completion >= 45;
-  const producerPassReady =
-    sessionReady &&
-    result.lyricScore >= 55 &&
-    result.metrics.structure >= 55 &&
-    result.metrics.hook >= 45;
-  const certified =
-    producerPassReady &&
-    result.score >= 75 &&
-    result.metrics.completion >= 75 &&
-    result.metrics.cadence >= 55 &&
-    result.performance.takeSaved;
-  const currentIndex = certified ? 3 : producerPassReady ? 2 : sessionReady ? 1 : 0;
-
-  if (certified) {
-    return {
-      currentIndex,
-      label: "Booth Ready Certified",
-      detail: "The record has cleared its core writing, structure, cadence, and rough-take checks.",
-      stages,
-      certified,
-    };
-  }
-  if (producerPassReady) {
-    return {
-      currentIndex,
-      label: "Producer Pass",
-      detail: "The song is built. Resolve the highest-impact lyric or performance note before certification.",
-      stages,
-      certified,
-    };
-  }
-  if (sessionReady) {
-    return {
-      currentIndex,
-      label: "Session Ready",
-      detail: "The structure is ready for rehearsal. Record a rough take and listen for what the page cannot reveal.",
-      stages,
-      certified,
-    };
-  }
-  return {
-    currentIndex,
-    label: "Draft",
-    detail: "Build the hook and first verse until the record has enough structure for a meaningful review.",
-    stages,
-    certified,
-  };
-}
-
-function getSongState(completionPct: number, boothScore: number): { label: string; tone: "muted" | "gold" | "green" } {
-  if (completionPct >= 75 && boothScore >= 70) return { label: "Booth Ready", tone: "green" };
-  if (completionPct >= 55) return { label: "Session Ready", tone: "gold" };
-  if (completionPct >= 18) return { label: "Draft", tone: "gold" };
-  return { label: "Idea", tone: "muted" };
-}
-
-function formatShortDate(value: string) {
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value));
-}
-
-function formatVersionTime(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function versionSourceLabel(source: SectionVersion["source"]) {
-  const labels: Record<SectionVersion["source"], string> = {
-    autosave: "Autosave",
-    manual: "Manual save",
-    recovery: "Restored draft",
-    import: "Imported",
-    producer_action: "Producer pass",
-  };
-  return labels[source];
-}
-
-function formatDuration(seconds: number) {
-  const safeSeconds = Math.max(0, Math.floor(seconds));
-  const mins = Math.floor(safeSeconds / 60);
-  const secs = String(safeSeconds % 60).padStart(2, "0");
-  return `${mins}:${secs}`;
-}
-
-function formatFileSize(bytes: number) {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
-}
-
-function readAudioFileDuration(file: File) {
-  return new Promise<number>((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const audio = new Audio();
-    const cleanup = () => {
-      audio.removeAttribute("src");
-      audio.load();
-      URL.revokeObjectURL(url);
-    };
-    audio.preload = "metadata";
-    audio.onloadedmetadata = () => {
-      const duration = audio.duration;
-      cleanup();
-      if (Number.isFinite(duration) && duration > 0) resolve(duration);
-      else reject(new Error("Invalid audio duration."));
-    };
-    audio.onerror = () => {
-      cleanup();
-      reject(new Error("Audio metadata could not be read."));
-    };
-    audio.src = url;
-  });
-}
-
-function getProgressPct(currentTime: number, duration: number) {
-  if (!duration || duration <= 0) return 0;
-  return Math.max(0, Math.min(100, (currentTime / duration) * 100));
-}
-
-function getBeatDurationSeconds(beat: SelectedBeat) {
-  if (typeof beat.duration === "number") return beat.duration;
-  if (typeof beat.duration === "string") {
-    const [mins, secs] = beat.duration.split(":").map((part) => Number(part));
-    if (Number.isFinite(mins) && Number.isFinite(secs)) return mins * 60 + secs;
-  }
-  return 222;
-}
-
-function trackMarketplaceEvent(eventType: "beat_play" | "beat_favorite" | "beat_add", beatId: string) {
-  if (!PRODUCER_BEAT_ID.test(beatId) && !RAW_BEAT_UUID.test(beatId)) return;
-  void fetch("/api/marketplace/events", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ event_type: eventType, beat_id: beatId }),
-    credentials: "same-origin",
-    keepalive: true,
-  }).catch(() => undefined);
-}
-
-function buildSyntheticWaveBars(beat: SelectedBeat, count: number) {
-  const seed = Array.from(`${beat.id}-${beat.bpm ?? ""}-${beat.key ?? ""}`).reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const tempo = typeof beat.bpm === "number" ? beat.bpm : 84;
-  return Array.from({ length: count }, (_, index) => {
-    const wave = Math.sin((index + seed) * 0.72) * 0.5 + 0.5;
-    const knock = Math.sin((index + 3) * (tempo / 92)) * 0.5 + 0.5;
-    const accent = index % 8 === 0 ? 18 : index % 4 === 0 ? 10 : 0;
-    return Math.max(22, Math.min(92, 24 + wave * 34 + knock * 22 + accent));
-  });
-}
-
-function buildTakeWaveBars(count: number) {
-  return Array.from({ length: count }, (_, index) => {
-    const breath = Math.sin(index * 0.62) * 0.5 + 0.5;
-    const consonant = Math.sin((index + 4) * 1.27) * 0.5 + 0.5;
-    return Math.max(20, Math.min(88, 22 + breath * 30 + consonant * 24 + (index % 7 === 0 ? 14 : 0)));
-  });
-}
-
-function toBeatSnapshot(beat: Beat) {
-  const candidate = beat as Beat & { previewUrl?: string; audioUrl?: string };
-  return {
-    id: beat.id,
-    title: beat.title,
-    producer: beat.producer,
-    bpm: beat.bpm,
-    key: beat.key,
-    mood: beat.mood,
-    region: beat.region,
-    duration: beat.duration,
-    boothReadyScore: beat.boothReadyScore,
-    previewUrl: candidate.previewUrl ?? candidate.audioUrl,
-  };
 }
