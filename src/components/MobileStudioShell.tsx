@@ -111,7 +111,6 @@ import {
   formatShortDate,
   getProjectTitle,
   hasAllAccessMembership,
-  productUnlockFromEntitlement,
 } from "@/lib/studio/format";
 import {
   buildBeatIntelligence,
@@ -135,7 +134,6 @@ import type {
   BeatIntelligence,
   BoothReadyResult,
   EnvironmentIntelligence,
-  MarketplaceFeed,
   MobileDraftRecord,
   MobileNavView,
   PadActionStatus,
@@ -181,6 +179,7 @@ import { GhostwriterSheet } from "@/components/studio/sheets/GhostwriterSheet";
 import { MobileAuthDrawer } from "@/components/studio/sheets/MobileAuthDrawer";
 import { useAuthDrawer } from "@/components/studio/state/use-auth-drawer";
 import { useBeatPlayback } from "@/components/studio/state/use-beat-playback";
+import { useMarketplaceFeed } from "@/components/studio/state/use-marketplace-feed";
 import { useRoughTake } from "@/components/studio/state/use-rough-take";
 import { NewSongSheet } from "@/components/studio/sheets/NewSongSheet";
 import { PrivateBeatImportSheet } from "@/components/studio/sheets/PrivateBeatImportSheet";
@@ -238,6 +237,17 @@ export function MobileStudioShell() {
   const [readinessLaunchToken, setReadinessLaunchToken] = useState(0);
   const [marketFocusCategory, setMarketFocusCategory] = useState<MarketCategory | null>(null);
   const [activeStudioPackId, setActiveStudioPackId] = useState<StudioPackId>(defaultStudioRoomId);
+  const {
+    marketplaceFeed,
+    marketplaceFeedLoading,
+    marketplaceFeedError,
+    starterBeats,
+    starterBeatsLoading,
+    starterBeatsError,
+    mergedProductUnlocks,
+    unlockedProductIds,
+    saveSessionProductUnlock,
+  } = useMarketplaceFeed(productEntitlements);
   const take = useRoughTake(roughTake);
   const {
     playing,
@@ -288,13 +298,6 @@ export function MobileStudioShell() {
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [syncRetryNonce, setSyncRetryNonce] = useState(0);
   const [syncMessage, setSyncMessage] = useState("Saved on device");
-  const [productUnlocks, setProductUnlocks] = useState<ProductUnlock[]>([]);
-  const [marketplaceFeed, setMarketplaceFeed] = useState<MarketplaceFeed>({ beats: [], producers: [] });
-  const [marketplaceFeedLoading, setMarketplaceFeedLoading] = useState(true);
-  const [marketplaceFeedError, setMarketplaceFeedError] = useState<string | null>(null);
-  const [starterBeats, setStarterBeats] = useState<StarterBeat[]>([]);
-  const [starterBeatsLoading, setStarterBeatsLoading] = useState(true);
-  const [starterBeatsError, setStarterBeatsError] = useState<string | null>(null);
   const [beatSwitcherOpen, setBeatSwitcherOpen] = useState(false);
   const [boothExportOpen, setBoothExportOpen] = useState(false);
   const [boothExportDraft, setBoothExportDraft] = useState<BoothExportCreateInput | null>(null);
@@ -328,16 +331,6 @@ export function MobileStudioShell() {
   const activeSongId = session?.song_id ?? activeSong?.id;
   activeProjectIdRef.current = activeProjectId ?? null;
   activeSongIdRef.current = activeSongId ?? null;
-  const entitlementUnlocks = useMemo(() => productEntitlements.map(productUnlockFromEntitlement), [productEntitlements]);
-  const mergedProductUnlocks = useMemo(() => {
-    const seen = new Set<string>();
-    return [...entitlementUnlocks, ...productUnlocks].filter((unlock) => {
-      if (seen.has(unlock.id)) return false;
-      seen.add(unlock.id);
-      return true;
-    });
-  }, [entitlementUnlocks, productUnlocks]);
-  const unlockedProductIds = useMemo(() => new Set(mergedProductUnlocks.map((unlock) => unlock.id)), [mergedProductUnlocks]);
 
   useEffect(() => {
     const handleMembershipAccess = (event: Event) => {
@@ -521,61 +514,6 @@ export function MobileStudioShell() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    setMarketplaceFeedLoading(true);
-    setMarketplaceFeedError(null);
-    void fetch("/api/marketplace/beats")
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Producer feed is unavailable.");
-        return res.json();
-      })
-      .then((data) => {
-        if (cancelled) return;
-        setMarketplaceFeed({
-          beats: Array.isArray(data.beats) ? data.beats : [],
-          producers: Array.isArray(data.producers) ? data.producers : [],
-        });
-        setMarketplaceFeedLoading(false);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setMarketplaceFeed({ beats: [], producers: [] });
-          setMarketplaceFeedLoading(false);
-          setMarketplaceFeedError("Producer drops will appear when the live feed reconnects.");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    setStarterBeatsLoading(true);
-    setStarterBeatsError(null);
-    void fetch("/api/starter-beats")
-      .then(async (response) => {
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.error || "Starter Beats are unavailable.");
-        return data;
-      })
-      .then((data) => {
-        if (cancelled) return;
-        setStarterBeats(Array.isArray(data.beats) ? data.beats : []);
-        setStarterBeatsLoading(false);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setStarterBeats([]);
-        setStarterBeatsLoading(false);
-        setStarterBeatsError(error instanceof Error ? error.message : "Starter Beats are unavailable.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     try {
       const raw = window.localStorage.getItem(MOBILE_STUDIO_DNA_KEY);
       if (raw) {
@@ -652,13 +590,6 @@ export function MobileStudioShell() {
     if (playBeat && !playing && selectedBeat.id !== EMPTY_BEAT.id && resolveBeatPreviewUrl(selectedBeat)) {
       toggleBeatPlayback();
     }
-  }
-
-  function saveSessionProductUnlock(product: Omit<ProductUnlock, "unlockedAt">) {
-    setProductUnlocks((current) => {
-      if (current.some((item) => item.id === product.id)) return current;
-      return [{ ...product, unlockedAt: new Date().toISOString() }, ...current];
-    });
   }
 
   function unlockProduct(product: Omit<ProductUnlock, "unlockedAt">) {
