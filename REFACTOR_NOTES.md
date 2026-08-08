@@ -93,3 +93,48 @@ Just under the ~400 budget, and ~220 of those are the `environmentNotes` copy ta
 `buildEnvironmentIntelligence`. It is data, not logic, and could be split into its own
 module later. Left alone here — splitting it is not required to meet the budget and every
 extra file is another chance to get a move wrong.
+
+---
+
+## Phase 3 notes
+
+### None of the leaf components closed over parent state
+
+The spec warned that "several of these currently close over variables from the parent
+scope rather than taking them as props." That turned out not to be the case: every
+sub-component in `MobileStudioShell.tsx` is a top-level `function` declaration, so the only
+scope it can close over is the module scope — imports and module-level constants, never the
+root component's state. Everything module-level those components referenced had already
+moved to `src/lib/studio/` in Phases 1 and 2, so the extraction needed no new props at all
+and the diff is a pure move. Nothing was reached for context.
+
+Verified mechanically: the shell lost 1572 lines and gained 29, all of them `import`
+statements. Every removed non-blank line appears verbatim in an extracted file, or with an
+`export ` prefix on the declaration line.
+
+### Components needing more than 8 props
+
+- `PadTransport` — 12 props (`beat`, `playing`, `recording`, `compact`, `currentTime`,
+  `duration`, `error`, `onToggleBeat`, `onSeek`, `onSeekCommit`, `onChangeBeat`,
+  `onToggleRecording`). Seven of those are beat-playback state and its handlers, which is
+  precisely the `use-beat-playback` group in Phase 5c. Once that hook exists this is the
+  first real candidate for a playback context — but it stays a prop drill for now, since
+  introducing context here would change what Phase 5 has to reason about.
+
+No other extracted component exceeds 8 props.
+
+### Circular imports
+
+None. Dependency flow is one-directional: `panels/` and `locker/cards/` import from
+`primitives/` and `waveform/`, all of them import from `src/lib/studio/`, and nothing
+imports back into `MobileStudioShell.tsx`.
+
+### e2e in this sandbox
+
+`bun run test:e2e` cannot pass here regardless of the refactor: the suite boots a real dev
+server, which throws `Missing NEXT_PUBLIC_SUPABASE_URL and a Supabase publishable key`, and
+`playwright.config.ts` asks for branded Chrome (`channel: "chrome"`) which is not installed
+— only bundled Chromium is. Results below come from a throwaway local config that points at
+the bundled Chromium plus placeholder Supabase values, compared against a git worktree at
+the pre-refactor commit so pre-existing failures are distinguishable from new ones. Neither
+the throwaway config nor the placeholder env file is committed.
