@@ -313,6 +313,20 @@ Once the context decision above lands, both drop naturally. Left alone.
 
 ### Verification
 
-`bun run typecheck`, `bun run lint` and `bun run test:unit` (102 tests) pass on every commit.
-`bun run test:e2e` cannot run in this sandbox as written — see the Phase 3 note for why and
-what was run instead.
+`bun run typecheck` and `bun run lint` pass on **every commit independently**, verified by
+checking out each commit's `src/` in turn rather than only testing the tip.
+`bun run test:unit` passes: 102 tests, 268 assertions.
+
+`bun run test:e2e` cannot run in this sandbox as written — see the Phase 3 note. Running
+`tests/e2e/app-smoke.spec.ts` against bundled Chromium with placeholder Supabase values
+gives **10 passed, 1 failed**:
+
+    ✘ device preview embeds the live app and switches shells
+
+That one failure reproduces identically on a git worktree at the pre-refactor commit
+`6b8579c`, so it is a sandbox limitation, not a regression. It waits on `app-dock` inside
+the `/mobile-preview` iframe, which never mounts without real Supabase credentials.
+
+`app-smoke` is the suite that actually exercises `MobileStudioShell`. `release-journeys`
+and `security-boundaries` need authenticated fixtures and cannot run here at all; they were
+not used as a signal in either direction.
