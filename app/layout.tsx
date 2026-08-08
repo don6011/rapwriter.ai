@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Toaster } from "@/components/ui/sonner";
+import { Toaster } from "@/components/studio/primitives/sonner";
 import "../src/styles.css";
 
 export const metadata: Metadata = {

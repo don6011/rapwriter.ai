@@ -12,7 +12,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from "@/components/studio/primitives/alert-dialog";
 import { refreshActivityInbox } from "@/lib/client/activity-events";
 import { collaborationFileError } from "@/lib/collaboration-deliverables";
 import { createClient } from "@/lib/supabase/client";

@@ -15,7 +15,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from "@/components/studio/primitives/alert-dialog";
 import { refreshActivityInbox } from "@/lib/client/activity-events";
 import type { CollaborationAction } from "@/lib/collaboration";
 import { createClient } from "@/lib/supabase/client";
