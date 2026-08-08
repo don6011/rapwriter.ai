@@ -96,8 +96,6 @@ import {
   scoreBoothReady,
 } from "@/lib/studio/booth-ready";
 import {
-  MOBILE_STUDIO_DNA_KEY,
-  MOBILE_STUDIO_PACK_KEY,
   normalizeStudioDna,
   readMobileDraftRecord,
   writeMobileDraftRecord,
@@ -180,6 +178,7 @@ import { useBeatPlayback } from "@/components/studio/state/use-beat-playback";
 import { useMarketplaceFeed } from "@/components/studio/state/use-marketplace-feed";
 import { useRoughTake } from "@/components/studio/state/use-rough-take";
 import { useSheetStack } from "@/components/studio/state/use-sheet-stack";
+import { useStudioEnvironment } from "@/components/studio/state/use-studio-environment";
 import { NewSongSheet } from "@/components/studio/sheets/NewSongSheet";
 import { PrivateBeatImportSheet } from "@/components/studio/sheets/PrivateBeatImportSheet";
 import { StudioAirSheet } from "@/components/studio/sheets/StudioAirSheet";
@@ -229,12 +228,14 @@ export function MobileStudioShell() {
     uploadRoughTake,
     user,
   } = workspace;
+  // Declared ahead of the state hooks below: useStudioEnvironment takes setSyncMessage
+  // as its notice channel, and a React setter keeps that callback stable.
+  const [syncMessage, setSyncMessage] = useState("Saved on device");
   const { requestAuth, drawerProps: authDrawerProps } = useAuthDrawer(workspace);
   const [screen, setScreen] = useState<"home" | "writer">("home");
   const [activeNav, setActiveNav] = useState<MobileNavView>("studio");
   const [readinessLaunchToken, setReadinessLaunchToken] = useState(0);
   const [marketFocusCategory, setMarketFocusCategory] = useState<MarketCategory | null>(null);
-  const [activeStudioPackId, setActiveStudioPackId] = useState<StudioPackId>(defaultStudioRoomId);
   const {
     marketplaceFeed,
     marketplaceFeedLoading,
@@ -270,6 +271,20 @@ export function MobileStudioShell() {
     previewMarketplaceBeat,
   } = useBeatPlayback({ onPause: () => queueUrgentSessionSync() });
   const {
+    activeStudioPackId,
+    activeStudioPack,
+    studioDna,
+    studioAirPlaying,
+    setActiveStudioPackId,
+    setStudioDna,
+    stopStudioAir,
+    toggleStudioAir,
+    changeStudioAirVolume,
+    persistPack,
+    persistDna,
+    hasSavedDna,
+  } = useStudioEnvironment({ onNotice: setSyncMessage });
+  const {
     recording,
     recordingSeconds,
     error: recordError,
@@ -297,13 +312,9 @@ export function MobileStudioShell() {
   const [hydratedSessionId, setHydratedSessionId] = useState<string | null>(null);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [syncRetryNonce, setSyncRetryNonce] = useState(0);
-  const [syncMessage, setSyncMessage] = useState("Saved on device");
-  const [studioDna, setStudioDna] = useState<StudioDna>(defaultStudioDna);
-  const [studioAirPlaying, setStudioAirPlaying] = useState(false);
   const [producerActionProposal, setProducerActionProposal] = useState<ProducerActionProposal | null>(null);
   const [producerActionStatus, setProducerActionStatus] = useState<ProducerActionStatus>("idle");
   const [producerActionError, setProducerActionError] = useState<string | null>(null);
-  const studioAirEngineRef = useRef<{ context: AudioContext; source: AudioBufferSourceNode; gain: GainNode } | null>(null);
   const pendingBeatHandledRef = useRef(false);
   const localDraftRef = useRef<MobileDraftRecord | null>(null);
   const skipNextDraftWriteRef = useRef(false);
@@ -315,7 +326,6 @@ export function MobileStudioShell() {
   const activeProjectIdRef = useRef<string | null>(null);
   const activeSongIdRef = useRef<string | null>(null);
   const section = mobileSections[activeSection];
-  const activeStudioPack = getStudioPack(activeStudioPackId);
   const activeProjectId = session?.project_id ?? activeSong?.project_id ?? projects[0]?.id;
   const activeSongId = session?.song_id ?? activeSong?.id;
   activeProjectIdRef.current = activeProjectId ?? null;
@@ -395,65 +405,6 @@ export function MobileStudioShell() {
     setSyncRetryNonce((value) => value + 1);
   }, [buildDraftRecord, draftLoaded, user]);
 
-  const stopStudioAir = useCallback(() => {
-    const engine = studioAirEngineRef.current;
-    studioAirEngineRef.current = null;
-    if (engine) {
-      try {
-        engine.source.stop();
-      } catch {
-        // The ambient loop may already be stopped during navigation or a room change.
-      }
-      void engine.context.close();
-    }
-    setStudioAirPlaying(false);
-  }, []);
-
-  const toggleStudioAir = useCallback((index: number) => {
-    const safeIndex = Math.max(0, Math.min(activeStudioPack.ambience.length - 1, index));
-    if (studioAirPlaying && studioDna.studioAir.activeIndex === safeIndex) {
-      stopStudioAir();
-      return;
-    }
-
-    stopStudioAir();
-    const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) {
-      setSyncMessage("Studio Air is unavailable in this browser");
-      return;
-    }
-
-    const context = new AudioContextClass();
-    const source = context.createBufferSource();
-    const gain = context.createGain();
-    const filter = context.createBiquadFilter();
-    const ambience = activeStudioPack.ambience[safeIndex] ?? activeStudioPack.ambience[0];
-    source.buffer = createAmbientBuffer(context, `${activeStudioPack.id}-${ambience.title}`);
-    source.loop = true;
-    filter.type = "lowpass";
-    filter.frequency.value = ambience.title.toLowerCase().includes("rain") ? 5200 : 2400;
-    gain.gain.value = studioDna.studioAir.volume / 100;
-    source.connect(filter).connect(gain).connect(context.destination);
-    source.start();
-    studioAirEngineRef.current = { context, source, gain };
-    setStudioDna((current) => ({
-      ...current,
-      studioAir: { ...current.studioAir, activeIndex: safeIndex },
-    }));
-    setStudioAirPlaying(true);
-    setSyncMessage(`${ambience.title} playing`);
-  }, [activeStudioPack, stopStudioAir, studioAirPlaying, studioDna.studioAir.activeIndex, studioDna.studioAir.volume]);
-
-  const changeStudioAirVolume = useCallback((volume: number) => {
-    const safeVolume = Math.max(4, Math.min(32, volume));
-    setStudioDna((current) => ({
-      ...current,
-      studioAir: { ...current.studioAir, volume: safeVolume },
-    }));
-    const engine = studioAirEngineRef.current;
-    if (engine) engine.gain.gain.setTargetAtTime(safeVolume / 100, engine.context.currentTime, 0.08);
-  }, []);
-
   const selectBeatForSession = useCallback((beat: SelectedBeat) => {
     const draft = {
       ...buildDraftRecord(true),
@@ -486,11 +437,6 @@ export function MobileStudioShell() {
   }, []);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(MOBILE_STUDIO_PACK_KEY);
-    if (stored) setActiveStudioPackId(getStudioPack(stored).id);
-  }, []);
-
-  useEffect(() => {
     const checkout = new URLSearchParams(window.location.search).get("checkout");
     if (!checkout) return;
     setPadActionStatus({
@@ -502,19 +448,6 @@ export function MobileStudioShell() {
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
 
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(MOBILE_STUDIO_DNA_KEY);
-      if (raw) {
-        const next = normalizeStudioDna(JSON.parse(raw), defaultStudioRoomId);
-        setStudioDna(next);
-        setActiveStudioPackId(next.environment);
-      }
-    } catch {
-      // Studio DNA can always be rebuilt from the default session.
-    }
-  }, []);
-
   function changeStudioPack(id: StudioPackId) {
     if (!canUseStudioPack(id)) {
       setSyncMessage(`${getStudioPack(id).label} is locked. Preview it in Studio Store first.`);
@@ -524,7 +457,7 @@ export function MobileStudioShell() {
     stopStudioAir();
     setActiveStudioPackId(id);
     setStudioDna((current) => ({ ...current, environment: id }));
-    window.localStorage.setItem(MOBILE_STUDIO_PACK_KEY, id);
+    persistPack(id);
     setSyncMessage("Room changed");
   }
 
@@ -546,7 +479,7 @@ export function MobileStudioShell() {
           return current;
         }
         setActiveStudioPackId(patch.environment);
-        window.localStorage.setItem(MOBILE_STUDIO_PACK_KEY, patch.environment);
+        persistPack(patch.environment);
       }
       return next;
     });
@@ -562,15 +495,15 @@ export function MobileStudioShell() {
     }
     setStudioDna(normalized);
     setActiveStudioPackId(normalized.environment);
-    window.localStorage.setItem(MOBILE_STUDIO_PACK_KEY, normalized.environment);
-    window.localStorage.setItem(MOBILE_STUDIO_DNA_KEY, JSON.stringify(normalized));
+    persistPack(normalized.environment);
+    persistDna(normalized);
     closeSheet("studioDna");
     setScreen("writer");
     setSyncMessage("Studio DNA loaded");
   }
 
   function continueWriterFlow(playBeat = false) {
-    const hasSavedStudioDna = Boolean(window.localStorage.getItem(MOBILE_STUDIO_DNA_KEY));
+    const hasSavedStudioDna = hasSavedDna();
     if (!hasSavedStudioDna) {
       openSheet("studioDna");
       return;
@@ -683,12 +616,6 @@ export function MobileStudioShell() {
   }, [requestAuth]);
 
   useEffect(() => {
-    return () => {
-      stopStudioAir();
-    };
-  }, [stopStudioAir]);
-
-  useEffect(() => {
     if (activeNav === "studio") return;
     stopStudioAir();
   }, [activeNav, stopStudioAir]);
@@ -713,7 +640,7 @@ export function MobileStudioShell() {
     }
 
     setDraftLoaded(true);
-  }, [loading, seekTo, selectBeatKeepingPreview, user?.id]);
+  }, [loading, seekTo, selectBeatKeepingPreview, setActiveStudioPackId, setStudioDna, user?.id]);
 
   useEffect(() => {
     if (!draftLoaded) return;
@@ -865,8 +792,8 @@ export function MobileStudioShell() {
       setActiveStudioPackId(remotePack);
       setStudioDna({ ...remoteDna, environment: remotePack });
       seekTo(playbackPosition);
-      window.localStorage.setItem(MOBILE_STUDIO_PACK_KEY, remotePack);
-      window.localStorage.setItem(MOBILE_STUDIO_DNA_KEY, JSON.stringify({ ...remoteDna, environment: remotePack }));
+      persistPack(remotePack);
+      persistDna({ ...remoteDna, environment: remotePack });
 
       const remoteDraft: MobileDraftRecord = {
         version: 3,
@@ -893,7 +820,7 @@ export function MobileStudioShell() {
     }
 
     setHydratedSessionId(session.id);
-  }, [activeSong, canUseStudioPack, draftLoaded, hydratedSessionId, seekTo, selectBeatKeepingPreview, session, user?.id]);
+  }, [activeSong, canUseStudioPack, draftLoaded, hydratedSessionId, persistDna, persistPack, seekTo, selectBeatKeepingPreview, session, setActiveStudioPackId, setStudioDna, user?.id]);
 
   useEffect(() => {
     if (loadingData || pendingBeatHandledRef.current) return;
