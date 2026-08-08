@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from "react";
+import Link from "next/link";
 import {
   ArrowRight,
   Award,
@@ -12,6 +13,7 @@ import {
   FolderPlus,
   Heart,
   Headphones,
+  Handshake,
   Home,
   LockKeyhole,
   Mic,
@@ -24,7 +26,6 @@ import {
   ShoppingBag,
   ShoppingCart,
   Sparkles,
-  Star,
   TrendingUp,
   Users,
   WandSparkles,
@@ -41,9 +42,15 @@ import {
   type CatalogProduct,
 } from "@/lib/product-catalog";
 import type { Beat, Producer } from "@/lib/marketplace";
-import { prepStudioTiers } from "@/lib/prep-studio-plans";
+import { prepStudioTier, prepStudioTiers } from "@/lib/prep-studio-plans";
+import type { StarterBeat } from "@/lib/starter-beats";
+import {
+  resolveStudioRoomAccess,
+  type StudioRoomAccess,
+  type StudioRoomId,
+} from "@/lib/studio-room-access";
 
-type StudioPackId = "midnight" | "trap-house" | "bedroom" | "penthouse" | "cypher";
+type StudioPackId = StudioRoomId;
 
 type StudioPack = {
   id: StudioPackId;
@@ -103,13 +110,24 @@ type SessionContext = {
 
 type MarketSelection =
   | { kind: "beat"; beat: MarketplaceBeat }
-  | { kind: "room"; pack: StudioPack; product: CatalogProduct | null; owned: boolean }
+  | { kind: "room"; pack: StudioPack; product: CatalogProduct | null; access: StudioRoomAccess }
   | { kind: "product"; product: CatalogProduct; owned: boolean }
   | { kind: "bundle"; bundle: CatalogBundle; owned: boolean }
   | { kind: "producer"; producer: Producer; beats: MarketplaceBeat[]; saved: boolean };
 
-type MarketCategory = "beats" | "producer" | "studio-upgrades" | "creator-assets";
+export type MarketCategory = "beats" | "producer" | "studio-upgrades" | "creator-assets";
 type StudioUpgradeCategory = "rooms" | "themes" | "atmosphere";
+
+type StorePreviewVisual = {
+  accent: string;
+  accentSoft: string;
+  accentDeep: string;
+  background: string;
+  panel: string;
+  image: string;
+  imagePosition: string;
+  wash: string;
+};
 
 type PremiumMarketplaceProps = {
   signedIn: boolean;
@@ -122,14 +140,19 @@ type PremiumMarketplaceProps = {
   marketplaceFeed: MarketplaceFeed;
   marketplaceFeedLoading: boolean;
   marketplaceFeedError: string | null;
+  starterBeats: StarterBeat[];
+  onUseStarterBeat: (beat: StarterBeat) => void;
   activeStudioPack: StudioPack;
   studioPacks: StudioPack[];
   onStudioPack: (id: StudioPackId) => void;
+  artistPlanId?: string | null;
+  allAccess?: boolean;
   productUnlocks: ProductUnlock[];
   onUnlockProduct: (product: Omit<ProductUnlock, "unlockedAt">) => void;
   sessionContext: SessionContext;
   onOpenMembership: () => void;
   onContinueWriting: () => void;
+  focusCategory?: MarketCategory | null;
 };
 
 const creatorAssetProducts = writingPackProducts;
@@ -151,14 +174,19 @@ export function PremiumMarketplace({
   marketplaceFeed,
   marketplaceFeedLoading,
   marketplaceFeedError,
+  starterBeats,
+  onUseStarterBeat,
   activeStudioPack,
   studioPacks,
   onStudioPack,
+  artistPlanId,
+  allAccess = false,
   productUnlocks,
   onUnlockProduct,
   sessionContext,
   onOpenMembership,
   onContinueWriting,
+  focusCategory = null,
 }: PremiumMarketplaceProps) {
   const [category, setCategory] = useState<MarketCategory>("beats");
   const [studioUpgradeCategory, setStudioUpgradeCategory] = useState<StudioUpgradeCategory>("rooms");
@@ -167,6 +195,7 @@ export function PremiumMarketplace({
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [beatCatalogOpen, setBeatCatalogOpen] = useState(false);
+  const [producerDirectoryOpen, setProducerDirectoryOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const categoryRail = useHorizontalRail<HTMLElement>(marketCategories.length);
 
@@ -183,6 +212,9 @@ export function PremiumMarketplace({
     : [];
   const featuredBundle = bundleProducts[0];
   const featuredBundleOwned = unlockedIds.has(featuredBundle.id);
+  const activeArtistTier = artistPlanId ? prepStudioTier(artistPlanId) : null;
+  const roomAccessPlanId = allAccess ? "creator_all_access" : artistPlanId;
+  const hasActiveArtistMembership = Boolean(activeArtistTier && activeArtistTier.id !== "artist_free");
   const featuredProductTitles = useMemo(
     () => new Set(featuredBundle.includes.map((item) => item.toLowerCase())),
     [featuredBundle.includes],
@@ -193,10 +225,41 @@ export function PremiumMarketplace({
   const discoveryBeats = recommendedBeat
     ? [recommendedBeat, ...allMarketplaceBeats.filter((beat) => beat.id !== recommendedBeat.id)]
     : allMarketplaceBeats;
+  const recommendedStarterBeat = useMemo(() => {
+    if (recommendedBeat || starterBeats.length === 0) return null;
+    const context = `${sessionContext.mood} ${sessionContext.writingStyle} ${sessionContext.title}`.toLowerCase();
+    return [...starterBeats]
+      .map((beat) => ({
+        beat,
+        score: [beat.mood, beat.genre, beat.collection, ...beat.tags, ...beat.writingFit]
+          .filter(Boolean)
+          .reduce((total, value) => total + (context.includes(String(value).toLowerCase()) ? 1 : 0), beat.featured ? 1 : 0),
+      }))
+      .sort((left, right) => right.score - left.score)[0]?.beat ?? null;
+  }, [recommendedBeat, sessionContext.mood, sessionContext.title, sessionContext.writingStyle, starterBeats]);
   const studioUpgradeRooms = studioPacks.filter((pack) => !featuredProductTitles.has(pack.label.toLowerCase()));
   const studioUpgradeThemes = themeProducts.filter((product) => !featuredProductTitles.has(product.title.toLowerCase()));
   const studioUpgradeAtmospheres = ambientPackProducts.filter((product) => !featuredProductTitles.has(product.title.toLowerCase()));
   const visibleCreatorAssets = creatorAssetProducts.filter((product) => !featuredProductTitles.has(product.title.toLowerCase()));
+  const previewProduct = selection?.kind === "product"
+    && (selection.product.type === "theme" || selection.product.type === "ambient_pack")
+    ? selection.product
+    : null;
+  const previewVisual = previewProduct ? storePreviewVisual(previewProduct) : null;
+  const previewStyle = previewVisual
+    ? ({
+        "--amber": previewVisual.accent,
+        "--amber-soft": previewVisual.accentSoft,
+        "--amber-deep": previewVisual.accentDeep,
+        "--primary": previewVisual.accent,
+        "--accent": previewVisual.accent,
+        "--background": previewVisual.background,
+        "--panel": previewVisual.panel,
+        "--card": previewVisual.panel,
+        "--muted": previewVisual.panel,
+        "--ring": `${previewVisual.accent}88`,
+      } as CSSProperties)
+    : undefined;
 
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
@@ -224,16 +287,17 @@ export function PremiumMarketplace({
   }, [category, query]);
 
   useEffect(() => {
-    if (!selection && !beatCatalogOpen) return;
+    if (!selection && !beatCatalogOpen && !producerDirectoryOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setSelection(null);
         setBeatCatalogOpen(false);
+        setProducerDirectoryOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [beatCatalogOpen, selection]);
+  }, [beatCatalogOpen, producerDirectoryOpen, selection]);
 
   const jumpToShelf = (nextCategory: MarketCategory) => {
     setCategory(nextCategory);
@@ -244,9 +308,17 @@ export function PremiumMarketplace({
 
   const selectRoom = (pack: StudioPack) => {
     const product = studioRoomProducts.find((item) => item.id === `studio-room-${pack.id}`) ?? null;
-    const owned = pack.id === "midnight" || (product ? unlockedIds.has(product.id) : false);
-    setSelection({ kind: "room", pack, product, owned });
+    const access = resolveStudioRoomAccess(pack.id, roomAccessPlanId, Boolean(product && unlockedIds.has(product.id)));
+    setSelection({ kind: "room", pack, product, access });
   };
+
+  useEffect(() => {
+    if (!focusCategory) return;
+    setCategory(focusCategory);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`market-${focusCategory}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [focusCategory]);
 
   const selectProduct = (product: CatalogProduct) => {
     setSelection({ kind: "product", product, owned: unlockedIds.has(product.id) });
@@ -301,7 +373,12 @@ export function PremiumMarketplace({
           id: `room-${pack.id}`,
           title: pack.label,
           meta: "Studio environment",
-          selection: { kind: "room", pack, product, owned: pack.id === "midnight" || Boolean(product && unlockedIds.has(product.id)) },
+          selection: {
+            kind: "room",
+            pack,
+            product,
+            access: resolveStudioRoomAccess(pack.id, roomAccessPlanId, Boolean(product && unlockedIds.has(product.id))),
+          },
         });
       }
     }
@@ -318,10 +395,26 @@ export function PremiumMarketplace({
       }
     }
     return results.slice(0, 8);
-  }, [allMarketplaceBeats, featuredProducers, query, studioPacks, unlockedIds]);
+  }, [allMarketplaceBeats, featuredProducers, query, roomAccessPlanId, studioPacks, unlockedIds]);
 
   return (
-    <div ref={scrollContainerRef} className="flex-1 scroll-smooth overflow-y-auto px-5 pb-32 pt-5">
+    <div
+      ref={scrollContainerRef}
+      className="relative flex-1 scroll-smooth overflow-y-auto px-5 pb-32 pt-5 transition-colors duration-500"
+      style={previewStyle}
+      data-store-preview={previewProduct?.id}
+    >
+      {previewVisual && (
+        <div className="pointer-events-none fixed inset-0 z-[45] overflow-hidden" aria-hidden="true">
+          <img
+            src={previewVisual.image}
+            alt=""
+            className="h-full w-full object-cover opacity-55 transition-opacity duration-500"
+            style={{ objectPosition: previewVisual.imagePosition }}
+          />
+          <div className="absolute inset-0" style={{ background: previewVisual.wash }} />
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="label-hw text-gold/85">Studio Store&trade;</div>
@@ -382,7 +475,19 @@ export function PremiumMarketplace({
         </div>
       )}
 
-      <section className="relative mt-5 min-h-[360px] overflow-hidden rounded-[22px] border border-gold/25 bg-[#111113]">
+      {hasActiveArtistMembership && (
+        <PrepStudioMembership
+          signedIn={signedIn}
+          artistPlanId={artistPlanId}
+          onUpgrade={onOpenMembership}
+          onFindProducers={() => {
+            setCategory("producer");
+            setProducerDirectoryOpen(true);
+          }}
+        />
+      )}
+
+      {!hasActiveArtistMembership && <section className="relative mt-5 min-h-[360px] overflow-hidden rounded-[22px] border border-gold/25 bg-[#111113]">
         <img
           src={featuredBundle.image}
           alt="Penthouse Sessions studio"
@@ -398,7 +503,7 @@ export function PremiumMarketplace({
           </div>
           <div className="max-w-[330px]">
             <h2 className="text-[28px] font-semibold leading-[1.05]">{featuredBundle.title}</h2>
-            <p className="mt-2 text-sm leading-relaxed text-white/68">The complete commercial room for hook-first records.</p>
+            <p className="mt-2 text-sm leading-relaxed text-white/68">One room, one visual theme, and one hook-writing pack. All three stay in your Locker.</p>
             <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/78">
               {featuredBundle.includes.filter((item) => !featuredBundle.title.includes(item)).slice(0, 3).map((item) => (
                 <span key={item} className="inline-flex items-center gap-1.5"><Check className="h-3 w-3 text-gold" />{item}</span>
@@ -410,7 +515,7 @@ export function PremiumMarketplace({
                 onClick={() => selectBundle(featuredBundle)}
                 className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/18 bg-black/45 px-3 text-xs font-semibold text-white backdrop-blur-md"
               >
-                <Eye className="h-4 w-4" /> Preview Drop
+                <Eye className="h-4 w-4" /> Preview Bundle
               </button>
               <button
                 type="button"
@@ -423,9 +528,19 @@ export function PremiumMarketplace({
             </div>
           </div>
         </div>
-      </section>
+      </section>}
 
-      <PrepStudioMembership signedIn={signedIn} onUpgrade={onOpenMembership} />
+      {!hasActiveArtistMembership && (
+        <PrepStudioMembership
+          signedIn={signedIn}
+          artistPlanId={artistPlanId}
+          onUpgrade={onOpenMembership}
+          onFindProducers={() => {
+            setCategory("producer");
+            setProducerDirectoryOpen(true);
+          }}
+        />
+      )}
 
       {status.message && (
         <div className={cn("mt-4 rounded-xl px-3 py-2 text-center text-[11px]", status.state === "error" ? "border border-rec/25 bg-rec/10 text-rec" : "border border-gold/20 bg-gold/8 text-gold")}>{status.message}</div>
@@ -470,10 +585,10 @@ export function PremiumMarketplace({
         <div className="mt-4 grid grid-cols-2 gap-2">
           <RecommendationCard
             label="Beat direction"
-            title={recommendedBeat ? `${discoveryBeats.length} approved match${discoveryBeats.length === 1 ? "" : "es"}` : "Matching starts with the first drop"}
-            detail={recommendedBeat ? `${sessionContext.mood} pocket / ${recommendedBeat.bpm} BPM` : "No demo inventory added"}
+            title={recommendedBeat ? `${discoveryBeats.length} approved match${discoveryBeats.length === 1 ? "" : "es"}` : recommendedStarterBeat ? recommendedStarterBeat.title : "Find your first pocket"}
+            detail={recommendedBeat ? `${sessionContext.mood} pocket / ${recommendedBeat.bpm} BPM` : recommendedStarterBeat ? `Included with RapWriter / ${recommendedStarterBeat.bpm ?? "Open"} BPM` : "Add a beat from your Locker"}
             icon={Play}
-            onClick={() => jumpToShelf("beats")}
+            onClick={() => recommendedStarterBeat ? onUseStarterBeat(recommendedStarterBeat) : jumpToShelf("beats")}
           />
           <RecommendationCard
             label="Studio DNA"
@@ -484,6 +599,21 @@ export function PremiumMarketplace({
           />
         </div>
       </section>
+
+      {hasActiveArtistMembership && (
+        <section className="relative mt-7 min-h-[210px] overflow-hidden rounded-[22px] border border-gold/20 bg-[#111113]">
+          <img src={featuredBundle.image} alt="Penthouse Sessions studio" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: "67% center" }} draggable={false} />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(3,3,4,0.96),rgba(3,3,4,0.7)_65%,rgba(3,3,4,0.38))]" />
+          <div className="relative flex min-h-[210px] max-w-[290px] flex-col justify-end p-4">
+            <div className="label-hw text-gold/85">Featured Drop</div>
+            <h2 className="mt-2 text-xl font-semibold leading-tight">{featuredBundle.title}</h2>
+            <p className="mt-2 text-xs leading-relaxed text-white/62">A room, visual theme, and writing pack you keep.</p>
+            <button type="button" onClick={() => selectBundle(featuredBundle)} className="mt-4 flex min-h-11 w-fit items-center gap-2 rounded-xl border border-gold/30 bg-black/45 px-4 text-xs font-semibold text-gold backdrop-blur-md">
+              {featuredBundleOwned ? "View owned bundle" : `Explore ${featuredBundle.price}`} <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        </section>
+      )}
 
       {discoveryBeats.length > 0 && <section id="market-beats" className="scroll-mt-20 pt-10">
         <ShelfHeading
@@ -512,11 +642,21 @@ export function PremiumMarketplace({
 
       {spotlightProducer && (
         <section id="market-producer" className="scroll-mt-20 pt-10">
+          <ShelfHeading
+            eyebrow="Producer Network"
+            title="Find your collaborator"
+            detail="Explore approved producers, then send an Elite project brief from their storefront."
+            controls={featuredProducers.length > 0 ? (
+              <button type="button" onClick={() => setProducerDirectoryOpen(true)} className="min-h-9 shrink-0 px-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-gold">See all</button>
+            ) : undefined}
+          />
+          <div className="mt-4">
           <ProducerSpotlight
             producer={spotlightProducer}
             beats={spotlightBeats}
             onOpen={() => selectProducer(spotlightProducer)}
           />
+          </div>
         </section>
       )}
 
@@ -554,8 +694,8 @@ export function PremiumMarketplace({
         >
           {studioUpgradeCategory === "rooms" && studioUpgradeRooms.map((pack) => {
             const product = studioRoomProducts.find((item) => item.id === `studio-room-${pack.id}`);
-            const owned = pack.id === "midnight" || Boolean(product && unlockedIds.has(product.id));
-            return <RoomShelfCard key={pack.id} pack={pack} owned={owned} active={activeStudioPack.id === pack.id} onOpen={() => selectRoom(pack)} />;
+            const access = resolveStudioRoomAccess(pack.id, roomAccessPlanId, Boolean(product && unlockedIds.has(product.id)));
+            return <RoomShelfCard key={pack.id} pack={pack} access={access} active={activeStudioPack.id === pack.id} onOpen={() => selectRoom(pack)} />;
           })}
           {studioUpgradeCategory === "themes" && studioUpgradeThemes.map((product, index) => (
             <ThemeShelfCard key={product.id} product={product} index={index} owned={unlockedIds.has(product.id)} onOpen={() => selectProduct(product)} />
@@ -589,8 +729,20 @@ export function PremiumMarketplace({
         }}
       />
 
+      <ProducerDirectorySheet
+        open={producerDirectoryOpen}
+        producers={featuredProducers}
+        beats={allMarketplaceBeats}
+        onClose={() => setProducerDirectoryOpen(false)}
+        onPreview={(producer) => {
+          setProducerDirectoryOpen(false);
+          selectProducer(producer);
+        }}
+      />
+
       <MarketDetailSheet
         selection={selection}
+        previewVisual={previewVisual}
         producers={featuredProducers}
         playingBeatId={playingBeatId}
         status={status}
@@ -607,6 +759,7 @@ export function PremiumMarketplace({
           setSelection(null);
         }}
         onUnlockProduct={onUnlockProduct}
+        onOpenMembership={onOpenMembership}
       />
     </div>
   );
@@ -735,9 +888,44 @@ function ShelfHeading({ eyebrow, title, detail, controls }: { eyebrow: string; t
   );
 }
 
-function PrepStudioMembership({ signedIn, onUpgrade }: { signedIn: boolean; onUpgrade: () => void }) {
+function PrepStudioMembership({
+  signedIn,
+  artistPlanId,
+  onUpgrade,
+  onFindProducers,
+}: {
+  signedIn: boolean;
+  artistPlanId?: string | null;
+  onUpgrade: () => void;
+  onFindProducers: () => void;
+}) {
+  const activeTier = artistPlanId ? prepStudioTier(artistPlanId) : null;
+
+  if (activeTier && activeTier.id !== "artist_free") {
+    const elite = activeTier.id === "artist_studio";
+    return (
+      <section className="mt-4 overflow-hidden rounded-2xl border border-gold/25 bg-[linear-gradient(145deg,rgba(246,199,72,0.1),rgba(17,17,19,0.98)_62%)] p-3">
+        <div className="flex min-h-14 w-full items-center gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-gold/30 bg-black/28 text-gold"><Crown className="h-5 w-5" /></span>
+          <span className="min-w-0 flex-1">
+            <span className="label-hw block text-gold/85">Your Prep Studio</span>
+            <span className="mt-1 block truncate text-sm font-semibold">{activeTier.shortName} active</span>
+            <span className="mt-1 block truncate text-[10px] text-white/48">{elite ? "Producer connections and private rooms are available" : "Rooms and artist intelligence are available"}</span>
+          </span>
+          <button type="button" onClick={onUpgrade} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-gold/25 bg-gold/8 text-gold" aria-label="View membership"><ArrowRight className="h-4 w-4" /></button>
+        </div>
+        {elite && (
+          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/8 pt-3">
+            <button type="button" onClick={onFindProducers} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-gold/30 bg-gold/10 px-3 text-xs font-semibold text-gold"><Users className="h-4 w-4" />Find producers</button>
+            <Link href="/collaborations" className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-white/72"><Handshake className="h-4 w-4 text-gold" />Private rooms</Link>
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
-    <section className="mt-4 overflow-hidden rounded-[22px] border border-gold/25 bg-[linear-gradient(145deg,rgba(255,176,32,0.1),rgba(17,17,19,0.98)_54%)] p-4">
+    <section className="mt-4 overflow-hidden rounded-[22px] border border-gold/25 bg-[linear-gradient(145deg,rgba(246,199,72,0.1),rgba(17,17,19,0.98)_54%)] p-4">
       <div className="flex items-start gap-3">
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-gold/30 bg-black/28 text-gold"><Mic className="h-5 w-5" /></span>
         <div className="min-w-0 flex-1">
@@ -826,14 +1014,14 @@ function TrendingBeatCard({ beat, studioMatch, playing, favorite, onPreview, onF
   );
 }
 
-function RoomShelfCard({ pack, owned, active, onOpen }: { pack: StudioPack; owned: boolean; active: boolean; onOpen: () => void }) {
+function RoomShelfCard({ pack, access, active, onOpen }: { pack: StudioPack; access: StudioRoomAccess; active: boolean; onOpen: () => void }) {
   return (
     <button type="button" onClick={onOpen} className={cn("w-[80vw] max-w-[302px] shrink-0 snap-start overflow-hidden rounded-2xl border bg-[#111113] text-left", active ? "border-gold/45" : "border-white/10")}>
       <div className="relative h-44">
         <img src={pack.image} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: pack.position }} loading="lazy" decoding="async" draggable={false} />
         <div className="absolute inset-0" style={{ background: pack.overlay }} />
-        <div className="absolute left-3 top-3 rounded-full border border-white/15 bg-black/48 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/78 backdrop-blur-md">{active ? "Active" : owned ? "Owned" : "Preview"}</div>
-        {!owned && <span className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full border border-white/15 bg-black/48 text-white/76 backdrop-blur-md"><LockKeyhole className="h-4 w-4" /></span>}
+        <div className="absolute left-3 top-3 rounded-full border border-white/15 bg-black/48 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/78 backdrop-blur-md">{active ? "Active" : access.badge}</div>
+        {!access.available && <span className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full border border-white/15 bg-black/48 text-white/76 backdrop-blur-md"><LockKeyhole className="h-4 w-4" /></span>}
         <div className="absolute bottom-3 left-3 right-3">
           <div className="text-xl font-semibold">{pack.label}</div>
           <div className="mt-1 text-[11px] text-white/62">{pack.line}</div>
@@ -1059,8 +1247,105 @@ function BeatCatalogSheet({ open, beats, playingBeatId, favoriteIds, onClose, on
   );
 }
 
-function MarketDetailSheet({ selection, producers, playingBeatId, status, onClose, onPreviewBeat, onFavoriteBeat, onWriteBeat, onLicenseBeat, onUseRoom, onUnlockProduct }: {
+function ProducerDirectorySheet({ open, producers, beats, onClose, onPreview }: {
+  open: boolean;
+  producers: Producer[];
+  beats: MarketplaceBeat[];
+  onClose: () => void;
+  onPreview: (producer: Producer) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const filteredProducers = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return producers;
+    return producers.filter((producer) => {
+      const producerBeats = beats.filter((beat) => beat.producerId === producer.id);
+      return [
+        producer.name,
+        producer.handle,
+        producer.city,
+        producer.bio,
+        ...producerBeats.flatMap((beat) => [beat.title, beat.mood, beat.region, ...beat.tags]),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalized);
+    });
+  }, [beats, producers, query]);
+
+  useEffect(() => {
+    if (!open) setQuery("");
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[56] flex items-end justify-center bg-black/76 px-3 pb-3 backdrop-blur-sm" onMouseDown={(event) => event.currentTarget === event.target && onClose()}>
+      <section role="dialog" aria-modal="true" aria-label="Producer directory" className="flex max-h-[92svh] w-full max-w-[430px] flex-col overflow-hidden rounded-[24px] border border-white/10 bg-[#101012] shadow-[0_-24px_90px_rgba(0,0,0,0.7)]">
+        <div className="border-b border-white/8 px-4 pb-4 pt-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="label-hw text-gold/80">Producer Network</div>
+              <h2 className="mt-1 text-xl font-semibold">Find your collaborator</h2>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">{producers.length > 0 ? `${producers.length} verified storefronts` : "Verified storefronts are opening soon"}</p>
+            </div>
+            <button type="button" onClick={onClose} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.03] text-white/72" aria-label="Close producer directory">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <label className="mt-4 flex min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-black/28 px-3 focus-within:border-gold/35">
+            <Search className="h-4 w-4 shrink-0 text-gold/72" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search producer, city, sound, or beat" className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/32" />
+          </label>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 pb-8">
+          {filteredProducers.map((producer) => {
+            const producerBeats = beats.filter((beat) => beat.producerId === producer.id);
+            const storefrontHref = producerStorefrontHref(producer);
+            return (
+              <article key={producer.id} className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025]">
+                <div className="relative min-h-28 p-4" style={{ background: producer.banner }}>
+                  <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(0,0,0,0.18),rgba(0,0,0,0.88))]" />
+                  <div className="relative flex items-center gap-3">
+                    <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl border border-gold/35 bg-black/40 text-sm font-semibold text-gold">{producer.glyph}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="truncate text-lg font-semibold">{producer.name}</h3>
+                        {producer.verified && <ShieldCheck className="h-4 w-4 shrink-0 text-gold" />}
+                      </div>
+                      <div className="mt-1 truncate text-xs text-white/58">{producer.city} / {producer.handle}</div>
+                      <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-gold/80">{producerBeats.length} beats available</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 p-3">
+                  {storefrontHref ? (
+                    <Link href={storefrontHref} className="gold-seal flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold text-black">
+                      View storefront <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  ) : (
+                    <button type="button" onClick={() => onPreview(producer)} className="gold-seal min-h-11 rounded-xl px-3 text-xs font-semibold text-black">View producer</button>
+                  )}
+                  <button type="button" onClick={() => onPreview(producer)} className="min-h-11 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-white/72">Preview catalog</button>
+                </div>
+              </article>
+            );
+          })}
+          {filteredProducers.length === 0 && (
+            <div className="grid min-h-44 place-items-center text-center">
+              <div><Users className="mx-auto h-5 w-5 text-gold/60" /><p className="mt-3 text-sm font-semibold">{producers.length > 0 ? "No producer matches" : "The network is being curated"}</p><p className="mt-1 max-w-[260px] text-xs leading-5 text-muted-foreground">{producers.length > 0 ? "Try a city, sound, mood, or beat title." : "Approved producer storefronts will appear here as soon as verification is complete."}</p></div>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function MarketDetailSheet({ selection, previewVisual, producers, playingBeatId, status, onClose, onPreviewBeat, onFavoriteBeat, onWriteBeat, onLicenseBeat, onUseRoom, onUnlockProduct, onOpenMembership }: {
   selection: MarketSelection | null;
+  previewVisual: StorePreviewVisual | null;
   producers: Producer[];
   playingBeatId: string | null;
   status: PadActionStatus;
@@ -1071,16 +1356,23 @@ function MarketDetailSheet({ selection, producers, playingBeatId, status, onClos
   onLicenseBeat: (beat: MarketplaceBeat) => void;
   onUseRoom: (pack: StudioPack) => void;
   onUnlockProduct: (product: Omit<ProductUnlock, "unlockedAt">) => void;
+  onOpenMembership: () => void;
 }) {
   if (!selection) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/72 px-3 pb-3 backdrop-blur-sm" onMouseDown={(event) => event.currentTarget === event.target && onClose()}>
       <section role="dialog" aria-modal="true" aria-label="Studio Store preview" className="max-h-[90svh] w-full max-w-[430px] overflow-hidden rounded-[24px] border border-white/10 bg-[#101012] shadow-[0_-24px_90px_rgba(0,0,0,0.65)]">
-        <div className="flex items-center justify-between border-b border-white/8 px-4 py-3"><div className="label-hw text-gold/80">Studio Preview</div><button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/[0.03] text-white/72" aria-label="Close Studio Store preview"><X className="h-4 w-4" /></button></div>
+        <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="label-hw text-gold/80">Studio Preview</div>
+            {previewVisual && <span className="rounded-full border border-gold/30 bg-gold/10 px-2 py-1 text-[8px] font-semibold uppercase tracking-[0.12em] text-gold">Previewing</span>}
+          </div>
+          <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/[0.03] text-white/72" aria-label="Close Studio Store preview"><X className="h-4 w-4" /></button>
+        </div>
         <div className="max-h-[calc(90svh-65px)] overflow-y-auto">
           {selection.kind === "beat" && <BeatDetail beat={selection.beat} producer={producers.find((producer) => producer.id === selection.beat.producerId) ?? null} playing={playingBeatId === selection.beat.id} busy={status.state === "saving"} onPreview={() => onPreviewBeat(selection.beat)} onFavorite={() => onFavoriteBeat(selection.beat)} onWrite={() => onWriteBeat(selection.beat)} onLicense={() => onLicenseBeat(selection.beat)} />}
-          {selection.kind === "room" && <RoomDetail selection={selection} onUse={() => onUseRoom(selection.pack)} onUnlock={() => selection.product && onUnlockProduct(toUnlock(selection.product, "Studio Room"))} />}
-          {selection.kind === "product" && <ProductDetail selection={selection} onUnlock={() => onUnlockProduct(toUnlock(selection.product, productUnlockCategory(selection.product)))} />}
+          {selection.kind === "room" && <RoomDetail selection={selection} onUse={() => onUseRoom(selection.pack)} onUnlock={() => selection.product && onUnlockProduct(toUnlock(selection.product, "Studio Room"))} onOpenMembership={onOpenMembership} />}
+          {selection.kind === "product" && <ProductDetail selection={selection} previewVisual={previewVisual} onUnlock={() => onUnlockProduct(toUnlock(selection.product, productUnlockCategory(selection.product)))} />}
           {selection.kind === "bundle" && <BundleDetail selection={selection} onUnlock={() => onUnlockProduct(toUnlock(selection.bundle, "Bundle"))} />}
           {selection.kind === "producer" && <ProducerDetail selection={selection} onUseBeat={(beat) => onWriteBeat(beat)} />}
         </div>
@@ -1105,16 +1397,16 @@ function BeatDetail({ beat, producer, playing, busy, onPreview, onFavorite, onWr
   </div>;
 }
 
-function RoomDetail({ selection, onUse, onUnlock }: { selection: Extract<MarketSelection, { kind: "room" }>; onUse: () => void; onUnlock: () => void }) {
-  const { pack, product, owned } = selection;
-  return <div><div className="relative h-60"><img src={pack.image} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: pack.position }} decoding="async" /><div className="absolute inset-0" style={{ background: pack.overlay }} /><div className="absolute bottom-5 left-5 right-5"><div className="label-hw text-gold/85">{owned ? "Available" : "Locked Preview"}</div><h2 className="mt-2 text-3xl font-semibold">{pack.label}</h2><p className="mt-2 text-sm text-white/62">{pack.line}</p></div></div><div className="p-5"><div className="label-hw text-gold/80">Room intelligence</div><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{pack.writingCue}</p><div className="mt-4 flex flex-wrap gap-2">{pack.bestFor.map((tag) => <span key={tag} className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] text-white/62">{tag}</span>)}</div><div className="mt-5 space-y-2">{pack.ambience.slice(0, 3).map((item) => <div key={item.title} className="flex gap-3 border-t border-white/8 pt-3"><Headphones className="mt-0.5 h-4 w-4 shrink-0 text-gold" /><div><div className="text-sm font-semibold">{item.title}</div><div className="mt-1 text-xs text-muted-foreground">{item.detail}</div></div></div>)}</div><button type="button" onClick={owned ? onUse : onUnlock} className={cn("mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold", owned ? "gold-seal text-black" : "border border-gold/30 bg-gold/10 text-gold")}>{owned ? <><Home className="h-4 w-4" />Use this studio</> : <><ShoppingBag className="h-4 w-4" />Unlock {product?.price ?? "Room"}</>}</button>{!owned && <p className="mt-2 text-center text-[11px] text-muted-foreground">Preview freely. Unlocking activates the room in Studio.</p>}</div></div>;
+function RoomDetail({ selection, onUse, onUnlock, onOpenMembership }: { selection: Extract<MarketSelection, { kind: "room" }>; onUse: () => void; onUnlock: () => void; onOpenMembership: () => void }) {
+  const { pack, product, access } = selection;
+  return <div><div className="relative h-60"><img src={pack.image} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: pack.position }} decoding="async" /><div className="absolute inset-0" style={{ background: pack.overlay }} /><div className="absolute bottom-5 left-5 right-5"><div className="label-hw text-gold/85">{access.available ? access.badge : "Locked Preview"}</div><h2 className="mt-2 text-3xl font-semibold">{pack.label}</h2><p className="mt-2 text-sm text-white/62">{pack.line}</p></div></div><div className="p-5"><div className="label-hw text-gold/80">Room intelligence</div><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{pack.writingCue}</p><div className="mt-4 flex flex-wrap gap-2">{pack.bestFor.map((tag) => <span key={tag} className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] text-white/62">{tag}</span>)}</div><div className="mt-5 space-y-2">{pack.ambience.slice(0, 3).map((item) => <div key={item.title} className="flex gap-3 border-t border-white/8 pt-3"><Headphones className="mt-0.5 h-4 w-4 shrink-0 text-gold" /><div><div className="text-sm font-semibold">{item.title}</div><div className="mt-1 text-xs text-muted-foreground">{item.detail}</div></div></div>)}</div><button type="button" onClick={access.available ? onUse : onUnlock} className={cn("mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold", access.available ? "gold-seal text-black" : "border border-gold/30 bg-gold/10 text-gold")}>{access.available ? <><Home className="h-4 w-4" />Use this studio</> : <><ShoppingBag className="h-4 w-4" />Unlock {product?.price ?? "Room"}</>}</button>{!access.available && access.requiredPlan && <button type="button" onClick={onOpenMembership} className="mt-2 min-h-11 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-xs font-semibold text-white/72">Included with Prep Studio {access.requiredPlan === "elite" ? "Elite" : "Pro"}</button>}<p className="mt-2 text-center text-[11px] text-muted-foreground">{access.source === "owned" ? "You own this room permanently." : access.source === "membership" ? "Available while your membership is active." : access.available ? "Included with every RapWriter account." : "Preview freely. Studio Store purchases remain yours permanently."}</p></div></div>;
 }
 
-function ProductDetail({ selection, onUnlock }: { selection: Extract<MarketSelection, { kind: "product" }>; onUnlock: () => void }) {
+function ProductDetail({ selection, previewVisual, onUnlock }: { selection: Extract<MarketSelection, { kind: "product" }>; previewVisual: StorePreviewVisual | null; onUnlock: () => void }) {
   const { product, owned } = selection;
   const Icon = productIcon(product);
   const features = productFeatures(product);
-  return <div><div className="relative h-48" style={{ background: productArtwork(product, 2) }}><div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_18%,rgba(255,255,255,0.13),transparent_38%),linear-gradient(180deg,transparent,rgba(16,16,18,0.92))]" /><div className="absolute left-5 top-5 grid h-12 w-12 place-items-center rounded-2xl border border-gold/30 bg-black/25 text-gold"><Icon className="h-5 w-5" /></div><div className="absolute bottom-5 left-5 right-5"><div className="label-hw text-gold/85">{productTypeLabel(product)}</div><h2 className="mt-2 text-3xl font-semibold">{product.title}</h2></div></div><div className="p-5"><p className="text-sm leading-relaxed text-muted-foreground">{product.detail}</p><div className="mt-5 space-y-0">{features.map((feature) => <div key={feature.label} className="flex items-start justify-between gap-4 border-t border-white/8 py-3"><span className="text-xs text-muted-foreground">{feature.label}</span><span className="max-w-[220px] text-right text-xs font-semibold text-white/82">{feature.value}</span></div>)}</div><button type="button" onClick={onUnlock} disabled={owned} className={cn("mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold", owned ? "border border-gold/25 bg-gold/8 text-gold" : "gold-seal text-black")}>{owned ? <><Check className="h-4 w-4" />Owned</> : <><ShoppingCart className="h-4 w-4" />Unlock {product.price}</>}</button></div></div>;
+  return <div><div className="relative h-52 overflow-hidden" style={{ background: previewVisual?.background ?? productArtwork(product, 2) }}>{previewVisual && <img src={previewVisual.image} alt="" className="absolute inset-0 h-full w-full object-cover opacity-75" style={{ objectPosition: previewVisual.imagePosition }} decoding="async" />}<div className="absolute inset-0" style={{ background: previewVisual?.wash ?? "radial-gradient(circle at 78% 18%,rgba(255,255,255,0.13),transparent 38%),linear-gradient(180deg,transparent,rgba(16,16,18,0.92))" }} /><div className="absolute left-5 top-5 grid h-12 w-12 place-items-center rounded-2xl border border-gold/30 bg-black/35 text-gold backdrop-blur-md"><Icon className="h-5 w-5" /></div><div className="absolute bottom-5 left-5 right-5"><div className="label-hw text-gold/85">{productTypeLabel(product)}</div><h2 className="mt-2 text-3xl font-semibold">{product.title}</h2><p className="mt-1 text-[11px] text-white/64">Live preview. Your current studio is unchanged.</p></div></div><div className="p-5"><p className="text-sm leading-relaxed text-muted-foreground">{product.detail}</p><div className="mt-5 space-y-0">{features.map((feature) => <div key={feature.label} className="flex items-start justify-between gap-4 border-t border-white/8 py-3"><span className="text-xs text-muted-foreground">{feature.label}</span><span className="max-w-[220px] text-right text-xs font-semibold text-white/82">{feature.value}</span></div>)}</div><button type="button" onClick={onUnlock} disabled={owned} className={cn("mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold", owned ? "border border-gold/25 bg-gold/8 text-gold" : "gold-seal text-black")}>{owned ? <><Check className="h-4 w-4" />Owned</> : <><ShoppingCart className="h-4 w-4" />Unlock {product.price}</>}</button><p className="mt-2 text-center text-[10px] text-white/42">Close preview to return to your active studio.</p></div></div>;
 }
 
 function BundleDetail({ selection, onUnlock }: { selection: Extract<MarketSelection, { kind: "bundle" }>; onUnlock: () => void }) {
@@ -1206,6 +1498,102 @@ function themeSwatches(index: number) {
     { background: "linear-gradient(140deg,#030303,#202020 58%,#777)", colors: ["#050505", "#2f2f2f", "#b0b0b0"] },
   ];
   return themes[index % themes.length];
+}
+
+function storePreviewVisual(product: CatalogProduct): StorePreviewVisual {
+  const visuals: Record<string, StorePreviewVisual> = {
+    "theme-neon-tokyo": {
+      accent: "#8f6bff",
+      accentSoft: "#c29cff",
+      accentDeep: "#392485",
+      background: "#080611",
+      panel: "#11101a",
+      image: "/studio/afterglow.webp",
+      imagePosition: "62% center",
+      wash: "linear-gradient(180deg,rgba(10,5,20,0.08),rgba(8,6,17,0.9)),linear-gradient(120deg,rgba(38,89,255,0.24),rgba(159,44,255,0.3))",
+    },
+    "theme-memphis-soul": {
+      accent: "#d7a94f",
+      accentSoft: "#f3d68c",
+      accentDeep: "#704619",
+      background: "#0e0905",
+      panel: "#18110b",
+      image: "/studio/radio-room.webp",
+      imagePosition: "55% center",
+      wash: "linear-gradient(180deg,rgba(18,9,3,0.05),rgba(14,9,5,0.92)),linear-gradient(120deg,rgba(114,58,15,0.24),rgba(215,169,79,0.12))",
+    },
+    "theme-gold-executive": {
+      accent: "#f6c748",
+      accentSoft: "#ffe194",
+      accentDeep: "#8b5d13",
+      background: "#080807",
+      panel: "#14130f",
+      image: "/studio/penthouse-sessions.webp",
+      imagePosition: "68% center",
+      wash: "linear-gradient(180deg,rgba(6,6,5,0.08),rgba(8,8,7,0.92)),linear-gradient(120deg,rgba(246,199,72,0.18),transparent 62%)",
+    },
+    "theme-purple-dreams": {
+      accent: "#b979dc",
+      accentSoft: "#ddb0ef",
+      accentDeep: "#5d2a74",
+      background: "#0b0710",
+      panel: "#17101c",
+      image: "/studio/bedroom-diaries.webp",
+      imagePosition: "66% center",
+      wash: "linear-gradient(180deg,rgba(17,7,22,0.05),rgba(11,7,16,0.92)),linear-gradient(120deg,rgba(181,73,164,0.2),rgba(94,42,138,0.24))",
+    },
+    "theme-cypher-noir": {
+      accent: "#d4d4d6",
+      accentSoft: "#ffffff",
+      accentDeep: "#55555a",
+      background: "#050505",
+      panel: "#101010",
+      image: "/studio/cypher-sessions.webp",
+      imagePosition: "56% center",
+      wash: "linear-gradient(180deg,rgba(0,0,0,0.12),rgba(4,4,4,0.94)),linear-gradient(120deg,rgba(255,255,255,0.08),transparent 62%)",
+    },
+    "ambient-rain-on-glass": {
+      accent: "#78aef6",
+      accentSoft: "#b8d6ff",
+      accentDeep: "#284f85",
+      background: "#050910",
+      panel: "#0d141d",
+      image: "/studio/rooftop-sessions.webp",
+      imagePosition: "57% center",
+      wash: "linear-gradient(180deg,rgba(2,8,16,0.12),rgba(5,9,16,0.94)),linear-gradient(120deg,rgba(49,103,170,0.28),rgba(5,9,16,0.12))",
+    },
+    "ambient-atlanta-midnight": {
+      accent: "#9d74ef",
+      accentSoft: "#c8aaf9",
+      accentDeep: "#4f2c88",
+      background: "#090611",
+      panel: "#15101d",
+      image: "/studio/skyline-loft.webp",
+      imagePosition: "68% center",
+      wash: "linear-gradient(180deg,rgba(11,5,20,0.08),rgba(9,6,17,0.94)),linear-gradient(120deg,rgba(91,49,154,0.3),rgba(16,34,74,0.2))",
+    },
+    "ambient-vinyl-room": {
+      accent: "#d99a55",
+      accentSoft: "#efc58e",
+      accentDeep: "#74451c",
+      background: "#0d0805",
+      panel: "#18100b",
+      image: "/studio/radio-room.webp",
+      imagePosition: "52% center",
+      wash: "linear-gradient(180deg,rgba(17,8,3,0.06),rgba(13,8,5,0.94)),linear-gradient(120deg,rgba(128,65,21,0.3),rgba(40,20,8,0.1))",
+    },
+  };
+
+  return visuals[product.id] ?? {
+    accent: "#f6c748",
+    accentSoft: "#ffda78",
+    accentDeep: "#a97413",
+    background: "#0a0a0b",
+    panel: "#141416",
+    image: "/studio/modern-hero-v2.webp",
+    imagePosition: "center",
+    wash: "linear-gradient(180deg,rgba(0,0,0,0.08),rgba(10,10,11,0.94))",
+  };
 }
 
 function makeMarketBars(seed: string, count: number) {

@@ -180,4 +180,32 @@ describe("membership resolution", () => {
     expect(result.producer?.plan.id).toBe("producer_pro");
     expect(hasEntitlement(result, "producer", "producer_intelligence")).toBe(true);
   });
+
+  test("uses an active promotion when no paid membership exists", () => {
+    const result = resolveMembership({
+      roles: ["artist"], plans, now,
+      membershipGrants: [{ id: "grant-1", plan_id: "artist_pro", status: "active", starts_at: "2026-07-01T00:00:00.000Z", ends_at: "2026-08-01T00:00:00.000Z" }],
+    });
+    expect(result.artist?.plan.id).toBe("artist_pro");
+    expect(result.artist?.source).toBe("promotion");
+    expect(result.artist?.renews_at).toBe("2026-08-01T00:00:00.000Z");
+  });
+
+  test("paid membership takes precedence over a higher promotional plan", () => {
+    const result = resolveMembership({
+      roles: ["artist"], plans, now, subscriptions: [subscription()],
+      membershipGrants: [{ id: "grant-2", plan_id: "artist_studio", status: "active", starts_at: "2026-07-01T00:00:00.000Z", ends_at: "2026-08-01T00:00:00.000Z" }],
+    });
+    expect(result.artist?.plan.id).toBe("artist_pro");
+    expect(result.artist?.source).toBe("subscription");
+  });
+
+  test("ignores an expired promotional grant without touching user work", () => {
+    const result = resolveMembership({
+      roles: ["artist"], plans, now,
+      membershipGrants: [{ id: "grant-3", plan_id: "artist_pro", status: "active", starts_at: "2026-06-01T00:00:00.000Z", ends_at: "2026-07-01T00:00:00.000Z" }],
+    });
+    expect(result.artist?.plan.id).toBe("artist_free");
+    expect(result.artist?.source).toBe("free");
+  });
 });

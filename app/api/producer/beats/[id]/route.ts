@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/api/auth";
+import {
+  getProducerBeatPreviewPath,
+  MAX_PRODUCER_BEAT_PREVIEW_BYTES,
+  producerBeatPreviewMetadata,
+  PRODUCER_BEAT_BUCKET,
+  PRODUCER_BEAT_PREVIEW_SECONDS,
+} from "@/lib/producer-beat-media";
 import { getProducerBeatBlockers, getProducerProfileBlockers } from "@/lib/producer-release";
 import { producerBeatUpdateSchema } from "@/lib/schemas";
+import { createAdminClient } from "@/lib/supabase/admin";
 
-const BUCKET = "producer-beats";
+const BUCKET = PRODUCER_BEAT_BUCKET;
 const MAX_AUDIO_BYTES = 200 * 1024 * 1024;
 const MAX_ARTWORK_BYTES = 10 * 1024 * 1024;
 const AUDIO_MIME_TYPES = new Set(["audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg", "audio/webm"]);
@@ -77,6 +85,8 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       beat: {
         ...data,
         audio_url: await signedUrl(supabase, data.audio_path),
+        preview_url: await signedUrl(supabase, getProducerBeatPreviewPath(data.metadata)),
+        preview_ready: Boolean(getProducerBeatPreviewPath(data.metadata)),
         artwork_url: await signedUrl(supabase, data.artwork_path),
       },
     });
@@ -87,14 +97,32 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   }
 
   const audio = formData.get("audio");
+  const previewAudio = formData.get("preview_audio");
   const artwork = formData.get("artwork");
   const hasReplacementAudio = audio instanceof File && audio.size > 0;
+  const hasReplacementPreview = previewAudio instanceof File && previewAudio.size > 0;
   const hasReplacementArtwork = artwork instanceof File && artwork.size > 0;
   if (hasReplacementAudio && (audio.size > MAX_AUDIO_BYTES || !AUDIO_MIME_TYPES.has(audio.type))) {
     return NextResponse.json({ error: "Replacement audio must be an MP3, M4A, WAV, OGG, or WebM file under 200 MB." }, { status: 400 });
   }
   if (hasReplacementArtwork && (artwork.size > MAX_ARTWORK_BYTES || !ARTWORK_MIME_TYPES.has(artwork.type))) {
     return NextResponse.json({ error: "Replacement artwork must be a JPEG, PNG, or WebP image under 10 MB." }, { status: 400 });
+  }
+  const previewDurationSeconds = Number(formData.get("preview_duration_seconds") ?? 0);
+  if (
+    hasReplacementPreview
+    && (
+      previewAudio.size > MAX_PRODUCER_BEAT_PREVIEW_BYTES
+      || !AUDIO_MIME_TYPES.has(previewAudio.type)
+      || !Number.isInteger(previewDurationSeconds)
+      || previewDurationSeconds < 1
+      || previewDurationSeconds > PRODUCER_BEAT_PREVIEW_SECONDS
+    )
+  ) {
+    return NextResponse.json({ error: "Use a valid Store preview no longer than 30 seconds." }, { status: 400 });
+  }
+  if (hasReplacementAudio && !hasReplacementPreview) {
+    return NextResponse.json({ error: "Choose the replacement audio again so RapWriter can create its secure preview." }, { status: 400 });
   }
 
   const durationValue = optionalText(formData.get("duration_seconds"));
@@ -141,10 +169,20 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: blockers[0], blockers }, { status: 422 });
     }
 
+    const currentPreviewPath = getProducerBeatPreviewPath(current.metadata);
+    const prospectivePreviewPath = hasReplacementPreview ? `${user.id}/previews/pending.wav` : currentPreviewPath;
     const beatBlockers = getProducerBeatBlockers({
       ...parsed.data,
+      owner_id: user.id,
       audio_path: hasReplacementAudio ? "pending-upload" : current.audio_path,
       artwork_path: hasReplacementArtwork ? "pending-upload" : current.artwork_path,
+      metadata: prospectivePreviewPath
+        ? producerBeatPreviewMetadata(
+            prospectivePreviewPath,
+            hasReplacementPreview ? previewDurationSeconds : Number(current.metadata?.preview_duration_seconds ?? 0),
+            current.metadata,
+          )
+        : current.metadata,
     });
     if (beatBlockers.length) {
       return NextResponse.json({ error: beatBlockers[0], blockers: beatBlockers }, { status: 422 });
@@ -154,6 +192,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   const newPaths: string[] = [];
   let audioPath = current.audio_path as string;
   let artworkPath = current.artwork_path as string | null;
+  let previewPath = getProducerBeatPreviewPath(current.metadata);
 
   try {
     if (hasReplacementAudio) {
@@ -170,7 +209,22 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       newPaths.push(artworkPath);
     }
 
-    const { data, error } = await supabase
+    if (hasReplacementPreview) {
+      previewPath = `${user.id}/previews/${crypto.randomUUID()}.${extensionForMime(previewAudio.type)}`;
+      const { error } = await supabase.storage.from(BUCKET).upload(previewPath, previewAudio, { contentType: previewAudio.type, upsert: false });
+      if (error) throw error;
+      newPaths.push(previewPath);
+    }
+
+    const admin = createAdminClient();
+    const nextMetadata = previewPath
+      ? producerBeatPreviewMetadata(
+          previewPath,
+          hasReplacementPreview ? previewDurationSeconds : Number(current.metadata?.preview_duration_seconds ?? 0),
+          current.metadata,
+        )
+      : current.metadata;
+    const { data, error } = await admin
       .from("producer_beats")
       .update({
         title: parsed.data.title,
@@ -184,6 +238,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         license_tiers: parsed.data.license_tiers,
         audio_path: audioPath,
         artwork_path: artworkPath,
+        metadata: nextMetadata,
         status: parsed.data.submit ? "submitted" : "draft",
         submitted_at: parsed.data.submit ? new Date().toISOString() : null,
         reviewed_at: null,
@@ -200,6 +255,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     const replacedPaths = [
       audioPath !== current.audio_path ? current.audio_path as string : null,
       artworkPath !== current.artwork_path ? current.artwork_path as string | null : null,
+      previewPath !== getProducerBeatPreviewPath(current.metadata) ? getProducerBeatPreviewPath(current.metadata) : null,
     ].filter((path): path is string => Boolean(path));
     if (replacedPaths.length) await supabase.storage.from(BUCKET).remove(replacedPaths);
 
@@ -207,6 +263,8 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       beat: {
         ...data,
         audio_url: await signedUrl(supabase, data.audio_path),
+        preview_url: await signedUrl(supabase, getProducerBeatPreviewPath(data.metadata)),
+        preview_ready: Boolean(getProducerBeatPreviewPath(data.metadata)),
         artwork_url: await signedUrl(supabase, data.artwork_path),
       },
     });
@@ -225,7 +283,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
 
   const { data: beat, error: beatError } = await supabase
     .from("producer_beats")
-    .select("id, status, audio_path, artwork_path")
+    .select("id, status, audio_path, artwork_path, metadata")
     .eq("id", beatId)
     .eq("owner_id", user.id)
     .maybeSingle();
@@ -242,7 +300,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
     .eq("owner_id", user.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const paths = [beat.audio_path, beat.artwork_path].filter((path): path is string => Boolean(path));
+  const paths = [beat.audio_path, beat.artwork_path, getProducerBeatPreviewPath(beat.metadata)].filter((path): path is string => Boolean(path));
   const cleanup = paths.length ? await supabase.storage.from(BUCKET).remove(paths) : { error: null };
   return NextResponse.json({ deleted: true, cleanup_warning: cleanup.error?.message ?? null });
 }

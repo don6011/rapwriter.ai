@@ -1,4 +1,4 @@
-export const appRoles = ["artist", "producer", "admin"] as const;
+export const appRoles = ["artist", "producer", "moderator", "admin"] as const;
 
 export type AppRole = (typeof appRoles)[number];
 
@@ -8,4 +8,12 @@ export function isAppRole(value: unknown): value is AppRole {
 
 export function hasRole(roles: readonly AppRole[], requiredRole: AppRole) {
   return roles.includes(requiredRole);
+}
+
+export function hasAnyRole(roles: readonly AppRole[], requiredRoles: readonly AppRole[]) {
+  return requiredRoles.some((role) => roles.includes(role));
+}
+
+export function isStaff(roles: readonly AppRole[]) {
+  return hasAnyRole(roles, ["moderator", "admin"]);
 }

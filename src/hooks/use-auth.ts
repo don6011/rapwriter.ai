@@ -5,6 +5,14 @@ import type { User } from "@supabase/supabase-js";
 import { isAppRole, type AppRole } from "@/lib/access-control";
 import { createClient } from "@/lib/supabase/client";
 
+const SESSION_REQUEST_TIMEOUT_MS = 8_000;
+
+function rejectAfter(timeoutMs: number, message: string) {
+  return new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+}
+
 export function useAuth() {
   const supabase = useMemo(() => {
     try {
@@ -31,11 +39,14 @@ export function useAuth() {
       }
 
       try {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), SESSION_REQUEST_TIMEOUT_MS);
         const response = await fetch("/api/auth/me", {
           cache: "no-store",
           credentials: "same-origin",
           headers: { Accept: "application/json" },
-        });
+          signal: controller.signal,
+        }).finally(() => window.clearTimeout(timeout));
         const payload = (await response.json().catch(() => ({}))) as {
           authenticated?: boolean;
           user_id?: string | null;
@@ -47,6 +58,11 @@ export function useAuth() {
         if (verificationId !== verificationSequence.current) return false;
 
         if (!confirmed) {
+          if (response.status >= 500) {
+            setUser((current) => (current?.id === candidate.id ? current : candidate));
+            setError("Studio sync is reconnecting. Your work remains available on this device.");
+            return true;
+          }
           setUser(null);
           setRoles([]);
           setEmailVerified(false);
@@ -61,11 +77,9 @@ export function useAuth() {
         return true;
       } catch {
         if (verificationId !== verificationSequence.current) return false;
-        setUser(null);
-        setRoles([]);
-        setEmailVerified(false);
-        setError("RapWriter could not reach the session service. Please try again.");
-        return false;
+        setUser((current) => (current?.id === candidate.id ? current : candidate));
+        setError("Studio sync is reconnecting. Your work remains available on this device.");
+        return true;
       }
     },
     [],
@@ -80,18 +94,37 @@ export function useAuth() {
 
     let active = true;
 
-    void supabase.auth.getUser().then(async ({ data, error: userError }) => {
-      if (!active) return;
-      if (userError) {
-        const missingSession = userError.name === "AuthSessionMissingError"
-          || userError.message.toLowerCase().includes("auth session missing");
-        setError(missingSession ? null : userError.message);
+    void (async () => {
+      try {
+        const { data, error: userError } = await Promise.race([
+          supabase.auth.getSession(),
+          rejectAfter(SESSION_REQUEST_TIMEOUT_MS, "Session restore timed out."),
+        ]);
+        if (!active) return;
+        if (userError) {
+          const missingSession = userError.name === "AuthSessionMissingError"
+            || userError.message.toLowerCase().includes("auth session missing");
+          setError(missingSession ? null : userError.message);
+          setUser(null);
+        } else {
+          const restoredUser = data.session?.user ?? null;
+          if (restoredUser) {
+            setUser(restoredUser);
+            setLoading(false);
+          }
+          await confirmServerSession(restoredUser);
+        }
+      } catch {
+        if (!active) return;
+        verificationSequence.current += 1;
         setUser(null);
-      } else {
-        await confirmServerSession(data.user);
+        setRoles([]);
+        setEmailVerified(false);
+        setError(null);
+      } finally {
+        if (active) setLoading(false);
       }
-      if (active) setLoading(false);
-    });
+    })();
 
     const {
       data: { subscription },
@@ -111,8 +144,21 @@ export function useAuth() {
       });
     });
 
+    const retryServerSession = () => {
+      void supabase.auth.getSession().then(({ data }) => {
+        if (active && data.session?.user) void confirmServerSession(data.session.user);
+      });
+    };
+    const retryWhenVisible = () => {
+      if (document.visibilityState === "visible") retryServerSession();
+    };
+    window.addEventListener("focus", retryServerSession);
+    document.addEventListener("visibilitychange", retryWhenVisible);
+
     return () => {
       active = false;
+      window.removeEventListener("focus", retryServerSession);
+      document.removeEventListener("visibilitychange", retryWhenVisible);
       subscription.unsubscribe();
     };
   }, [confirmServerSession, supabase]);

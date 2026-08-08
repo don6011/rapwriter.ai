@@ -2,25 +2,36 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api/auth";
 import { parseJson } from "@/lib/api/json";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
-import { producerActionEntitlement } from "@/lib/producer-actions";
+import { hasValidRequestOrigin } from "@/lib/api/origin";
+import { producerActionFeature } from "@/lib/ai-features";
 import { producerActionCreateSchema } from "@/lib/schemas";
+import { AiGatewayError } from "@/lib/server/ai-gateway";
 import { generateProducerActionWithProvider } from "@/lib/server/producer-action-provider";
-import { consumeMembershipUsage, membershipErrorResponse } from "@/lib/server/membership-access";
+import { membershipErrorResponse, MembershipAccessError } from "@/lib/server/membership-access";
 
 export async function POST(request: Request) {
+  if (!hasValidRequestOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   const { supabase, user, response } = await requireUser();
   if (response) return response;
 
+  const parsed = await parseJson(request, producerActionCreateSchema);
+  if (parsed.response) return parsed.response;
+
   const rateLimit = await enforceRateLimit(request, {
-    scope: "producer-actions",
+    scope: `ai:${producerActionFeature(parsed.data.action_type)}`,
     limit: 20,
     windowSeconds: 5 * 60,
     identity: user.id,
   });
   if (rateLimit) return rateLimit;
 
-  const parsed = await parseJson(request, producerActionCreateSchema);
-  if (parsed.response) return parsed.response;
+  const { data: existing } = await supabase
+    .from("producer_actions")
+    .select("id, action_type, attempt, input_content, proposed_content, rationale, changes, provider, status, section_name")
+    .eq("owner_id", user.id)
+    .eq("request_id", parsed.data.request_id)
+    .maybeSingle();
+  if (existing) return NextResponse.json({ proposal: proposalFrom(existing) });
 
   const { data: song, error: songError } = await supabase
     .from("songs")
@@ -46,30 +57,35 @@ export async function POST(request: Request) {
     if (!session) return NextResponse.json({ error: "Session not found." }, { status: 404 });
   }
 
+  let generated: Awaited<ReturnType<typeof generateProducerActionWithProvider>>;
   try {
-    await consumeMembershipUsage(supabase, user.id, "artist", {
-      entitlement: producerActionEntitlement(parsed.data.action_type),
-      limitKey: "ghostwriter_actions_monthly",
-      metric: "ghostwriter_actions",
+    generated = await generateProducerActionWithProvider({
+      supabase,
+      ownerId: user.id,
+      requestId: parsed.data.request_id,
+      actionType: parsed.data.action_type,
+      sectionName: parsed.data.section_name,
+      sectionContent: parsed.data.section_content,
+      attempt: parsed.data.attempt,
+      beat: parsed.data.beat,
+      studioDna: parsed.data.studio_dna,
     });
   } catch (error) {
-    return membershipErrorResponse(error);
+    if (error instanceof MembershipAccessError) return membershipErrorResponse(error);
+    if (error instanceof AiGatewayError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status, headers: { "Cache-Control": "private, no-store" } });
+    }
+    return NextResponse.json({ error: "Studio intelligence is temporarily unavailable.", code: "ai_unavailable" }, { status: 503 });
   }
-
-  const draft = await generateProducerActionWithProvider({
-    actionType: parsed.data.action_type,
-    sectionName: parsed.data.section_name,
-    sectionContent: parsed.data.section_content,
-    attempt: parsed.data.attempt,
-    beat: parsed.data.beat,
-    studioDna: parsed.data.studio_dna,
-  });
+  const { draft } = generated;
 
   const sectionKey = toSectionKey(parsed.data.section_name);
   const { data: action, error } = await supabase
     .from("producer_actions")
     .insert({
       owner_id: user.id,
+      request_id: parsed.data.request_id,
+      ai_usage_id: generated.usageId,
       project_id: parsed.data.project_id,
       song_id: parsed.data.song_id,
       session_id: parsed.data.session_id ?? null,
@@ -95,22 +111,30 @@ export async function POST(request: Request) {
 
   return NextResponse.json(
     {
-      proposal: {
-        id: action.id,
-        actionType: action.action_type,
-        title: draft.title,
-        sectionName: action.section_name,
-        originalContent: action.input_content,
-        proposedContent: action.proposed_content,
-        rationale: action.rationale,
-        changes: action.changes,
-        attempt: action.attempt,
-        provider: action.provider,
-        status: action.status,
-      },
+      proposal: proposalFrom(action, draft.title),
     },
     { status: 201 },
   );
+}
+
+function proposalFrom(action: Record<string, unknown>, title?: string) {
+  return {
+    id: action.id,
+    actionType: action.action_type,
+    title: title ?? actionTitle(String(action.action_type)),
+    sectionName: action.section_name,
+    originalContent: action.input_content,
+    proposedContent: action.proposed_content,
+    rationale: action.rationale,
+    changes: action.changes,
+    attempt: action.attempt,
+    provider: action.provider,
+    status: action.status,
+  };
+}
+
+function actionTitle(value: string) {
+  return { hook: "Hook Doctor", rewrite: "Producer Rewrite", commercial: "Commercial Pass", pocket: "Pocket Adjustment" }[value] ?? "Producer Revision";
 }
 
 function toSectionKey(value: string) {

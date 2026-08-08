@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Smartphone } from "lucide-react";
+import { Home, SlidersHorizontal, Smartphone } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { cn } from "@/lib/utils";
 
 type PhoneModel = "iphone" | "samsung";
+type PreviewScreen = "studio" | "producer";
 
 const phoneModels: Array<{ id: PhoneModel; label: string; detail: string }> = [
   { id: "iphone", label: "iPhone", detail: "390 x 844" },
@@ -14,18 +15,26 @@ const phoneModels: Array<{ id: PhoneModel; label: string; detail: string }> = [
 
 export function PhonePreview() {
   const [model, setModel] = useState<PhoneModel>("iphone");
+  const [screen, setScreen] = useState<PreviewScreen>("studio");
   const [isHydrated, setIsHydrated] = useState(false);
   const activeModel = phoneModels.find((item) => item.id === model) ?? phoneModels[0];
 
   useEffect(() => {
     const savedModel = window.sessionStorage.getItem("rapwriter:preview-device");
     if (savedModel === "iphone" || savedModel === "samsung") setModel(savedModel);
+    const savedScreen = window.sessionStorage.getItem("rapwriter:preview-screen");
+    if (savedScreen === "studio" || savedScreen === "producer") setScreen(savedScreen);
     setIsHydrated(true);
   }, []);
 
   function selectModel(nextModel: PhoneModel) {
     window.sessionStorage.setItem("rapwriter:preview-device", nextModel);
     setModel(nextModel);
+  }
+
+  function selectScreen(nextScreen: PreviewScreen) {
+    window.sessionStorage.setItem("rapwriter:preview-screen", nextScreen);
+    setScreen(nextScreen);
   }
 
   return (
@@ -63,15 +72,44 @@ export function PhonePreview() {
           </div>
         </div>
 
+        <div className="mb-5 flex rounded-xl border border-white/10 bg-black/35 p-1" role="tablist" aria-label="Preview screen">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={screen === "studio"}
+            onClick={() => selectScreen("studio")}
+            className={cn(
+              "flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors",
+              screen === "studio" ? "bg-gold text-black" : "text-white/55 hover:bg-white/[0.04] hover:text-white",
+            )}
+          >
+            <Home className="h-3.5 w-3.5" />
+            Studio
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={screen === "producer"}
+            onClick={() => selectScreen("producer")}
+            className={cn(
+              "flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors",
+              screen === "producer" ? "bg-gold text-black" : "text-white/55 hover:bg-white/[0.04] hover:text-white",
+            )}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Producer HQ
+          </button>
+        </div>
+
         <div className="relative">
-          <DeviceShell model={model} />
+          <DeviceShell model={model} screen={screen} />
         </div>
       </section>
     </main>
   );
 }
 
-function DeviceShell({ model }: { model: PhoneModel }) {
+function DeviceShell({ model, screen }: { model: PhoneModel; screen: PreviewScreen }) {
   const isIPhone = model === "iphone";
 
   return (
@@ -109,8 +147,8 @@ function DeviceShell({ model }: { model: PhoneModel }) {
           )}
         />
         <iframe
-          src="/"
-          title="RapWriter device preview"
+          src={screen === "producer" ? "/producer" : "/"}
+          title={screen === "producer" ? "RapWriter Producer HQ device preview" : "RapWriter Studio device preview"}
           className="h-full w-full border-0 bg-black"
           allow="autoplay; microphone"
         />

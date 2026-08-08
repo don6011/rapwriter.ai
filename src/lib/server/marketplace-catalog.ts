@@ -1,5 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Beat, EmotionalTag, License, Producer } from "@/lib/marketplace";
+import {
+  getProducerBeatPreviewDuration,
+  getProducerBeatPreviewPath,
+  isOwnedProducerPreviewPath,
+} from "@/lib/producer-beat-media";
 
 type ProducerProfileRow = {
   id: string;
@@ -8,10 +13,12 @@ type ProducerProfileRow = {
   city: string | null;
   bio: string | null;
   verified: boolean;
+  featured_until: string | null;
 };
 
 type ProducerBeatRow = {
   id: string;
+  owner_id: string;
   producer_profile_id: string;
   title: string;
   bpm: number | null;
@@ -22,8 +29,9 @@ type ProducerBeatRow = {
   tags: string[];
   license_tiers: Array<{ license: License; price: number }>;
   artwork_path: string | null;
+  audio_path: string;
   duration_seconds: number;
-  metadata: { featured?: boolean } | null;
+  metadata: { featured?: boolean; preview_path?: string; preview_duration_seconds?: number } | null;
 };
 
 type ProducerMetricsRow = {
@@ -56,15 +64,16 @@ export async function loadApprovedMarketplaceCatalog(limit = 100) {
   const [beatResult, profileResult, metricResult, beatMetricResult] = await Promise.all([
     supabase
       .from("producer_beats")
-      .select("id, producer_profile_id, title, bpm, musical_key, genre, mood, region, tags, license_tiers, artwork_path, duration_seconds, metadata")
+      .select("id, owner_id, producer_profile_id, title, bpm, musical_key, genre, mood, region, tags, license_tiers, audio_path, artwork_path, duration_seconds, metadata")
       .eq("status", "approved")
       .order("updated_at", { ascending: false })
       .limit(limit),
     supabase
       .from("producer_profiles")
-      .select("id, display_name, handle, city, bio, verified")
+      .select("id, display_name, handle, city, bio, verified, featured_until")
       .eq("status", "approved")
       .eq("is_public", true)
+      .order("featured_until", { ascending: false, nullsFirst: false })
       .order("updated_at", { ascending: false })
       .limit(limit),
     supabase
@@ -89,7 +98,12 @@ export async function loadApprovedMarketplaceCatalog(limit = 100) {
     ((beatMetricResult.data ?? []) as BeatMetricsRow[]).map((metric) => [metric.beat_id, metric]),
   );
   const beats = ((beatResult.data ?? []) as ProducerBeatRow[])
-    .filter((beat) => profileMap.has(beat.producer_profile_id))
+    .filter((beat) => {
+      const previewPath = getProducerBeatPreviewPath(beat.metadata);
+      return profileMap.has(beat.producer_profile_id)
+        && Boolean(getProducerBeatPreviewDuration(beat.metadata))
+        && isOwnedProducerPreviewPath(previewPath, beat.owner_id, beat.audio_path);
+    })
     .map((beat) => toMarketplaceBeat(beat, profileMap.get(beat.producer_profile_id)!, beatMetrics.get(beat.id)));
 
   return {

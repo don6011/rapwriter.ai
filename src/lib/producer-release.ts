@@ -1,3 +1,9 @@
+import {
+  getProducerBeatPreviewDuration,
+  getProducerBeatPreviewPath,
+  isOwnedProducerPreviewPath,
+} from "@/lib/producer-beat-media";
+
 type ProducerProfileReadiness = {
   display_name?: string | null;
   handle?: string | null;
@@ -24,6 +30,8 @@ type ProducerBeatReadiness = {
   license_tiers?: Array<{ license?: string | null; price?: number | null }> | null;
   audio_path?: string | null;
   artwork_path?: string | null;
+  owner_id?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 type ProducerUploadDraftReadiness = {
@@ -69,6 +77,14 @@ export function getProducerBeatBlockers(beat: ProducerBeatReadiness | null | und
   if (!(beat.tags?.length)) blockers.push("Add at least one discovery tag.");
   if (!hasText(beat.audio_path)) blockers.push("Upload playable audio.");
   if (!hasText(beat.artwork_path)) blockers.push("Upload release artwork.");
+  const previewPath = getProducerBeatPreviewPath(beat.metadata);
+  if (
+    !hasText(beat.owner_id)
+    || !isOwnedProducerPreviewPath(previewPath, beat.owner_id!, beat.audio_path)
+    || !getProducerBeatPreviewDuration(beat.metadata)
+  ) {
+    blockers.push("Create a secure 30-second Store preview.");
+  }
 
   const tiers = beat.license_tiers ?? [];
   const requiredLicenses = ["Lease", "Premium Lease", "Exclusive"];

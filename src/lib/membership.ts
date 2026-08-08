@@ -19,6 +19,17 @@ export type PlanDefinition = {
   metadata: Record<string, unknown>;
 };
 
+export type MembershipBundleDefinition = {
+  id: string;
+  name: string;
+  tagline: string;
+  monthly_price_cents: number;
+  annual_price_cents: number | null;
+  currency: string;
+  included_plan_ids: string[];
+  metadata: Record<string, unknown>;
+};
+
 export type SubscriptionRecord = {
   id: string;
   plan_id: string;
@@ -30,6 +41,14 @@ export type SubscriptionRecord = {
   trial_end: string | null;
   grace_period_end: string | null;
   cancel_at_period_end: boolean;
+};
+
+export type MembershipGrantRecord = {
+  id: string;
+  plan_id: string;
+  starts_at: string;
+  ends_at: string | null;
+  status: string;
 };
 
 export type EntitlementGrantRecord = {
@@ -51,7 +70,8 @@ export type WorkspaceMembership = {
   audience: MembershipAudience;
   plan: PlanDefinition;
   status: string;
-  source: "free" | "subscription";
+  source: "free" | "subscription" | "promotion";
+  provider: string | null;
   renews_at: string | null;
   cancel_at_period_end: boolean;
   entitlements: EntitlementValues;
@@ -130,6 +150,7 @@ function workspaceForAudience(
   audience: MembershipAudience,
   plans: PlanDefinition[],
   subscriptions: SubscriptionRecord[],
+  membershipGrants: MembershipGrantRecord[],
   grants: EntitlementGrantRecord[],
   usageRows: UsageRecord[],
   now: Date,
@@ -144,7 +165,20 @@ function workspaceForAudience(
     .filter((entry): entry is { subscription: SubscriptionRecord; plan: PlanDefinition } => Boolean(entry.plan))
     .sort((a, b) => b.plan.tier - a.plan.tier);
 
-  const selected = activeSubscriptions[0] ?? null;
+  const activePromotions = membershipGrants
+    .filter((grant) => grant.status === "active")
+    .filter((grant) => {
+      const start = validDate(grant.starts_at);
+      const end = validDate(grant.ends_at);
+      return start !== null && start <= now.getTime() && (end === null || end > now.getTime());
+    })
+    .map((grant) => ({ grant, plan: audiencePlans.find((plan) => plan.id === grant.plan_id) }))
+    .filter((entry): entry is { grant: MembershipGrantRecord; plan: PlanDefinition } => Boolean(entry.plan))
+    .sort((a, b) => b.plan.tier - a.plan.tier);
+
+  const paid = activeSubscriptions[0] ?? null;
+  const promotion = activePromotions[0] ?? null;
+  const selected = paid ?? promotion;
   const plan = selected?.plan ?? freePlan;
   const entitlements = { ...plan.entitlements };
   const limits = { ...plan.limits };
@@ -163,10 +197,11 @@ function workspaceForAudience(
   return {
     audience,
     plan,
-    status: selected?.subscription.status ?? "free",
-    source: selected ? "subscription" : "free",
-    renews_at: selected?.subscription.current_period_end ?? null,
-    cancel_at_period_end: selected?.subscription.cancel_at_period_end ?? false,
+    status: paid?.subscription.status ?? (promotion ? "active" : "free"),
+    source: paid ? "subscription" : promotion ? "promotion" : "free",
+    provider: paid?.subscription.provider ?? (promotion ? "promotion" : null),
+    renews_at: paid?.subscription.current_period_end ?? promotion?.grant.ends_at ?? null,
+    cancel_at_period_end: paid?.subscription.cancel_at_period_end ?? false,
     entitlements,
     limits,
     usage,
@@ -177,12 +212,14 @@ export function resolveMembership(input: {
   roles: AppRole[];
   plans: PlanDefinition[];
   subscriptions?: SubscriptionRecord[];
+  membershipGrants?: MembershipGrantRecord[];
   grants?: EntitlementGrantRecord[];
   usage?: UsageRecord[];
   now?: Date;
 }): MembershipSnapshot {
   const now = input.now ?? new Date();
   const subscriptions = input.subscriptions ?? [];
+  const membershipGrants = input.membershipGrants ?? [];
   const grants = input.grants ?? [];
   const usage = input.usage ?? [];
   const isAdmin = input.roles.includes("admin");
@@ -190,10 +227,10 @@ export function resolveMembership(input: {
   return {
     roles: input.roles,
     artist: input.roles.includes("artist") || isAdmin
-      ? workspaceForAudience("artist", input.plans, subscriptions, grants, usage, now)
+      ? workspaceForAudience("artist", input.plans, subscriptions, membershipGrants, grants, usage, now)
       : null,
     producer: input.roles.includes("producer") || isAdmin
-      ? workspaceForAudience("producer", input.plans, subscriptions, grants, usage, now)
+      ? workspaceForAudience("producer", input.plans, subscriptions, membershipGrants, grants, usage, now)
       : null,
   };
 }

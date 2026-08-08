@@ -2,7 +2,16 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/auth";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
+import {
+  getProducerBeatPreviewPath,
+  getProducerBeatPreviewDuration,
+  isOwnedProducerPreviewPath,
+  MAX_PRODUCER_BEAT_PREVIEW_BYTES,
+  producerBeatPreviewMetadata,
+  PRODUCER_BEAT_PREVIEW_SECONDS,
+} from "@/lib/producer-beat-media";
 import { getProducerBeatBlockers } from "@/lib/producer-release";
+import { getStarterBeatPublishBlockers } from "@/lib/starter-beat-release";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const PRODUCER_BUCKET = "producer-beats";
@@ -17,6 +26,23 @@ const deleteSchema = z.object({
   id: z.string().uuid(),
   confirmation: z.literal("REMOVE"),
 });
+
+const starterBeatActionSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("editorial"),
+    content_type: z.literal("starter_beat"),
+    id: z.string().uuid(),
+    status: z.enum(["draft", "published", "archived"]),
+    featured: z.boolean().optional(),
+  }),
+  z.object({
+    action: z.literal("link_producer"),
+    content_type: z.literal("starter_beat"),
+    id: z.string().uuid(),
+    producer_profile_id: z.string().uuid().nullable(),
+    reason: z.string().trim().min(8).max(500),
+  }),
+]);
 
 const profileSchema = z.object({
   owner_id: z.string().uuid(),
@@ -56,7 +82,12 @@ const starterBeatSchema = z.object({
   genre: z.string().trim().max(80).nullable(),
   mood: z.string().trim().max(80).nullable(),
   tags: z.array(z.string().trim().min(1).max(60)).max(12),
+  collection_slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120).nullable(),
+  energy: z.enum(["low", "medium", "high"]).nullable(),
+  writing_fit: z.array(z.string().trim().min(1).max(80)).max(8),
   attribution: z.string().trim().max(500).optional(),
+  publish: z.boolean(),
+  featured: z.boolean(),
 });
 
 export const dynamic = "force-dynamic";
@@ -88,6 +119,85 @@ export async function POST(request: Request) {
   return NextResponse.json({ error: "Choose a supported Marketplace content type." }, { status: 400 });
 }
 
+export async function PUT(request: Request) {
+  const admin = await requireRole("admin");
+  if (admin.response || !admin.user) return admin.response;
+
+  const rateLimit = await enforceRateLimit(request, {
+    scope: "admin-producer-preview-repair",
+    limit: 30,
+    windowSeconds: 60 * 60,
+    identity: admin.user.id,
+  });
+  if (rateLimit) return rateLimit;
+
+  let supabase: ReturnType<typeof createAdminClient>;
+  try {
+    supabase = createAdminClient();
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Admin storage is unavailable." }, { status: 500 });
+  }
+
+  const formData = await request.formData();
+  const parsedId = z.string().uuid().safeParse(text(formData, "id"));
+  const previewAudio = formData.get("preview_audio");
+  const previewDurationSeconds = numberValue(formData, "preview_duration_seconds");
+  if (!parsedId.success) return NextResponse.json({ error: "Choose a valid producer beat." }, { status: 400 });
+  if (
+    !(previewAudio instanceof File)
+    || previewAudio.size < 1
+    || previewAudio.size > MAX_PRODUCER_BEAT_PREVIEW_BYTES
+    || !AUDIO_MIME_TYPES.has(previewAudio.type)
+    || !Number.isInteger(previewDurationSeconds)
+    || previewDurationSeconds < 1
+    || previewDurationSeconds > PRODUCER_BEAT_PREVIEW_SECONDS
+  ) {
+    return NextResponse.json({ error: "Upload a secure Store preview no longer than 30 seconds." }, { status: 400 });
+  }
+
+  const { data: beat, error: readError } = await supabase
+    .from("producer_beats")
+    .select("id, owner_id, audio_path, metadata, status")
+    .eq("id", parsedId.data)
+    .maybeSingle();
+  if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
+  if (!beat) return NextResponse.json({ error: "Producer beat not found." }, { status: 404 });
+
+  const previewPath = `${beat.owner_id}/previews/${crypto.randomUUID()}.${extensionForMime(previewAudio.type)}`;
+  const { error: uploadError } = await supabase.storage.from(PRODUCER_BUCKET).upload(previewPath, previewAudio, {
+    contentType: previewAudio.type,
+    upsert: false,
+  });
+  if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
+
+  const previousPreviewPath = getProducerBeatPreviewPath(beat.metadata);
+  const { data, error } = await supabase
+    .from("producer_beats")
+    .update({
+      metadata: producerBeatPreviewMetadata(previewPath, previewDurationSeconds, beat.metadata),
+    })
+    .eq("id", beat.id)
+    .select("id, title, status, metadata")
+    .single();
+  if (error) {
+    await supabase.storage.from(PRODUCER_BUCKET).remove([previewPath]);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (
+    previousPreviewPath
+    && previousPreviewPath !== previewPath
+    && isOwnedProducerPreviewPath(previousPreviewPath, beat.owner_id, beat.audio_path)
+  ) {
+    await supabase.storage.from(PRODUCER_BUCKET).remove([previousPreviewPath]);
+  }
+
+  return NextResponse.json({
+    updated: data,
+    preview_ready: Boolean(getProducerBeatPreviewDuration(data.metadata)),
+  });
+}
+
 export async function DELETE(request: Request) {
   const admin = await requireRole("admin");
   if (admin.response || !admin.user) return admin.response;
@@ -113,6 +223,110 @@ export async function DELETE(request: Request) {
   if (parsed.data.content_type === "producer_beat") return removeProducerBeat(supabase, parsed.data.id);
   if (parsed.data.content_type === "starter_beat") return removeStarterBeat(supabase, parsed.data.id);
   return removeProducerProfile(supabase, parsed.data.id);
+}
+
+export async function PATCH(request: Request) {
+  const admin = await requireRole("admin");
+  if (admin.response || !admin.user) return admin.response;
+
+  const rateLimit = await enforceRateLimit(request, {
+    scope: "admin-marketplace-update",
+    limit: 120,
+    windowSeconds: 60 * 60,
+    identity: admin.user.id,
+  });
+  if (rateLimit) return rateLimit;
+
+  const parsed = starterBeatActionSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Choose a valid starter beat action." }, { status: 400 });
+
+  let supabase: ReturnType<typeof createAdminClient>;
+  try {
+    supabase = createAdminClient();
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Admin storage is unavailable." }, { status: 500 });
+  }
+
+  const { data: beat, error: readError } = await supabase.from("starter_beats").select("*").eq("id", parsed.data.id).maybeSingle();
+  if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
+  if (!beat) return NextResponse.json({ error: "Starter beat not found." }, { status: 404 });
+
+  if (parsed.data.action === "link_producer") {
+    if (beat.source_type !== "producer_donated") {
+      return NextResponse.json({ error: "Only producer-donated beats can be attached to a producer catalog." }, { status: 409 });
+    }
+
+    let producerName: string | null = null;
+    if (parsed.data.producer_profile_id) {
+      const { data: profile, error: profileError } = await supabase
+        .from("producer_profiles")
+        .select("id, display_name, status, verified")
+        .eq("id", parsed.data.producer_profile_id)
+        .maybeSingle();
+      if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
+      if (!profile || profile.status !== "approved" || !profile.verified) {
+        return NextResponse.json({ error: "Verify and approve the producer profile before assigning catalog credit." }, { status: 409 });
+      }
+      producerName = profile.display_name;
+    }
+
+    const previousProfileId = typeof beat.producer_profile_id === "string" ? beat.producer_profile_id : null;
+    const metadata = isRecord(beat.metadata) ? beat.metadata : {};
+    const existingHistory = Array.isArray(metadata.claim_history) ? metadata.claim_history : [];
+    const claimEvent = {
+      action: parsed.data.producer_profile_id ? "linked" : "unlinked",
+      producer_profile_id: parsed.data.producer_profile_id,
+      previous_producer_profile_id: previousProfileId,
+      reason: parsed.data.reason,
+      actor_id: admin.user.id,
+      created_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("starter_beats")
+      .update({
+        producer_profile_id: parsed.data.producer_profile_id,
+        metadata: {
+          ...metadata,
+          claim_status: parsed.data.producer_profile_id ? "verified" : "unclaimed",
+          claim_reason: parsed.data.reason,
+          claim_verified_at: claimEvent.created_at,
+          claim_verified_by: admin.user.id,
+          claim_history: [...existingHistory, claimEvent].slice(-25),
+        },
+      })
+      .eq("id", parsed.data.id)
+      .select("id, title, producer_name, producer_profile_id, metadata")
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({
+      updated: data,
+      message: parsed.data.producer_profile_id
+        ? `${beat.title} is now credited to ${producerName}'s catalog.`
+        : `${beat.title} has been removed from the linked producer catalog.`,
+    });
+  }
+
+  if (parsed.data.status === "published") {
+    const blockers = getStarterBeatPublishBlockers(beat);
+    if (blockers.length) return NextResponse.json({ error: blockers.join(". "), blockers }, { status: 409 });
+  }
+
+  const { data, error } = await supabase
+    .from("starter_beats")
+    .update({
+      status: parsed.data.status,
+      is_featured: parsed.data.status === "published" ? (parsed.data.featured ?? beat.is_featured) : false,
+    })
+    .eq("id", parsed.data.id)
+    .select("id, title, status, is_active, is_featured, published_at, archived_at")
+    .single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ updated: data });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 async function createProducerProfile(supabase: ReturnType<typeof createAdminClient>, formData: FormData) {
@@ -169,10 +383,23 @@ async function createProducerBeat(supabase: ReturnType<typeof createAdminClient>
   if (!parsed.success) return invalidResponse(parsed.error.issues[0]?.message);
 
   const audio = formData.get("audio");
+  const previewAudio = formData.get("preview_audio");
+  const previewDurationSeconds = numberValue(formData, "preview_duration_seconds");
   const artwork = formData.get("artwork");
   const fileError = validateFiles(audio, artwork);
   if (fileError) return NextResponse.json({ error: fileError }, { status: 400 });
   if (!(audio instanceof File)) return NextResponse.json({ error: "Beat audio is required." }, { status: 400 });
+  if (
+    !(previewAudio instanceof File)
+    || previewAudio.size < 1
+    || previewAudio.size > MAX_PRODUCER_BEAT_PREVIEW_BYTES
+    || !AUDIO_MIME_TYPES.has(previewAudio.type)
+    || !Number.isInteger(previewDurationSeconds)
+    || previewDurationSeconds < 1
+    || previewDurationSeconds > PRODUCER_BEAT_PREVIEW_SECONDS
+  ) {
+    return NextResponse.json({ error: "A secure Store preview no longer than 30 seconds is required." }, { status: 400 });
+  }
   const artworkFile = artwork instanceof File && artwork.size > 0 ? artwork : null;
 
   const { data: profile, error: profileError } = await supabase
@@ -187,15 +414,18 @@ async function createProducerBeat(supabase: ReturnType<typeof createAdminClient>
   }
 
   const audioPath = `${profile.owner_id}/beats/${crypto.randomUUID()}.${extensionForMime(audio.type)}`;
+  const previewPath = `${profile.owner_id}/previews/${crypto.randomUUID()}.${extensionForMime(previewAudio.type)}`;
   const artworkPath = artworkFile
     ? `${profile.owner_id}/artwork/${crypto.randomUUID()}.${extensionForMime(artworkFile.type)}`
     : null;
   if (parsed.data.publish) {
     const blockers = getProducerBeatBlockers({
       ...parsed.data,
+      owner_id: profile.owner_id,
       audio_path: audioPath,
       artwork_path: artworkPath,
       license_tiers: licenseTiers(parsed.data),
+      metadata: producerBeatPreviewMetadata(previewPath, previewDurationSeconds),
     });
     if (blockers.length) return NextResponse.json({ error: blockers[0], blockers }, { status: 422 });
   }
@@ -205,6 +435,10 @@ async function createProducerBeat(supabase: ReturnType<typeof createAdminClient>
     const { error: audioError } = await supabase.storage.from(PRODUCER_BUCKET).upload(audioPath, audio, { contentType: audio.type, upsert: false });
     if (audioError) throw audioError;
     uploaded.push(audioPath);
+
+    const { error: previewError } = await supabase.storage.from(PRODUCER_BUCKET).upload(previewPath, previewAudio, { contentType: previewAudio.type, upsert: false });
+    if (previewError) throw previewError;
+    uploaded.push(previewPath);
 
     if (artworkPath && artworkFile) {
       const { error: artworkError } = await supabase.storage.from(PRODUCER_BUCKET).upload(artworkPath, artworkFile, { contentType: artworkFile.type, upsert: false });
@@ -234,7 +468,7 @@ async function createProducerBeat(supabase: ReturnType<typeof createAdminClient>
         submitted_at: parsed.data.publish ? now : null,
         reviewed_at: parsed.data.publish ? now : null,
         reviewed_by: parsed.data.publish ? reviewerId : null,
-        metadata: { featured: parsed.data.publish && parsed.data.featured, admin_imported: true },
+        metadata: producerBeatPreviewMetadata(previewPath, previewDurationSeconds, { featured: parsed.data.publish && parsed.data.featured, admin_imported: true }),
       })
       .select("id, title, status")
       .single();
@@ -259,7 +493,12 @@ async function createStarterBeat(supabase: ReturnType<typeof createAdminClient>,
     genre: nullableText(formData, "genre"),
     mood: nullableText(formData, "mood"),
     tags: splitList(formData.get("tags")),
+    collection_slug: nullableText(formData, "collection_slug"),
+    energy: nullableText(formData, "energy"),
+    writing_fit: splitList(formData.get("writing_fit")),
     attribution: nullableText(formData, "attribution") || undefined,
+    publish: booleanValue(formData, "publish"),
+    featured: booleanValue(formData, "featured"),
   });
   if (!parsed.success) return invalidResponse(parsed.error.issues[0]?.message);
 
@@ -269,36 +508,63 @@ async function createStarterBeat(supabase: ReturnType<typeof createAdminClient>,
   }
 
   const audioPath = `catalog/${parsed.data.slug}/${crypto.randomUUID()}.${extensionForMime(audio.type)}`;
+  const artwork = formData.get("artwork");
+  if (artwork instanceof File && artwork.size > 0 && (artwork.size > MAX_ARTWORK_BYTES || !ARTWORK_MIME_TYPES.has(artwork.type))) {
+    return NextResponse.json({ error: "Artwork must be a JPEG, PNG, or WebP image under 10 MB." }, { status: 400 });
+  }
+  const artworkPath = artwork instanceof File && artwork.size > 0
+    ? `catalog/${parsed.data.slug}/artwork-${crypto.randomUUID()}.${extensionForMime(artwork.type)}`
+    : null;
   const { error: uploadError } = await supabase.storage.from(STARTER_BUCKET).upload(audioPath, audio, { contentType: audio.type, upsert: false });
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
+
+  if (artworkPath && artwork instanceof File) {
+    const { error: artworkError } = await supabase.storage.from(STARTER_BUCKET).upload(artworkPath, artwork, { contentType: artwork.type, upsert: false });
+    if (artworkError) {
+      await supabase.storage.from(STARTER_BUCKET).remove([audioPath]);
+      return NextResponse.json({ error: artworkError.message }, { status: 500 });
+    }
+  }
+
+  const { publish, featured, ...record } = parsed.data;
+  const attribution = record.attribution || `Included with RapWriter. Courtesy of ${record.producer_name}.`;
+  if (publish) {
+    const blockers = getStarterBeatPublishBlockers({ ...record, audio_path: audioPath, attribution });
+    if (blockers.length) {
+      await supabase.storage.from(STARTER_BUCKET).remove([audioPath, artworkPath].filter((path): path is string => Boolean(path)));
+      return NextResponse.json({ error: blockers.join(". "), blockers }, { status: 409 });
+    }
+  }
 
   const { data, error } = await supabase
     .from("starter_beats")
     .insert({
-      ...parsed.data,
-      attribution: parsed.data.attribution || `Included with RapWriter. Courtesy of ${parsed.data.producer_name}.`,
+      ...record,
+      attribution,
       audio_bucket: STARTER_BUCKET,
       audio_path: audioPath,
+      artwork_path: artworkPath,
       license_scope: "rapwriter_starter_nonexclusive",
-      is_active: true,
+      status: publish ? "published" : "draft",
+      is_featured: publish && featured,
       metadata: { admin_imported: true },
     })
-    .select("id, slug, title, is_active")
+    .select("id, slug, title, status, is_active, is_featured")
     .single();
   if (error) {
-    await supabase.storage.from(STARTER_BUCKET).remove([audioPath]);
+    await supabase.storage.from(STARTER_BUCKET).remove([audioPath, artworkPath].filter((path): path is string => Boolean(path)));
     return NextResponse.json({ error: friendlyDatabaseError(error.message, "A starter beat already uses that slug.") }, { status: 409 });
   }
   return NextResponse.json({ created: data, content_type: "starter_beat" }, { status: 201 });
 }
 
 async function removeProducerBeat(supabase: ReturnType<typeof createAdminClient>, id: string) {
-  const { data: beat, error: readError } = await supabase.from("producer_beats").select("id, audio_bucket, audio_path, artwork_path").eq("id", id).maybeSingle();
+  const { data: beat, error: readError } = await supabase.from("producer_beats").select("id, audio_bucket, audio_path, artwork_path, metadata").eq("id", id).maybeSingle();
   if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
   if (!beat) return NextResponse.json({ error: "Beat not found." }, { status: 404 });
   const { error } = await supabase.from("producer_beats").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const paths = [beat.audio_path, beat.artwork_path].filter((path): path is string => Boolean(path));
+  const paths = [beat.audio_path, beat.artwork_path, getProducerBeatPreviewPath(beat.metadata)].filter((path): path is string => Boolean(path));
   const cleanup = paths.length ? await supabase.storage.from(beat.audio_bucket || PRODUCER_BUCKET).remove(paths) : { error: null };
   return NextResponse.json({ deleted: true, cleanup_warning: cleanup.error?.message ?? null });
 }
@@ -317,7 +583,7 @@ async function removeStarterBeat(supabase: ReturnType<typeof createAdminClient>,
 async function removeProducerProfile(supabase: ReturnType<typeof createAdminClient>, id: string) {
   const [{ data: profile, error: profileError }, { data: beats, error: beatsError }] = await Promise.all([
     supabase.from("producer_profiles").select("id, avatar_path, banner_path").eq("id", id).maybeSingle(),
-    supabase.from("producer_beats").select("audio_bucket, audio_path, artwork_path").eq("producer_profile_id", id),
+    supabase.from("producer_beats").select("audio_bucket, audio_path, artwork_path, metadata").eq("producer_profile_id", id),
   ]);
   if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
   if (beatsError) return NextResponse.json({ error: beatsError.message }, { status: 500 });
@@ -329,7 +595,7 @@ async function removeProducerProfile(supabase: ReturnType<typeof createAdminClie
   const paths = [
     profile.avatar_path,
     profile.banner_path,
-    ...(beats ?? []).flatMap((beat) => [beat.audio_path, beat.artwork_path]),
+    ...(beats ?? []).flatMap((beat) => [beat.audio_path, beat.artwork_path, getProducerBeatPreviewPath(beat.metadata)]),
   ].filter((path): path is string => Boolean(path));
   const cleanup = paths.length ? await supabase.storage.from(PRODUCER_BUCKET).remove(paths) : { error: null };
   return NextResponse.json({ deleted: true, cleanup_warning: cleanup.error?.message ?? null });
@@ -380,6 +646,10 @@ function numberValue(formData: FormData, key: string, fallback = Number.NaN) {
 function optionalNumberValue(formData: FormData, key: string) {
   const value = text(formData, key);
   return value ? numberValue(formData, key) : null;
+}
+
+function booleanValue(formData: FormData, key: string) {
+  return ["true", "1", "on", "yes"].includes(text(formData, key).toLowerCase());
 }
 
 function splitList(value: FormDataEntryValue | null) {

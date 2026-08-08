@@ -13,7 +13,13 @@ export type StarterBeat = {
   genre: string | null;
   mood: string | null;
   tags: string[];
+  collectionSlug: string | null;
+  collection: string | null;
+  energy: "low" | "medium" | "high" | null;
+  writingFit: string[];
   attribution: string;
+  featured: boolean;
+  previewSeconds: number;
   previewUrl: string;
   artworkUrl: string | null;
 };

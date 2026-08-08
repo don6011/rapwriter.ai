@@ -28,6 +28,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const sessionId = searchParams.get("session_id");
   const songId = searchParams.get("song_id");
+  const includeAll = searchParams.get("all") === "1";
 
   if (sessionId && !roughTakeUploadSchema.shape.session_id.safeParse(sessionId).success) {
     return NextResponse.json({ error: "Invalid session." }, { status: 400 });
@@ -40,13 +41,26 @@ export async function GET(request: Request) {
     .from("rough_takes")
     .select("*")
     .eq("owner_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(1);
+    .order("created_at", { ascending: false });
 
   if (sessionId) query = query.eq("session_id", sessionId);
   else if (songId) query = query.eq("song_id", songId);
 
-  const { data, error } = await query.maybeSingle();
+  if (includeAll) {
+    const { data, error } = await query.limit(50);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    try {
+      const roughTakes = await Promise.all((data ?? []).map(async (take) => ({
+        ...take,
+        signed_url: await signedUrl(supabase, take.storage_path),
+      })));
+      return NextResponse.json({ roughTakes }, { headers: { "Cache-Control": "private, no-store" } });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Could not load rough takes." }, { status: 500 });
+    }
+  }
+
+  const { data, error } = await query.limit(1).maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ roughTake: null });
 

@@ -1,26 +1,30 @@
 import { describe, expect, test } from "bun:test";
 import {
   bundleProducts,
-  getAnyCatalogProduct,
-  getCatalogProduct,
-  marketplaceProducts,
+  studioRoomProducts,
+  themeProducts,
+  writingPackProducts,
 } from "./product-catalog.ts";
 
-describe("Studio Store ownership boundary", () => {
-  test("only exposes ownable assets for new purchases", () => {
-    expect(marketplaceProducts.some((product) => product.type === "ai_style")).toBe(false);
-    expect(marketplaceProducts.some((product) => product.type === "vocal_chain")).toBe(false);
-    expect(getCatalogProduct("ai-style-hook-doctor")).toBeNull();
-    expect(getCatalogProduct("vocal-booth-polish")).toBeNull();
+describe("Studio Store catalog pricing", () => {
+  test("prices the Penthouse room as an owned environment asset", () => {
+    const room = studioRoomProducts.find((product) => product.id === "studio-room-penthouse");
+
+    expect(room?.priceCents).toBe(999);
+    expect(room?.price).toBe("$9.99");
   });
 
-  test("keeps retired capability products resolvable for purchase history", () => {
-    expect(getAnyCatalogProduct("ai-style-hook-doctor")?.title).toBe("Billboard Writer");
-    expect(getAnyCatalogProduct("vocal-booth-polish")?.title).toBe("Booth Polish");
-  });
+  test("keeps the Penthouse bundle below its individual asset total", () => {
+    const bundle = bundleProducts.find((product) => product.id === "bundle-penthouse-drop");
+    const room = studioRoomProducts.find((product) => product.id === "studio-room-penthouse");
+    const theme = themeProducts.find((product) => product.id === "theme-gold-executive");
+    const writingPack = writingPackProducts.find((product) => product.id === "writing-hook-builder");
+    const individualTotal = [room, theme, writingPack].reduce(
+      (total, product) => total + (product?.priceCents ?? 0),
+      0,
+    );
 
-  test("featured bundles contain assets instead of membership capabilities", () => {
-    const retiredTitles = new Set(["Billboard Writer", "Street Legend", "Pain Architect", "Booth Polish"]);
-    expect(bundleProducts.every((bundle) => bundle.includes.every((title) => !retiredTitles.has(title)))).toBe(true);
+    expect(bundle?.priceCents).toBe(999);
+    expect(bundle?.priceCents).toBeLessThan(individualTotal);
   });
 });

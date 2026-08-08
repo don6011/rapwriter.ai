@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api/auth";
 import { parseJson } from "@/lib/api/json";
+import {
+  getProducerBeatPreviewDuration,
+  getProducerBeatPreviewPath,
+  isOwnedProducerPreviewPath,
+} from "@/lib/producer-beat-media";
 import { producerFollowSchema } from "@/lib/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -28,6 +33,8 @@ type ProfileRow = {
   instagram_url: string | null;
   youtube_url: string | null;
   beatstars_url: string | null;
+  airbit_url: string | null;
+  traktrain_url: string | null;
   status: string;
   verified: boolean;
   is_public: boolean;
@@ -46,7 +53,20 @@ type BeatRow = {
   audio_path: string;
   artwork_path: string | null;
   duration_seconds: number;
-  metadata: { featured?: boolean } | null;
+  metadata: { featured?: boolean; preview_path?: string; preview_duration_seconds?: number } | null;
+};
+
+type StarterBeatRow = {
+  id: string;
+  title: string;
+  bpm: number | null;
+  musical_key: string | null;
+  genre: string | null;
+  mood: string | null;
+  tags: string[];
+  duration_seconds: number;
+  artwork_path: string | null;
+  is_featured: boolean;
 };
 
 type PlaylistRow = {
@@ -70,7 +90,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
   const viewerId = await getViewerId();
   const { data, error } = await admin
     .from("producer_profiles")
-    .select("id, owner_id, display_name, handle, city, state, country, studio_name, years_producing, bio, genres, specialties, avatar_path, banner_path, website_url, instagram_url, youtube_url, beatstars_url, status, verified, is_public")
+    .select("id, owner_id, display_name, handle, city, state, country, studio_name, years_producing, bio, genres, specialties, avatar_path, banner_path, website_url, instagram_url, youtube_url, beatstars_url, airbit_url, traktrain_url, status, verified, is_public")
     .eq("handle", handle)
     .maybeSingle();
 
@@ -82,12 +102,20 @@ export async function GET(_request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Producer storefront is not live." }, { status: 404 });
   }
 
-  const [beatsResult, playlistsResult, servicesResult, metricsResult, followCountResult, followingResult, avatarResult, bannerResult] = await Promise.all([
+  const [beatsResult, creditedBeatsResult, playlistsResult, servicesResult, metricsResult, followCountResult, followingResult, avatarResult, bannerResult, accountAvatarResult] = await Promise.all([
     admin
       .from("producer_beats")
       .select("id, title, bpm, musical_key, genre, mood, region, tags, license_tiers, audio_path, artwork_path, duration_seconds, metadata")
       .eq("producer_profile_id", profile.id)
       .eq("status", "approved")
+      .order("created_at", { ascending: false }),
+    admin
+      .from("starter_beats")
+      .select("id, title, bpm, musical_key, genre, mood, tags, duration_seconds, artwork_path, is_featured")
+      .eq("producer_profile_id", profile.id)
+      .eq("source_type", "producer_donated")
+      .eq("status", "published")
+      .eq("is_active", true)
       .order("created_at", { ascending: false }),
     admin
       .from("producer_playlists")
@@ -112,9 +140,10 @@ export async function GET(_request: Request, { params }: RouteContext) {
       : Promise.resolve({ data: null, error: null }),
     profile.avatar_path ? admin.storage.from(BUCKET).createSignedUrl(profile.avatar_path, 60 * 20) : Promise.resolve({ data: null, error: null }),
     profile.banner_path ? admin.storage.from(BUCKET).createSignedUrl(profile.banner_path, 60 * 20) : Promise.resolve({ data: null, error: null }),
+    admin.from("profiles").select("avatar_url").eq("id", profile.owner_id).maybeSingle(),
   ]);
 
-  for (const result of [beatsResult, playlistsResult, metricsResult, followCountResult, followingResult]) {
+  for (const result of [beatsResult, creditedBeatsResult, playlistsResult, metricsResult, followCountResult, followingResult, accountAvatarResult]) {
     if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
   }
   if (servicesResult.error
@@ -124,7 +153,16 @@ export async function GET(_request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: servicesResult.error.message }, { status: 500 });
   }
 
-  const beats = ((beatsResult.data ?? []) as BeatRow[]).map((beat) => serializeBeat(beat, profile));
+  const beats = [
+    ...((beatsResult.data ?? []) as BeatRow[])
+      .filter((beat) => {
+        const previewPath = getProducerBeatPreviewPath(beat.metadata);
+        return Boolean(getProducerBeatPreviewDuration(beat.metadata))
+          && isOwnedProducerPreviewPath(previewPath, profile.owner_id, beat.audio_path);
+      })
+      .map((beat) => serializeBeat(beat, profile)),
+    ...((creditedBeatsResult.data ?? []) as StarterBeatRow[]).map((beat) => serializeCreditedBeat(beat, profile)),
+  ];
   const beatIds = new Set(beats.map((beat) => beat.id));
   const collections = ((playlistsResult.data ?? []) as unknown as PlaylistRow[]).map((playlist) => ({
     id: playlist.id,
@@ -150,13 +188,15 @@ export async function GET(_request: Request, { params }: RouteContext) {
       genres: profile.genres,
       specialties: profile.specialties,
       verified: profile.verified,
-      avatarUrl: avatarResult.data?.signedUrl ?? null,
+      avatarUrl: avatarResult.data?.signedUrl ?? accountAvatarResult.data?.avatar_url ?? null,
       bannerUrl: bannerResult.data?.signedUrl ?? null,
       social: {
         website: safeExternalUrl(profile.website_url),
         instagram: safeExternalUrl(profile.instagram_url),
         youtube: safeExternalUrl(profile.youtube_url),
         beatstars: safeExternalUrl(profile.beatstars_url),
+        airbit: safeExternalUrl(profile.airbit_url),
+        traktrain: safeExternalUrl(profile.traktrain_url),
       },
     },
     beats,
@@ -232,6 +272,30 @@ function serializeBeat(beat: BeatRow, profile: ProfileRow) {
     artworkUrl: beat.artwork_path ? `/api/marketplace/beats/${beat.id}/media?kind=artwork` : null,
     licenseTiers: beat.license_tiers,
     featured: Boolean(beat.metadata?.featured),
+    included: false,
+  };
+}
+
+function serializeCreditedBeat(beat: StarterBeatRow, profile: ProfileRow) {
+  return {
+    id: `starter-${beat.id}`,
+    marketplaceId: `starter-beat-${beat.id}`,
+    title: beat.title,
+    producer: profile.display_name,
+    producerId: `producer-${profile.id}`,
+    bpm: beat.bpm ?? 0,
+    key: beat.musical_key ?? "Key not listed",
+    genre: beat.genre ?? "Independent",
+    mood: beat.mood ?? beat.genre ?? "Independent",
+    region: profile.city ?? "Online",
+    tags: beat.tags,
+    duration: formatDuration(beat.duration_seconds),
+    durationSeconds: beat.duration_seconds,
+    audioUrl: `/api/starter-beats/${beat.id}/media?kind=audio`,
+    artworkUrl: beat.artwork_path ? `/api/starter-beats/${beat.id}/media?kind=artwork` : null,
+    licenseTiers: [],
+    featured: beat.is_featured,
+    included: true,
   };
 }
 

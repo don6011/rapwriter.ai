@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/api/auth";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
+import {
+  MAX_PRODUCER_BEAT_PREVIEW_BYTES,
+  producerBeatPreviewMetadata,
+  PRODUCER_BEAT_BUCKET,
+  PRODUCER_BEAT_PREVIEW_SECONDS,
+} from "@/lib/producer-beat-media";
 import { getProducerBeatBlockers, getProducerProfileBlockers } from "@/lib/producer-release";
 import { producerBeatUpdateSchema } from "@/lib/schemas";
 import { membershipErrorResponse, requireMembershipLimit } from "@/lib/server/membership-access";
 
-const BUCKET = "producer-beats";
+const BUCKET = PRODUCER_BEAT_BUCKET;
 const MAX_AUDIO_BYTES = 200 * 1024 * 1024;
 const MAX_ARTWORK_BYTES = 10 * 1024 * 1024;
 const AUDIO_MIME_TYPES = new Set(["audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg", "audio/webm"]);
@@ -81,6 +87,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Upload an MP3, M4A, WAV, OGG, or WebM beat under 200 MB." }, { status: 400 });
   }
 
+  const previewAudio = formData.get("preview_audio");
+  const previewDurationSeconds = Number(formData.get("preview_duration_seconds") ?? 0);
+  if (
+    !(previewAudio instanceof File)
+    || previewAudio.size < 1
+    || previewAudio.size > MAX_PRODUCER_BEAT_PREVIEW_BYTES
+    || !AUDIO_MIME_TYPES.has(previewAudio.type)
+    || !Number.isInteger(previewDurationSeconds)
+    || previewDurationSeconds < 1
+    || previewDurationSeconds > PRODUCER_BEAT_PREVIEW_SECONDS
+  ) {
+    return NextResponse.json({ error: "The secure Store preview could not be created. Choose the beat audio again." }, { status: 400 });
+  }
+
   const artwork = formData.get("artwork");
   if (artwork instanceof File && artwork.size > 0 && (artwork.size > MAX_ARTWORK_BYTES || !ARTWORK_MIME_TYPES.has(artwork.type))) {
     return NextResponse.json({ error: "Artwork must be a JPEG, PNG, or WebP image under 10 MB." }, { status: 400 });
@@ -123,8 +143,10 @@ export async function POST(request: Request) {
     }
     const beatBlockers = getProducerBeatBlockers({
       ...parsed.data,
+      owner_id: user.id,
       audio_path: "pending-upload",
       artwork_path: artwork instanceof File && artwork.size > 0 ? "pending-upload" : null,
+      metadata: producerBeatPreviewMetadata(`${user.id}/previews/pending.wav`, previewDurationSeconds),
     });
     if (beatBlockers.length) {
       return NextResponse.json({ error: beatBlockers[0], blockers: beatBlockers }, { status: 422 });
@@ -132,11 +154,21 @@ export async function POST(request: Request) {
   }
 
   const audioPath = `${user.id}/beats/${crypto.randomUUID()}.${extensionForMime(audio.type)}`;
+  const previewPath = `${user.id}/previews/${crypto.randomUUID()}.${extensionForMime(previewAudio.type)}`;
   const { error: audioError } = await supabase.storage.from(BUCKET).upload(audioPath, audio, {
     contentType: audio.type,
     upsert: false,
   });
   if (audioError) return NextResponse.json({ error: audioError.message }, { status: 500 });
+
+  const { error: previewError } = await supabase.storage.from(BUCKET).upload(previewPath, previewAudio, {
+    contentType: previewAudio.type,
+    upsert: false,
+  });
+  if (previewError) {
+    await supabase.storage.from(BUCKET).remove([audioPath]);
+    return NextResponse.json({ error: previewError.message }, { status: 500 });
+  }
 
   let artworkPath: string | null = null;
   if (artwork instanceof File && artwork.size > 0) {
@@ -146,7 +178,7 @@ export async function POST(request: Request) {
       upsert: false,
     });
     if (artworkError) {
-      await supabase.storage.from(BUCKET).remove([audioPath]);
+      await supabase.storage.from(BUCKET).remove([audioPath, previewPath]);
       return NextResponse.json({ error: artworkError.message }, { status: 500 });
     }
   }
@@ -168,6 +200,7 @@ export async function POST(request: Request) {
       audio_bucket: BUCKET,
       audio_path: audioPath,
       artwork_path: artworkPath,
+      metadata: producerBeatPreviewMetadata(previewPath, previewDurationSeconds),
       status,
       submitted_at: status === "submitted" ? new Date().toISOString() : null,
     })
@@ -175,7 +208,7 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    await supabase.storage.from(BUCKET).remove([audioPath, artworkPath].filter((path): path is string => Boolean(path)));
+    await supabase.storage.from(BUCKET).remove([audioPath, previewPath, artworkPath].filter((path): path is string => Boolean(path)));
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -185,6 +218,7 @@ export async function POST(request: Request) {
         beat: {
           ...data,
           audio_url: await signedUrl(supabase, audioPath),
+          preview_url: await signedUrl(supabase, previewPath),
           artwork_url: artworkPath ? await signedUrl(supabase, artworkPath) : null,
         },
       },
@@ -193,7 +227,7 @@ export async function POST(request: Request) {
   } catch (err) {
     return NextResponse.json(
       {
-        beat: { ...data, audio_url: null, artwork_url: null },
+        beat: { ...data, audio_url: null, preview_url: null, artwork_url: null },
         warning: err instanceof Error ? err.message : "Uploaded files could not be previewed yet.",
       },
       { status: 201 },

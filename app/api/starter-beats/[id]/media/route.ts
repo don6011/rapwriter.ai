@@ -19,6 +19,7 @@ export async function GET(request: Request, { params }: RouteContext) {
       .from("starter_beats")
       .select("audio_bucket, audio_path, artwork_path")
       .eq("id", beatId)
+      .eq("status", "published")
       .eq("is_active", true)
       .maybeSingle();
 

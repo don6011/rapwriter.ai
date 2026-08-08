@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import Link from "next/link";
 import {
   Award,
   Briefcase,
+  Camera,
   Check,
   ChevronDown,
   ChevronRight,
@@ -16,10 +18,10 @@ import {
   Headphones,
   History,
   Home,
+  LifeBuoy,
   LockKeyhole,
   Mail,
   Mic,
-  Palette,
   Pause,
   Pencil,
   Play,
@@ -39,8 +41,9 @@ import {
   X,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
+import { ActivityInbox } from "@/components/ActivityInbox";
 import { MembershipCard } from "@/components/MembershipCard";
-import { PremiumMarketplace } from "@/components/PremiumMarketplace";
+import { PremiumMarketplace, type MarketCategory } from "@/components/PremiumMarketplace";
 import {
   analyzeLyrics,
   analyzeRoughTakeAudio,
@@ -63,6 +66,7 @@ import {
   isSessionConflictError,
   type BeatLockerRow,
   type BoothExportCreateInput,
+  type CommerceOrderRow,
   type HookLockerRow,
   type ProductEntitlementRow,
   type ProfileRow,
@@ -81,8 +85,16 @@ import {
   type MembershipAccessNotice,
 } from "@/lib/client/membership-access";
 import { consumePendingBeat, type Beat, type Producer } from "@/lib/marketplace";
+import { clampBeatSeekTime, resolveBeatPreviewUrl } from "@/lib/beat-playback";
+import { studioRoomProducts } from "@/lib/product-catalog";
 import type { StarterBeat } from "@/lib/starter-beats";
-import type { WorkspaceMembership } from "@/lib/membership";
+import type { MembershipSnapshot, WorkspaceMembership } from "@/lib/membership";
+import {
+  defaultStudioRoomId,
+  resolveStudioRoomAccess,
+  type StudioRoomAccess,
+  type StudioRoomId,
+} from "@/lib/studio-room-access";
 import { cn } from "@/lib/utils";
 
 const mobileSections = [
@@ -126,7 +138,7 @@ const EMPTY_BEAT = {
   duration: "0:00",
 };
 
-type StudioPackId = "midnight" | "trap-house" | "bedroom" | "penthouse" | "cypher";
+type StudioPackId = StudioRoomId;
 
 type StudioPack = {
   id: StudioPackId;
@@ -156,7 +168,7 @@ const studioPacks: StudioPack[] = [
     image: "/studio/modern-hero-v2.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(0,0,0,0.08), rgba(7,7,8,0.78) 72%, #070708)",
-    chip: "Default",
+    chip: "Included",
     bestFor: ["Hooks", "Melodic rap", "Night writing"],
     ambience: [
       { title: "Warm booth air", detail: "Low room tone with clean vocal focus." },
@@ -237,10 +249,192 @@ const studioPacks: StudioPack[] = [
     ],
     writingCue: "Respect the pocket. Internal rhymes, clean breath points, and no filler between punchlines.",
   },
+  {
+    id: "afterglow",
+    label: "Afterglow",
+    eyebrow: "Ambition / focus / late-night polish",
+    headline: "Stay after the idea.",
+    line: "Violet skyline energy with a polished control-room edge.",
+    image: "/studio/afterglow.webp",
+    position: "center",
+    overlay: "linear-gradient(180deg, rgba(20,8,34,0.08), rgba(7,7,8,0.78) 72%, #070708)",
+    chip: "After Hours",
+    bestFor: ["Late-night records", "Melodic rap", "Ambition"],
+    ambience: [
+      { title: "Violet city hush", detail: "A distant skyline bed behind the beat." },
+      { title: "Console glow", detail: "Soft control-room light for polished writing." },
+      { title: "After-hours focus", detail: "Quiet pressure that keeps the session moving." },
+    ],
+    writingCue: "Write past the obvious line. Keep the ambition visible, but let the strongest detail carry it.",
+  },
+  {
+    id: "bedroom-diaries",
+    label: "Bedroom Diaries",
+    eyebrow: "Personal / melodic / honest",
+    headline: "Write what you never said.",
+    line: "Soft light, private memories, and first-take honesty.",
+    image: "/studio/bedroom-diaries.webp",
+    position: "center",
+    overlay: "linear-gradient(180deg, rgba(28,8,20,0.08), rgba(7,7,8,0.8) 72%, #070708)",
+    chip: "Personal",
+    bestFor: ["Personal records", "Melodic rap", "Storytelling"],
+    ambience: [
+      { title: "Bedroom hush", detail: "A private room tone for honest writing." },
+      { title: "Window rain", detail: "Soft night texture under emotional records." },
+      { title: "Warm lamp air", detail: "Gentle focus without losing the feeling." },
+    ],
+    writingCue: "Write one memory exactly as it happened. Keep the names private, but make the details real.",
+  },
+  {
+    id: "red-light",
+    label: "Red Light Booth",
+    eyebrow: "Performance / pressure / conviction",
+    headline: "Step into the take.",
+    line: "A close vocal booth built for commitment and delivery.",
+    image: "/studio/red-light.webp",
+    position: "center",
+    overlay: "linear-gradient(180deg, rgba(40,3,3,0.08), rgba(7,7,8,0.84) 72%, #070708)",
+    chip: "Performance",
+    bestFor: ["Performance", "Street records", "Raw vocals"],
+    ambience: [
+      { title: "Booth room tone", detail: "Dry vocal space for hearing every word." },
+      { title: "Red cue light", detail: "Focused pressure for committed takes." },
+      { title: "Headphone seal", detail: "Close, controlled energy around the vocal." },
+    ],
+    writingCue: "Write for the take, not the page. Mark the breaths and make every ending sound intentional.",
+  },
+  {
+    id: "main-room",
+    label: "Main Room",
+    eyebrow: "Club energy / replay / crowd response",
+    headline: "Make the room move.",
+    line: "Before-doors-open club focus for records built to carry energy.",
+    image: "/studio/main-room.webp",
+    position: "center",
+    overlay: "linear-gradient(180deg, rgba(18,5,3,0.06), rgba(7,7,8,0.8) 74%, #070708)",
+    chip: "Club",
+    bestFor: ["Club records", "Anthems", "Replay"],
+    ambience: [
+      { title: "Main-room hush", detail: "The empty-club tension before the first crowd arrives." },
+      { title: "Low-end room tone", detail: "A restrained bass-space bed beneath the beat." },
+      { title: "Stage reflections", detail: "Subtle performance depth without crowd noise." },
+    ],
+    writingCue: "Test the hook like the crowd only hears it once. Keep the title immediate, the rhythm physical, and the response easy to repeat.",
+  },
+  {
+    id: "skyline-loft",
+    label: "Skyline Loft",
+    eyebrow: "Bright ambition / commercial / open air",
+    headline: "Write above the noise.",
+    line: "Daylight skyline focus for bigger, cleaner ideas.",
+    image: "/studio/skyline-loft.webp",
+    position: "center",
+    overlay: "linear-gradient(180deg, rgba(5,10,14,0.06), rgba(7,7,8,0.78) 74%, #070708)",
+    chip: "Default",
+    bestFor: ["Commercial hooks", "Victory records", "Big ideas"],
+    ambience: [
+      { title: "Open skyline", detail: "Wide city air for bigger hook ideas." },
+      { title: "Daylight focus", detail: "A clean room tone with less visual pressure." },
+      { title: "Loft presence", detail: "Bright reflections that keep the record moving." },
+    ],
+    writingCue: "Open the chorus up. Use a clean title, fewer words, and one line that feels larger than the room.",
+  },
+  {
+    id: "soft-life",
+    label: "Soft Life Sessions",
+    eyebrow: "Peace / melody / warm focus",
+    headline: "Let the record breathe.",
+    line: "Ocean light and quiet luxury for effortless writing.",
+    image: "/studio/soft-life.webp",
+    position: "center",
+    overlay: "linear-gradient(180deg, rgba(20,15,8,0.05), rgba(7,7,8,0.76) 74%, #070708)",
+    chip: "Ease",
+    bestFor: ["Melodic rap", "R&B", "Feel-good records"],
+    ambience: [
+      { title: "Ocean air", detail: "Soft coastal movement beneath the session." },
+      { title: "Warm daylight", detail: "Easy room energy for melodic ideas." },
+      { title: "Quiet luxury", detail: "A polished bed without added pressure." },
+    ],
+    writingCue: "Leave room between the thoughts. Favor open vowels, clear images, and a hook that feels effortless.",
+  },
+  {
+    id: "desert-sessions",
+    label: "Desert Sessions",
+    eyebrow: "Reflection / space / storytelling",
+    headline: "Leave room for the truth.",
+    line: "Sunset stillness for patient verses and vivid scenes.",
+    image: "/studio/desert-sessions.webp",
+    position: "center",
+    overlay: "linear-gradient(180deg, rgba(30,15,4,0.06), rgba(7,7,8,0.8) 74%, #070708)",
+    chip: "Reflective",
+    bestFor: ["Storytelling", "Reflective records", "Soul"],
+    ambience: [
+      { title: "Desert wind", detail: "A low open-air bed with gentle movement." },
+      { title: "Sunset room tone", detail: "Warm stillness for patient writing." },
+      { title: "Distant horizon", detail: "Space around the beat for longer scenes." },
+    ],
+    writingCue: "Slow the scene down. Give the listener one place, one object, and one consequence they can picture.",
+  },
+  {
+    id: "rooftop-sessions",
+    label: "Rooftop Sessions",
+    eyebrow: "Night city / ambition / anthems",
+    headline: "Make the city listen.",
+    line: "Open-air night energy for bold hooks and focused verses.",
+    image: "/studio/rooftop-sessions.webp",
+    position: "center",
+    overlay: "linear-gradient(180deg, rgba(4,8,18,0.08), rgba(7,7,8,0.82) 72%, #070708)",
+    chip: "Anthem",
+    bestFor: ["Anthems", "Night records", "Ambition"],
+    ambience: [
+      { title: "Night skyline", detail: "Distant city energy under the chorus." },
+      { title: "Rooftop rain", detail: "Light reflections and open-air texture." },
+      { title: "After-dark focus", detail: "A wide room feel for bigger records." },
+    ],
+    writingCue: "Write the line people shout back. Keep the verse focused and let the chorus own the skyline.",
+  },
+  {
+    id: "radio-room",
+    label: "Radio Room",
+    eyebrow: "Broadcast / clarity / replay",
+    headline: "Write for the first listen.",
+    line: "Broadcast-room precision for hooks people remember.",
+    image: "/studio/radio-room.webp",
+    position: "center",
+    overlay: "linear-gradient(180deg, rgba(20,5,4,0.08), rgba(7,7,8,0.84) 72%, #070708)",
+    chip: "Broadcast",
+    bestFor: ["Radio hooks", "Commercial records", "Replay"],
+    ambience: [
+      { title: "Broadcast room", detail: "Clean studio presence around every word." },
+      { title: "On-air hush", detail: "A quiet bed that keeps the title forward." },
+      { title: "Console pulse", detail: "Subtle movement for first-listen energy." },
+    ],
+    writingCue: "Make the title clear before the second listen. Cut any phrase that slows down recognition.",
+  },
+  {
+    id: "bando-sessions",
+    label: "Bando Sessions",
+    eyebrow: "Survival / raw truth / pressure",
+    headline: "Turn the room into proof.",
+    line: "Stripped-back pressure for unfiltered bars and survival stories.",
+    image: "/studio/bando-sessions.webp",
+    position: "center",
+    overlay: "linear-gradient(180deg, rgba(14,11,7,0.1), rgba(7,7,8,0.86) 72%, #070708)",
+    chip: "Survival",
+    bestFor: ["Street records", "Pain records", "Raw bars"],
+    ambience: [
+      { title: "Empty-room tone", detail: "Dry reflections around the mic." },
+      { title: "Outside air", detail: "A little daylight beneath the pressure." },
+      { title: "Bare-floor focus", detail: "Nothing polished enough to hide the truth." },
+    ],
+    writingCue: "Say what happened without dressing it up. Use one hard detail, one consequence, and no filler.",
+  },
 ];
 
 function getStudioPack(id?: string | null) {
-  return studioPacks.find((pack) => pack.id === id) ?? studioPacks[0];
+  return studioPacks.find((pack) => pack.id === id)
+    ?? studioPacks.find((pack) => pack.id === defaultStudioRoomId)
+    ?? studioPacks[0];
 }
 
 type SelectedBeat = {
@@ -329,6 +523,19 @@ type BoothReadyResult = {
   blockers: string[];
 };
 
+type RecordReadinessStage = {
+  id: "draft" | "session_ready" | "producer_pass" | "booth_ready";
+  label: string;
+};
+
+type RecordReadiness = {
+  currentIndex: number;
+  label: string;
+  detail: string;
+  stages: RecordReadinessStage[];
+  certified: boolean;
+};
+
 type BeatIntelligence = {
   beatBrief: string;
   beatTags: string[];
@@ -369,6 +576,12 @@ type StudioDna = {
   style: string;
   mood: string;
   producer: string;
+  studioAir: StudioAirPreference;
+};
+
+type StudioAirPreference = {
+  activeIndex: number;
+  volume: number;
 };
 
 type MobileDraftRecord = {
@@ -390,11 +603,15 @@ type MobileDraftRecord = {
 };
 
 const defaultStudioDna: StudioDna = {
-  environment: "midnight",
+  environment: defaultStudioRoomId,
   goal: "Hit Record",
   style: "Storytelling",
   mood: "Late Night",
   producer: "Commercial Producer",
+  studioAir: {
+    activeIndex: 0,
+    volume: 16,
+  },
 };
 
 const artistGoals = ["Hit Record", "Freestyle", "Mixtape", "Album", "Battle"];
@@ -422,8 +639,10 @@ export function MobileStudioShell() {
     membership,
     profile,
     productEntitlements,
+    commerceOrders,
     projects,
     roughTake,
+    roughTakes,
     removeLockerItem,
     saveHook,
     saveNow,
@@ -442,13 +661,18 @@ export function MobileStudioShell() {
     songLocker,
     updateSong,
     updateAccountRole,
+    updateProfileAvatar,
+    updateProfileIdentity,
     unlockProductEntitlement,
     uploadRoughTake,
     user,
   } = workspace;
   const [screen, setScreen] = useState<"home" | "writer">("home");
   const [activeNav, setActiveNav] = useState<MobileNavView>("studio");
-  const [activeStudioPackId, setActiveStudioPackId] = useState<StudioPackId>("midnight");
+  const [studioAccessOpen, setStudioAccessOpen] = useState(false);
+  const [readinessLaunchToken, setReadinessLaunchToken] = useState(0);
+  const [marketFocusCategory, setMarketFocusCategory] = useState<MarketCategory | null>(null);
+  const [activeStudioPackId, setActiveStudioPackId] = useState<StudioPackId>(defaultStudioRoomId);
   const [playing, setPlaying] = useState(false);
   const [beatCurrentTime, setBeatCurrentTime] = useState(0);
   const [beatDuration, setBeatDuration] = useState(getBeatDurationSeconds(EMPTY_BEAT));
@@ -504,6 +728,7 @@ export function MobileStudioShell() {
   const [boothExportStatus, setBoothExportStatus] = useState<"idle" | "saving" | "error">("idle");
   const [boothExportError, setBoothExportError] = useState<string | null>(null);
   const [studioDna, setStudioDna] = useState<StudioDna>(defaultStudioDna);
+  const [studioAirPlaying, setStudioAirPlaying] = useState(false);
   const [studioDnaOpen, setStudioDnaOpen] = useState(false);
   const [producerActionProposal, setProducerActionProposal] = useState<ProducerActionProposal | null>(null);
   const [producerActionStatus, setProducerActionStatus] = useState<ProducerActionStatus>("idle");
@@ -525,6 +750,7 @@ export function MobileStudioShell() {
   const beatTimerRef = useRef<number | null>(null);
   const beatCurrentTimeRef = useRef(0);
   const beatDurationRef = useRef(getBeatDurationSeconds(EMPTY_BEAT));
+  const studioAirEngineRef = useRef<{ context: AudioContext; source: AudioBufferSourceNode; gain: GainNode } | null>(null);
   const pendingBeatHandledRef = useRef(false);
   const activePreviewBeatIdRef = useRef<string | null>(null);
   const skipNextBeatResetRef = useRef(false);
@@ -558,21 +784,39 @@ export function MobileStudioShell() {
     const handleMembershipAccess = (event: Event) => {
       const notice = (event as CustomEvent<MembershipAccessNotice>).detail;
       if (!notice) return;
-      setScreen("home");
-      setActiveNav("profile");
       setBeatSwitcherOpen(false);
       setSyncMessage(membershipAccessCopy(notice));
-      window.setTimeout(() => {
-        document.getElementById("profile-membership")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 0);
+      setStudioAccessOpen(true);
     };
     window.addEventListener(MEMBERSHIP_ACCESS_EVENT, handleMembershipAccess);
     return () => window.removeEventListener(MEMBERSHIP_ACCESS_EVENT, handleMembershipAccess);
   }, []);
 
+  useEffect(() => {
+    const artist = membership?.artist;
+    const producer = membership?.producer;
+    if (!user || !artist || artist.plan.tier <= 0) return;
+    const accessIdentity = `${artist.plan.id}:${producer?.plan.id ?? "none"}`;
+    const storageKey = `rapwriter:membership-announced:${user.id}`;
+    if (window.localStorage.getItem(storageKey) === accessIdentity) return;
+    window.localStorage.setItem(storageKey, accessIdentity);
+    setStudioAccessOpen(true);
+  }, [membership?.artist, membership?.producer, user]);
+
+  const getStudioPackAccess = useCallback((id: StudioPackId) => {
+    const accessPlanId = hasAllAccessMembership(membership)
+      ? "creator_all_access"
+      : membership?.artist?.plan.id;
+    return resolveStudioRoomAccess(
+      id,
+      accessPlanId,
+      unlockedProductIds.has(getStudioRoomProductId(id)),
+    );
+  }, [membership, unlockedProductIds]);
+
   const canUseStudioPack = useCallback((id: StudioPackId) => {
-    return id === "midnight" || unlockedProductIds.has(getStudioRoomProductId(id));
-  }, [unlockedProductIds]);
+    return getStudioPackAccess(id).available;
+  }, [getStudioPackAccess]);
 
   const buildDraftRecord = useCallback((unsynced: boolean, savedSession?: SessionRow | null): MobileDraftRecord => {
     const previous = localDraftRef.current;
@@ -609,6 +853,65 @@ export function MobileStudioShell() {
     retryUrgentRef.current = true;
     setSyncRetryNonce((value) => value + 1);
   }, [buildDraftRecord, draftLoaded, user]);
+
+  const stopStudioAir = useCallback(() => {
+    const engine = studioAirEngineRef.current;
+    studioAirEngineRef.current = null;
+    if (engine) {
+      try {
+        engine.source.stop();
+      } catch {
+        // The ambient loop may already be stopped during navigation or a room change.
+      }
+      void engine.context.close();
+    }
+    setStudioAirPlaying(false);
+  }, []);
+
+  const toggleStudioAir = useCallback((index: number) => {
+    const safeIndex = Math.max(0, Math.min(activeStudioPack.ambience.length - 1, index));
+    if (studioAirPlaying && studioDna.studioAir.activeIndex === safeIndex) {
+      stopStudioAir();
+      return;
+    }
+
+    stopStudioAir();
+    const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) {
+      setSyncMessage("Studio Air is unavailable in this browser");
+      return;
+    }
+
+    const context = new AudioContextClass();
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    const filter = context.createBiquadFilter();
+    const ambience = activeStudioPack.ambience[safeIndex] ?? activeStudioPack.ambience[0];
+    source.buffer = createAmbientBuffer(context, `${activeStudioPack.id}-${ambience.title}`);
+    source.loop = true;
+    filter.type = "lowpass";
+    filter.frequency.value = ambience.title.toLowerCase().includes("rain") ? 5200 : 2400;
+    gain.gain.value = studioDna.studioAir.volume / 100;
+    source.connect(filter).connect(gain).connect(context.destination);
+    source.start();
+    studioAirEngineRef.current = { context, source, gain };
+    setStudioDna((current) => ({
+      ...current,
+      studioAir: { ...current.studioAir, activeIndex: safeIndex },
+    }));
+    setStudioAirPlaying(true);
+    setSyncMessage(`${ambience.title} playing`);
+  }, [activeStudioPack, stopStudioAir, studioAirPlaying, studioDna.studioAir.activeIndex, studioDna.studioAir.volume]);
+
+  const changeStudioAirVolume = useCallback((volume: number) => {
+    const safeVolume = Math.max(4, Math.min(32, volume));
+    setStudioDna((current) => ({
+      ...current,
+      studioAir: { ...current.studioAir, volume: safeVolume },
+    }));
+    const engine = studioAirEngineRef.current;
+    if (engine) engine.gain.gain.setTargetAtTime(safeVolume / 100, engine.context.currentTime, 0.08);
+  }, []);
 
   const selectBeatForSession = useCallback((beat: SelectedBeat) => {
     const draft = {
@@ -735,7 +1038,7 @@ export function MobileStudioShell() {
     try {
       const raw = window.localStorage.getItem(MOBILE_STUDIO_DNA_KEY);
       if (raw) {
-        const next = normalizeStudioDna(JSON.parse(raw), "midnight");
+        const next = normalizeStudioDna(JSON.parse(raw), defaultStudioRoomId);
         setStudioDna(next);
         setActiveStudioPackId(next.environment);
       }
@@ -750,10 +1053,19 @@ export function MobileStudioShell() {
       setActiveNav("market");
       return;
     }
+    stopStudioAir();
     setActiveStudioPackId(id);
     setStudioDna((current) => ({ ...current, environment: id }));
     window.localStorage.setItem(MOBILE_STUDIO_PACK_KEY, id);
     setSyncMessage("Room changed");
+  }
+
+  function previewStudioPack(id: StudioPackId) {
+    if (process.env.NODE_ENV === "production") return;
+    stopStudioAir();
+    setActiveStudioPackId(id);
+    setStudioDna((current) => ({ ...current, environment: id }));
+    setSyncMessage(`${getStudioPack(id).label} preview active - access remains locked`);
   }
 
   function updateStudioDna(patch: Partial<StudioDna>) {
@@ -796,7 +1108,7 @@ export function MobileStudioShell() {
       return;
     }
     setScreen("writer");
-    if (playBeat && !playing && selectedBeat.id !== EMPTY_BEAT.id && (selectedBeat.previewUrl || selectedBeat.audioUrl)) {
+    if (playBeat && !playing && selectedBeat.id !== EMPTY_BEAT.id && resolveBeatPreviewUrl(selectedBeat)) {
       toggleBeatPlayback();
     }
   }
@@ -843,6 +1155,21 @@ export function MobileStudioShell() {
       .catch((err) => {
         setPadActionStatus({ state: "error", message: err instanceof Error ? err.message : "Checkout could not be started." });
       });
+  }
+
+  function unlockStudioPack(id: StudioPackId) {
+    const product = studioRoomProducts.find((item) => item.id === getStudioRoomProductId(id));
+    if (!product) {
+      setPadActionStatus({ state: "error", message: "This room is not available for purchase yet." });
+      return;
+    }
+    unlockProduct({
+      id: product.id,
+      title: product.title,
+      category: "Studio Room",
+      detail: product.detail,
+      price: product.price,
+    });
   }
 
   function licenseBeat(beat: Beat) {
@@ -902,18 +1229,35 @@ export function MobileStudioShell() {
     setBeatDuration(duration);
     setBeatError(null);
 
-    const previewUrl = getBeatPreviewUrl(beat);
+    const previewUrl = resolveBeatPreviewUrl(beat);
     if (previewUrl) {
       const audio = new Audio(previewUrl);
+      audio.preload = "metadata";
       beatAudioRef.current = audio;
-      audio.currentTime = Math.min(beatOffsetRef.current, duration - 0.1);
-      audio.onloadedmetadata = () => setBeatDuration(Number.isFinite(audio.duration) ? audio.duration : duration);
       audio.ontimeupdate = () => setBeatCurrentTime(audio.currentTime);
       audio.onended = () => stopBeatPreview({ reset: true });
-      audio.onerror = () => {
-        setBeatError("Beat preview could not load.");
-        stopBeatPreview({ reset: true });
-      };
+
+      await new Promise<void>((resolve, reject) => {
+        const handleLoadedMetadata = () => resolve();
+        const handleError = () => reject(new Error("Beat preview could not load."));
+
+        if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
+          resolve();
+          return;
+        }
+
+        audio.addEventListener("loadedmetadata", handleLoadedMetadata, { once: true });
+        audio.addEventListener("error", handleError, { once: true });
+        audio.load();
+      });
+
+      if (beatAudioRef.current !== audio) return;
+
+      const mediaDuration = Number.isFinite(audio.duration) ? audio.duration : duration;
+      const resumeAt = clampBeatSeekTime(beatOffsetRef.current, mediaDuration);
+      setBeatDuration(mediaDuration);
+      audio.currentTime = resumeAt;
+      setBeatCurrentTime(resumeAt);
       await audio.play();
       trackMarketplaceEvent("beat_play", beat.id);
       setPlaying(true);
@@ -932,7 +1276,7 @@ export function MobileStudioShell() {
     }
     void startBeatPreview().catch(() => {
       setBeatError("Could not start beat preview.");
-      stopBeatPreview({ reset: true });
+      stopBeatPreview();
     });
   };
 
@@ -940,8 +1284,7 @@ export function MobileStudioShell() {
     const audio = beatAudioRef.current;
     const audioDuration = audio && Number.isFinite(audio.duration) ? audio.duration : 0;
     const duration = Math.max(audioDuration, beatDurationRef.current, 0);
-    const upperBound = duration > 0.1 ? duration - 0.05 : duration;
-    const nextTime = Math.min(upperBound, Math.max(0, requestedTime));
+    const nextTime = clampBeatSeekTime(requestedTime, duration);
 
     beatOffsetRef.current = nextTime;
     beatCurrentTimeRef.current = nextTime;
@@ -992,8 +1335,14 @@ export function MobileStudioShell() {
       recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
       if (roughTakeUrlRef.current) URL.revokeObjectURL(roughTakeUrlRef.current);
       stopBeatPreview({ reset: false });
+      stopStudioAir();
     };
-  }, [stopBeatPreview]);
+  }, [stopBeatPreview, stopStudioAir]);
+
+  useEffect(() => {
+    if (activeNav === "studio") return;
+    stopStudioAir();
+  }, [activeNav, stopStudioAir]);
 
   useEffect(() => {
     if (skipNextBeatResetRef.current) {
@@ -1037,7 +1386,8 @@ export function MobileStudioShell() {
   }, [roughTake, roughTakeBlob]);
 
   useEffect(() => {
-    const draft = readMobileDraftRecord();
+    if (loading) return;
+    const draft = readMobileDraftRecord(user?.id ?? null);
     localDraftRef.current = draft;
     skipNextDraftWriteRef.current = true;
 
@@ -1058,7 +1408,7 @@ export function MobileStudioShell() {
     }
 
     setDraftLoaded(true);
-  }, []);
+  }, [loading, user?.id]);
 
   useEffect(() => {
     if (!draftLoaded) return;
@@ -1186,7 +1536,7 @@ export function MobileStudioShell() {
       if (sectionIndex >= 0) setActiveSection(sectionIndex);
       skipNextBeatResetRef.current = true;
       setSelectedBeat(localDraft.beat);
-      const localPack = canUseStudioPack(localDraft.studioPackId) ? localDraft.studioPackId : "midnight";
+      const localPack = canUseStudioPack(localDraft.studioPackId) ? localDraft.studioPackId : defaultStudioRoomId;
       const localDna = normalizeStudioDna(localDraft.studioDna, localPack);
       setActiveStudioPackId(localPack);
       setStudioDna({ ...localDna, environment: localPack });
@@ -1203,7 +1553,7 @@ export function MobileStudioShell() {
       const nextSectionIndex = mobileSections.findIndex((item) => item.name === session.active_section);
       const nextBeat = beatSnapshotFromRecord(session.beat_snapshot) ?? beatSnapshotFromSong(activeSong) ?? EMPTY_BEAT;
       const remoteDna = normalizeStudioDna(session.studio_dna, getStudioPack(session.ambiance || session.mode).id);
-      const remotePack = canUseStudioPack(remoteDna.environment) ? remoteDna.environment : "midnight";
+      const remotePack = canUseStudioPack(remoteDna.environment) ? remoteDna.environment : defaultStudioRoomId;
       const playbackPosition = Math.max(0, Number(session.playback_position_seconds) || 0);
 
       skipNextDraftWriteRef.current = true;
@@ -1422,6 +1772,7 @@ export function MobileStudioShell() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          request_id: crypto.randomUUID(),
           project_id: projectId,
           song_id: songId,
           session_id: sessionId ?? null,
@@ -1572,11 +1923,18 @@ export function MobileStudioShell() {
   };
 
   const loadMobileSong = async (song: SongRow) => {
+    if (roughTakeBlob && !roughTakeSaved) {
+      setSongSwitchStatus({ state: "error", message: "Keep or delete the current rough take before switching songs." });
+      return;
+    }
     setSongSwitchStatus({ state: "saving", message: "Loading session..." });
     const nextSections = { ...blankSections(), ...song.sections };
     const nextSectionName = song.active_section || "Hook";
     const nextSectionIndex = mobileSections.findIndex((item) => item.name === nextSectionName);
     const nextBeat = beatSnapshotFromSong(song) ?? EMPTY_BEAT;
+    const nextDna = normalizeStudioDna(song.studio_dna, getStudioPack(song.session_ambiance || song.session_mode).id);
+    const nextPack = canUseStudioPack(nextDna.environment) ? nextDna.environment : defaultStudioRoomId;
+    const nextPlaybackPosition = Math.max(0, Number(song.playback_position_seconds) || 0);
     const nextBoothScore = song.booth_score ?? scoreBoothReady(nextSections, song.completion_pct ?? 0, analyzeLyrics(nextSections), {
       activeSection: nextSectionName,
       roughTakeDuration: 0,
@@ -1587,30 +1945,59 @@ export function MobileStudioShell() {
       roughTakeAnalysis: null,
     }).score;
 
-    setSectionContent(nextSections);
-    setActiveSection(nextSectionIndex >= 0 ? nextSectionIndex : 0);
-    setRoughTakeBlob(null);
-    setRoughTakeUrl(null);
-    setRoughTakeDuration(0);
-    setRoughTakeSaved(false);
-    setRoughTakeAnalysis(null);
-    setRoughTakeAnalyzing(false);
-    setSelectedBeat(nextBeat);
-
     try {
+      if (activeProjectId && activeSongId && activeSongId !== song.id) {
+        await saveNow({
+          projectId: activeProjectId,
+          songId: activeSongId,
+          sessionId: session?.id,
+          beat: selectedBeat,
+          mode: activeStudioPack.id,
+          ambiance: activeStudioPack.id,
+          sectionContent,
+          activeSection: section.name,
+          songState: completionPct >= 67 ? 2 : 1,
+          completionPct,
+          boothScore: boothReady.score,
+          totalBars,
+          playbackPositionSeconds: beatCurrentTimeRef.current,
+          studioDna: { ...studioDna, environment: activeStudioPack.id },
+        });
+      }
+
+      stopBeatPreview({ reset: true });
+      stopStudioAir();
+      setSectionContent(nextSections);
+      setActiveSection(nextSectionIndex >= 0 ? nextSectionIndex : 0);
+      setRoughTakeBlob(null);
+      setRoughTakeUrl(null);
+      setRoughTakeDuration(0);
+      setRoughTakeSaved(false);
+      setRoughTakeAnalysis(null);
+      setRoughTakeAnalyzing(false);
+      skipNextBeatResetRef.current = true;
+      setSelectedBeat(nextBeat);
+      setActiveStudioPackId(nextPack);
+      setStudioDna({ ...nextDna, environment: nextPack });
+      setBeatCurrentTime(nextPlaybackPosition);
+      beatCurrentTimeRef.current = nextPlaybackPosition;
+      beatOffsetRef.current = nextPlaybackPosition;
+
       await saveNow({
         projectId: song.project_id,
         songId: song.id,
         sessionId: session?.id,
         beat: nextBeat,
-        mode: activeStudioPack.id,
-        ambiance: activeStudioPack.id,
+        mode: nextPack,
+        ambiance: nextPack,
         sectionContent: nextSections,
         activeSection: nextSectionName,
         songState: song.song_state ?? 1,
         completionPct: song.completion_pct ?? completionPct,
         boothScore: nextBoothScore,
         totalBars: song.total_bars ?? countTotalBars(nextSections),
+        playbackPositionSeconds: nextPlaybackPosition,
+        studioDna: { ...nextDna, environment: nextPack },
       });
       await loadLatestRoughTake({ songId: song.id });
       setHydratedSessionId(null);
@@ -1646,6 +2033,27 @@ export function MobileStudioShell() {
     const cleanTitle = title.trim() || `${beatIntel.titleSeed} ${songs.length + 1}`;
 
     try {
+      if (roughTakeBlob && !roughTakeSaved) {
+        throw new Error("Keep or delete the current rough take before creating another song.");
+      }
+      if (activeProjectId && activeSongId) {
+        await saveNow({
+          projectId: activeProjectId,
+          songId: activeSongId,
+          sessionId: session?.id,
+          beat: selectedBeat,
+          mode: activeStudioPack.id,
+          ambiance: activeStudioPack.id,
+          sectionContent,
+          activeSection: section.name,
+          songState: completionPct >= 67 ? 2 : 1,
+          completionPct,
+          boothScore: boothReady.score,
+          totalBars,
+          playbackPositionSeconds: beatCurrentTimeRef.current,
+          studioDna: { ...studioDna, environment: activeStudioPack.id },
+        });
+      }
       let project: ProjectRow | undefined = projects[0];
       if (!project) {
         const created = await ensureWorkspace({
@@ -1675,6 +2083,13 @@ export function MobileStudioShell() {
       setRoughTakeUrl(null);
       setRoughTakeDuration(0);
       setRoughTakeSaved(false);
+      stopBeatPreview({ reset: true });
+      stopStudioAir();
+      skipNextBeatResetRef.current = true;
+      setSelectedBeat(songBeat ?? EMPTY_BEAT);
+      setBeatCurrentTime(0);
+      beatCurrentTimeRef.current = 0;
+      beatOffsetRef.current = 0;
       await saveNow({
         projectId: project.id,
         songId: createdSong.id,
@@ -1688,6 +2103,8 @@ export function MobileStudioShell() {
         completionPct: 0,
         boothScore: 0,
         totalBars: 0,
+        playbackPositionSeconds: 0,
+        studioDna: { ...studioDna, environment: activeStudioPack.id },
       });
       setHydratedSessionId(null);
       setSaveStatus("saved");
@@ -1823,6 +2240,7 @@ export function MobileStudioShell() {
 
   const startRecording = async () => {
     setRecordError(null);
+    stopStudioAir();
     roughTakeAnalysisRunRef.current += 1;
     setRoughTakeAnalysis(null);
     setRoughTakeAnalyzing(false);
@@ -2042,7 +2460,7 @@ export function MobileStudioShell() {
     },
     onFavoriteBeat: () => {
       void runPadAction("Beat saved to Locker.", async () => {
-        await addBeatLicense(selectedBeat, "Lease", 49);
+        await addBeatLicense(selectedBeat, "Favorite", 0);
       });
     },
     onAddBeatToProject: () => {
@@ -2227,8 +2645,50 @@ export function MobileStudioShell() {
       <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.38),rgba(7,7,8,0.92)_46%,#070708)]" />
       <ImmersiveEnvironmentEffects studioPack={activeStudioPack} />
 
-      <div className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-[430px] flex-col overflow-hidden bg-[#070708]/96">
-        <MobileHeader />
+      <div className={cn(
+        "relative z-10 mx-auto flex w-full max-w-[430px] flex-col overflow-hidden bg-[#070708]/96",
+        screen === "writer" ? "h-[100svh]" : "min-h-[100svh]",
+      )}>
+        <MobileHeader
+          signedIn={Boolean(user)}
+          membership={membership}
+          onOpenAccess={() => setStudioAccessOpen(true)}
+          onAuthRequired={() => requestAuth("Sign in to open your studio activity.")}
+        />
+        <StudioAccessHub
+          open={studioAccessOpen}
+          membership={membership}
+          onClose={() => setStudioAccessOpen(false)}
+          onStartWriting={() => {
+            setStudioAccessOpen(false);
+            setActiveNav("studio");
+            setScreen("writer");
+          }}
+          onOpenReadiness={() => {
+            setStudioAccessOpen(false);
+            setActiveNav("studio");
+            setScreen("writer");
+            setReadinessLaunchToken((current) => current + 1);
+          }}
+          onChooseRoom={() => {
+            setStudioAccessOpen(false);
+            setActiveNav("studio");
+            setScreen("home");
+            setStudioDnaOpen(true);
+          }}
+          onBrowseProducers={() => {
+            setStudioAccessOpen(false);
+            setMarketFocusCategory("producer");
+            setActiveNav("market");
+            setScreen("home");
+          }}
+          onManage={() => {
+            setStudioAccessOpen(false);
+            setActiveNav("profile");
+            setScreen("home");
+            window.requestAnimationFrame(() => document.getElementById("profile-membership")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+          }}
+        />
         {screen === "home" ? (
           <>
             {activeNav === "studio" && (
@@ -2273,6 +2733,9 @@ export function MobileStudioShell() {
                 onToggleRecording={toggleRecording}
                 onSetActiveSection={setActiveSection}
                 onToggleBeat={toggleBeatPlayback}
+                onSeekBeat={seekBeatPlayback}
+                onCommitBeatSeek={queueUrgentSessionSync}
+                onChangeBeat={() => setBeatSwitcherOpen(true)}
                 onContinue={() => continueWriterFlow(true)}
                 songs={songs}
                 projects={projects}
@@ -2289,9 +2752,18 @@ export function MobileStudioShell() {
                 studioPack={activeStudioPack}
                 studioPacks={studioPacks}
                 studioDna={studioDna}
-                canUseStudioPack={canUseStudioPack}
+                studioAirPlaying={studioAirPlaying}
+                getStudioPackAccess={getStudioPackAccess}
+                onUnlockStudioPack={unlockStudioPack}
+                onOpenMembership={() => {
+                  setActiveNav("profile");
+                  window.requestAnimationFrame(() => document.getElementById("profile-membership")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+                }}
                 onStudioPack={changeStudioPack}
+                onPreviewStudioPack={previewStudioPack}
                 onStudioDna={() => setStudioDnaOpen(true)}
+                onToggleStudioAir={toggleStudioAir}
+                onStudioAirVolume={changeStudioAirVolume}
               />
             )}
             {activeNav === "locker" && (
@@ -2300,9 +2772,11 @@ export function MobileStudioShell() {
                 starterBeats={starterBeats}
                 songs={songLocker}
                 hooks={hookLocker}
+                roughTakes={roughTakes}
                 sessionSongs={songs}
                 activeStudioPack={activeStudioPack}
                 productUnlocks={mergedProductUnlocks}
+                orders={commerceOrders}
                 loading={loading || loadingData || starterBeatsLoading}
                 signedIn={Boolean(user)}
                 error={workspaceError ?? starterBeatsError}
@@ -2375,6 +2849,7 @@ export function MobileStudioShell() {
             )}
             {activeNav === "market" && (
               <PremiumMarketplace
+                focusCategory={marketFocusCategory}
                 signedIn={Boolean(user)}
                 onFavoriteBeat={(beat) => {
                   const snapshot = toBeatSnapshot(beat);
@@ -2420,9 +2895,23 @@ export function MobileStudioShell() {
                 marketplaceFeed={marketplaceFeed}
                 marketplaceFeedLoading={marketplaceFeedLoading}
                 marketplaceFeedError={marketplaceFeedError}
+                starterBeats={starterBeats}
+                onUseStarterBeat={(beat) => {
+                  const snapshot = beatSnapshotFromStarterBeat(beat);
+                  stopBeatPreview({ reset: true });
+                  beatOffsetRef.current = 0;
+                  beatCurrentTimeRef.current = 0;
+                  setBeatCurrentTime(0);
+                  selectBeatForSession(snapshot);
+                  setActiveNav("studio");
+                  setScreen("writer");
+                  setSyncMessage(`${beat.title} loaded from RapWriter Beats`);
+                }}
                 activeStudioPack={activeStudioPack}
                 studioPacks={studioPacks}
                 onStudioPack={changeStudioPack}
+                artistPlanId={membership?.artist?.plan.id}
+                allAccess={hasAllAccessMembership(membership)}
                 productUnlocks={mergedProductUnlocks}
                 onUnlockProduct={unlockProduct}
                 onOpenMembership={() => {
@@ -2445,24 +2934,37 @@ export function MobileStudioShell() {
                 completionPct={completionPct}
                 boothReady={boothReady}
                 activeStudioPack={activeStudioPack}
+                membership={membership}
                 profile={profile}
                 lockerCounts={lockerCounts}
                 loading={loading || loadingData}
                 signedIn={Boolean(user)}
                 emailVerified={emailVerified}
-                isAdmin={roles.includes("admin")}
+                isAdmin={roles.includes("admin") || roles.includes("moderator")}
                 error={workspaceError}
                 onAuthRequired={() => requestAuth("Sign in to sync your artist profile.")}
                 onExpandWorkspace={async () => {
                   await updateAccountRole("artist_producer");
                   setSyncMessage("Artist + Producer workspace ready");
                 }}
+                onProfileAvatar={updateProfileAvatar}
+                onProfileIdentity={async (artistName) => updateProfileIdentity({ artistName })}
                 onSignOut={signOut}
+                onOpenStudio={() => {
+                  setActiveNav("studio");
+                  setScreen("writer");
+                }}
+                onOpenMarket={() => {
+                  setMarketFocusCategory("producer");
+                  setActiveNav("market");
+                  setScreen("home");
+                }}
               />
             )}
           </>
         ) : (
           <MobileWriter
+            readinessLaunchToken={readinessLaunchToken}
             activeSection={activeSection}
             sectionContent={sectionContent}
             saveStatus={saveStatus}
@@ -2499,7 +3001,10 @@ export function MobileStudioShell() {
             onPrepareForBooth={() => void openCurrentBoothExport()}
             studioPack={activeStudioPack}
             studioDna={studioDna}
+            studioAirPlaying={studioAirPlaying}
             artistMembership={membership?.artist ?? null}
+            onToggleStudioAir={toggleStudioAir}
+            onStudioAirVolume={changeStudioAirVolume}
             onUpgrade={() => {
               setScreen("home");
               setActiveNav("profile");
@@ -2558,6 +3063,7 @@ export function MobileStudioShell() {
           <MobileBottomNav
             activeNav={activeNav}
             onChange={(view) => {
+              if (view === "market") setMarketFocusCategory(null);
               setActiveNav(view);
               setScreen("home");
             }}
@@ -2682,7 +3188,7 @@ function ImmersiveEnvironmentEffects({ studioPack }: { studioPack: StudioPack })
         ? "rgba(82,145,255,0.16)"
         : studioPack.id === "cypher"
           ? "rgba(255,255,255,0.08)"
-          : "rgba(255,176,32,0.14)";
+          : "rgba(246,199,72,0.14)";
 
   return (
     <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -2775,22 +3281,27 @@ function StudioDnaChoice({
   return (
     <div className="mt-4 first:mt-0">
       <div className="label-hw">{title}</div>
-      <div className="mt-2 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onSelect(option.value)}
-            aria-pressed={value === option.value}
-            className={cn(
-              "inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold",
-              value === option.value ? "border-gold/45 bg-gold/12 text-gold" : "border-white/10 bg-black/24 text-muted-foreground",
-            )}
-          >
-            {option.locked && <LockKeyhole className="h-3 w-3" />}
-            {option.label}
-          </button>
-        ))}
+      <div className="relative mt-2">
+        <div className="flex snap-x snap-proximity gap-2 overflow-x-auto overscroll-x-contain scroll-smooth pb-1 pr-8 touch-pan-x [mask-image:linear-gradient(to_right,#000_0,#000_calc(100%-2.25rem),transparent_100%)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onSelect(option.value)}
+              aria-pressed={value === option.value}
+              className={cn(
+                "inline-flex min-h-10 shrink-0 snap-start items-center gap-1.5 rounded-full border px-3 text-xs font-semibold",
+                value === option.value ? "border-gold/45 bg-gold/12 text-gold" : "border-white/10 bg-black/24 text-muted-foreground",
+              )}
+            >
+              {option.locked && <LockKeyhole className="h-3 w-3" />}
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <div className="pointer-events-none absolute inset-y-0 right-0 grid w-7 place-items-center text-gold/65" aria-hidden="true">
+          <ChevronRight className="h-4 w-4" />
+        </div>
       </div>
     </div>
   );
@@ -2861,6 +3372,126 @@ function buildEnvironmentIntelligence(pack: StudioPack, dna: StudioDna, sectionN
       boothFocusTitle: "Mic Check Focus",
       boothFocusBody: "Make the writing performable: breath points, punchline spacing, and originality.",
       focusMetrics: ["Bars", "Breath", "Originality"],
+    },
+    afterglow: {
+      passTitle: "After-Hours Pass",
+      missionCue: "Keep the ambition visible without over-writing it. The room rewards finish lines, polish, and controlled energy.",
+      producerNotes: [
+        "Trim the setup until the strongest image arrives sooner.",
+        "Let one ambitious line carry the section instead of stacking flexes.",
+        "Finish the thought cleanly before opening a new idea.",
+      ],
+      boothFocusTitle: "After-Hours Focus",
+      boothFocusBody: "Finish with control: remove filler, protect the mood, and save a polished rough take.",
+      focusMetrics: ["Focus", "Polish", "Finish"],
+    },
+    "bedroom-diaries": {
+      passTitle: "Private Page Pass",
+      missionCue: "Specific memories matter more than perfect lines. Let the section sound private, melodic, and emotionally exact.",
+      producerNotes: [
+        "Replace one general feeling with a real object or memory.",
+        "Keep the melody natural before tightening every rhyme.",
+        "Protect the line that feels hardest to say out loud.",
+      ],
+      boothFocusTitle: "Diary-Take Focus",
+      boothFocusBody: "Prioritize emotional truth, concrete details, and a first take that still feels close to the original idea.",
+      focusMetrics: ["Truth", "Detail", "Melody"],
+    },
+    "red-light": {
+      passTitle: "Performance Pass",
+      missionCue: "Write for delivery. Every line needs a breath plan, a clear landing, and enough conviction to survive the booth.",
+      producerNotes: [
+        "Mark the breath before the longest line.",
+        "Strengthen the last word so the bar lands in the room.",
+        "Read the section aloud and cut anything the mouth fights.",
+      ],
+      boothFocusTitle: "Take-Ready Focus",
+      boothFocusBody: "Commit to the delivery: clean breath points, controlled volume, and endings that sound intentional.",
+      focusMetrics: ["Delivery", "Breath", "Conviction"],
+    },
+    "main-room": {
+      passTitle: "Club Record Pass",
+      missionCue: "Make the hook register through movement. This room rewards immediate titles, physical rhythm, and repeatable crowd moments.",
+      producerNotes: [
+        "Move the title phrase closer to the first strong downbeat.",
+        "Leave a clean response pocket after the line people should repeat.",
+        "Cut any setup that lowers the energy before the hook lands.",
+      ],
+      boothFocusTitle: "Main-Room Focus",
+      boothFocusBody: "Prioritize hook recognition, energy control, and a delivery that stays clear over a loud system.",
+      focusMetrics: ["Energy", "Replay", "Response"],
+    },
+    "skyline-loft": {
+      passTitle: "Big Record Pass",
+      missionCue: "Open the record up. This room favors a clear title, commercial lift, and sections that move without extra explanation.",
+      producerNotes: [
+        "Make the title phrase easier to recognize on the first listen.",
+        "Give the chorus more open vowels and fewer competing ideas.",
+        "Let the verse build upward instead of resetting every four bars.",
+      ],
+      boothFocusTitle: "Skyline Focus",
+      boothFocusBody: "Prioritize lift, hook clarity, and a structure that makes the record feel larger without making it busier.",
+      focusMetrics: ["Lift", "Hook", "Clarity"],
+    },
+    "soft-life": {
+      passTitle: "Open-Air Melody Pass",
+      missionCue: "Let the lines breathe. The room rewards warm melody, simple language, and confident space between ideas.",
+      producerNotes: [
+        "Open the vowels where the melody wants to stretch.",
+        "Remove one line so the strongest phrase has more space.",
+        "Keep the emotion light without making the writing vague.",
+      ],
+      boothFocusTitle: "Easy-Take Focus",
+      boothFocusBody: "Aim for melody, space, and a relaxed delivery that still keeps every word easy to understand.",
+      focusMetrics: ["Melody", "Space", "Ease"],
+    },
+    "desert-sessions": {
+      passTitle: "Story Horizon Pass",
+      missionCue: "Slow the scene down and let the detail do the work. This room rewards patience, place, and a clear emotional payoff.",
+      producerNotes: [
+        "Name the place before explaining what it meant.",
+        "Carry one image through the section instead of changing scenes early.",
+        "Make the final line reveal what the scene cost you.",
+      ],
+      boothFocusTitle: "Story-Take Focus",
+      boothFocusBody: "Prioritize scene clarity, patient delivery, and a payoff the listener can see before they fully understand it.",
+      focusMetrics: ["Scene", "Patience", "Payoff"],
+    },
+    "rooftop-sessions": {
+      passTitle: "City Anthem Pass",
+      missionCue: "Write for scale. The hook should be easy to shout back while the verse keeps the ambition specific.",
+      producerNotes: [
+        "Turn the strongest line into a repeatable chorus phrase.",
+        "Keep the city image concrete instead of using generic success language.",
+        "Raise the cadence energy before the section changes.",
+      ],
+      boothFocusTitle: "Anthem Focus",
+      boothFocusBody: "Build energy without crowding the record: strong chorus scale, clean cadence, and immediate replay value.",
+      focusMetrics: ["Energy", "Scale", "Replay"],
+    },
+    "radio-room": {
+      passTitle: "First-Listen Pass",
+      missionCue: "Make the record easy to understand without making it predictable. The title and hook should register immediately.",
+      producerNotes: [
+        "Put the title idea closer to the start of the hook.",
+        "Replace one clever phrase with a cleaner emotional statement.",
+        "Repeat the best line before introducing another concept.",
+      ],
+      boothFocusTitle: "Broadcast Focus",
+      boothFocusBody: "Prioritize first-listen clarity, hook recognition, and a take that sounds confident at low volume.",
+      focusMetrics: ["Clarity", "Hook", "Replay"],
+    },
+    "bando-sessions": {
+      passTitle: "Survival Pass",
+      missionCue: "Keep the truth hard and concise. This room rewards pressure, lived detail, and a voice that does not ask permission.",
+      producerNotes: [
+        "Use the real consequence instead of summarizing the struggle.",
+        "Cut the line that softens the strongest moment.",
+        "Let the delivery stay conversational until the punch lands.",
+      ],
+      boothFocusTitle: "Raw-Take Focus",
+      boothFocusBody: "Prioritize truth, pressure, and a distinct voice. The section should feel lived in before it feels polished.",
+      focusMetrics: ["Truth", "Pressure", "Voice"],
     },
   };
 
@@ -3176,12 +3807,190 @@ function findAnchorWord(text: string) {
   return count >= 2 ? word : null;
 }
 
-function MobileHeader() {
+function MobileHeader({
+  signedIn,
+  membership,
+  onOpenAccess,
+  onAuthRequired,
+}: {
+  signedIn: boolean;
+  membership: MembershipSnapshot | null;
+  onOpenAccess: () => void;
+  onAuthRequired: () => void;
+}) {
+  const accessLabel = membershipAccessLabel(membership);
   return (
-    <header className="sticky top-0 z-30 flex items-center border-b border-white/10 bg-black/82 px-5 py-4 backdrop-blur-xl">
+    <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-black/82 px-5 py-4 backdrop-blur-xl">
       <BrandLogo className="[&>span:first-child]:h-10 [&>span:first-child]:w-[9.25rem]" />
+      <div className="flex items-center gap-2">
+        {accessLabel && (
+          <button
+            type="button"
+            onClick={onOpenAccess}
+            className="flex min-h-9 items-center gap-1.5 rounded-full border border-gold/30 bg-gold/[0.08] px-2.5 text-[10px] font-semibold text-gold"
+            aria-label={`Open ${accessLabel} studio access`}
+          >
+            <Crown className="h-3.5 w-3.5" />
+            <span>{accessLabel}</span>
+          </button>
+        )}
+        <ActivityInbox signedIn={signedIn} onAuthRequired={onAuthRequired} />
+      </div>
     </header>
   );
+}
+
+function StudioAccessHub({
+  open,
+  membership,
+  onClose,
+  onStartWriting,
+  onOpenReadiness,
+  onChooseRoom,
+  onBrowseProducers,
+  onManage,
+}: {
+  open: boolean;
+  membership: MembershipSnapshot | null;
+  onClose: () => void;
+  onStartWriting: () => void;
+  onOpenReadiness: () => void;
+  onChooseRoom: () => void;
+  onBrowseProducers: () => void;
+  onManage: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  const artist = membership?.artist ?? null;
+  const producer = membership?.producer ?? null;
+  if (!open || !artist) return null;
+
+  const planLabel = [artist.plan.name, producer?.plan.name].filter(Boolean).join(" + ");
+  const allAccess = hasAllAccessMembership(membership);
+  const roomLimit = allAccess ? -1 : typeof artist.limits.studio_rooms === "number" ? artist.limits.studio_rooms : 1;
+  const hasWriterIntelligence = artist.entitlements.ghostwriter === true || artist.entitlements.full_pen_view === true;
+  const hasAdvancedReadiness = artist.entitlements.advanced_booth_ready === true;
+  const hasProducerConnections = artist.entitlements.producer_connections === true;
+
+  return (
+    <div className="fixed inset-0 z-[115] flex items-end justify-center bg-black/76 px-2 pt-14 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Studio access">
+      <button type="button" className="absolute inset-0" onClick={onClose} aria-label="Close studio access" />
+      <section className="relative max-h-[88dvh] w-full max-w-[430px] overflow-y-auto rounded-t-3xl border border-white/10 bg-[#101012] pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-28px_90px_rgba(0,0,0,0.72)]">
+        <div className="relative overflow-hidden border-b border-gold/18 px-5 pb-5 pt-6">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(246,199,72,0.16),transparent_42%)]" />
+          <div className="relative flex items-start gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-gold/35 bg-gold/10 text-gold"><Crown className="h-5 w-5" /></span>
+            <div className="min-w-0 flex-1">
+              <div className="label-hw text-gold/80">Your studio is upgraded</div>
+              <h2 className="mt-1 text-xl font-semibold text-white">{membershipAccessLabel(membership) ?? artist.plan.name} is active.</h2>
+              <p className="mt-1 text-xs leading-relaxed text-white/52">{planLabel}. The tools below are ready where you create.</p>
+            </div>
+            <button type="button" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/10 text-white/55" aria-label="Close">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-3 p-4">
+          <AccessLaunchRow
+            icon={WandSparkles}
+            eyebrow="Create"
+            title="Writer Flow"
+            detail={hasWriterIntelligence ? "Ghostwriter, Pen View, rewrites, and version history are available inside the pad." : "Your focused writing room is ready."}
+            action="Start writing"
+            onClick={onStartWriting}
+          />
+          <AccessLaunchRow
+            icon={ShieldCheck}
+            eyebrow="Finish"
+            title="Record Readiness"
+            detail={hasAdvancedReadiness ? "Advanced Booth Ready, performance coaching, and premium exports are active." : "Track song completion and prepare the record for the booth."}
+            action="Open session"
+            onClick={onOpenReadiness}
+          />
+          <AccessLaunchRow
+            icon={Home}
+            eyebrow="Environment"
+            title={roomLimit === -1 ? "All studio rooms" : `${Math.max(1, roomLimit)} studio rooms`}
+            detail="Choose the room that matches the energy of tonight's record."
+            action="Choose room"
+            onClick={onChooseRoom}
+          />
+          <AccessLaunchRow
+            icon={Headphones}
+            eyebrow="Connect"
+            title="Producer discovery"
+            detail={hasProducerConnections ? "Matched producers, storefronts, beats, and messaging are unlocked." : "Find a producer and a beat that fit the session."}
+            action="Browse producers"
+            onClick={onBrowseProducers}
+          />
+
+          {producer && (
+            <Link href="/producer" className="flex min-h-14 items-center gap-3 rounded-2xl border border-gold/25 bg-gold/[0.07] px-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-gold/25 bg-black/24 text-gold"><Briefcase className="h-4 w-4" /></span>
+              <span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-white">Open Producer HQ</span><span className="mt-0.5 block truncate text-[10px] text-white/45">Catalog, services, promotion, and intelligence</span></span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-gold" />
+            </Link>
+          )}
+
+          <button type="button" onClick={onManage} className="min-h-10 w-full text-xs font-semibold text-white/45 hover:text-gold">Manage membership in Profile</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AccessLaunchRow({
+  icon: Icon,
+  eyebrow,
+  title,
+  detail,
+  action,
+  onClick,
+}: {
+  icon: typeof Home;
+  eyebrow: string;
+  title: string;
+  detail: string;
+  action: string;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick} className="flex min-h-[82px] w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.025] p-3 text-left">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold/20 bg-gold/[0.07] text-gold"><Icon className="h-4 w-4" /></span>
+      <span className="min-w-0 flex-1">
+        <span className="label-hw block text-gold/68">{eyebrow}</span>
+        <span className="mt-1 block text-sm font-semibold text-white">{title}</span>
+        <span className="mt-1 block text-[10px] leading-relaxed text-white/45">{detail}</span>
+      </span>
+      <span className="shrink-0 text-[10px] font-semibold text-gold">{action}</span>
+    </button>
+  );
+}
+
+function membershipAccessLabel(membership: MembershipSnapshot | null) {
+  const artistPlan = `${membership?.artist?.plan.id ?? ""} ${membership?.artist?.plan.name ?? ""}`.toLowerCase();
+  const producerPlan = `${membership?.producer?.plan.id ?? ""} ${membership?.producer?.plan.name ?? ""}`.toLowerCase();
+  const hasArtistElite = /\belite\b/.test(artistPlan);
+  const hasArtistPro = /\bpro\b/.test(artistPlan);
+  const hasProducerPro = /\bpro\b/.test(producerPlan);
+  if (hasArtistElite && hasProducerPro) return "All Access";
+  if (hasArtistElite) return "Elite";
+  if (hasArtistPro) return "Pro";
+  if (hasProducerPro) return "Producer Pro";
+  return null;
+}
+
+function hasAllAccessMembership(membership: MembershipSnapshot | null) {
+  return membership?.artist?.plan.id === "artist_studio"
+    && membership?.producer?.plan.id === "producer_pro";
 }
 
 function BeatSwitcherSheet({
@@ -3220,6 +4029,7 @@ function BeatSwitcherSheet({
   const [previewProgress, setPreviewProgress] = useState(0);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [starterCollection, setStarterCollection] = useState("all");
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const stopSample = useCallback(() => {
@@ -3261,7 +4071,7 @@ function BeatSwitcherSheet({
     onPreviewStart();
     setPreviewError(null);
     const snapshot = toBeatSnapshot(beat);
-    const previewUrl = getBeatPreviewUrl(snapshot);
+    const previewUrl = resolveBeatPreviewUrl(snapshot);
     if (!previewUrl) {
       setPreviewError("This producer has not added a playable preview yet.");
       return;
@@ -3294,6 +4104,8 @@ function BeatSwitcherSheet({
   if (!open) return null;
 
   const lockerByBeatId = new Map(lockerBeats.map((beat) => [beat.beat_id, beat]));
+  const starterCollections = Array.from(new Map(starterBeats.filter((beat) => beat.collectionSlug && beat.collection).map((beat) => [beat.collectionSlug!, beat.collection!])).entries());
+  const visibleStarterBeats = starterCollection === "all" ? starterBeats : starterBeats.filter((beat) => beat.collectionSlug === starterCollection);
 
   return (
     <div className="fixed inset-0 z-[75] flex items-end justify-center bg-black/72 backdrop-blur-sm" onMouseDown={onClose}>
@@ -3348,8 +4160,18 @@ function BeatSwitcherSheet({
                   <Upload className="h-3.5 w-3.5" />Import beat
                 </button>
               </div>
-              {starterBeats.length > 0 && <div className="px-1 pb-1 label-hw text-gold/75">Included with RapWriter</div>}
-              {starterBeats.map((beat) => {
+              {starterBeats.length > 0 && (
+                <div className="flex items-center justify-between gap-3 px-1 pb-1">
+                  <div className="label-hw text-gold/75">Included with RapWriter</div>
+                  {starterCollections.length > 1 && (
+                    <select value={starterCollection} onChange={(event) => setStarterCollection(event.target.value)} aria-label="Filter included beats by collection" className="min-h-8 max-w-[155px] rounded-lg border border-white/10 bg-[#0d0d0e] px-2 text-[10px] font-semibold text-white/70 outline-none focus:border-gold/35">
+                      <option value="all">All collections</option>
+                      {starterCollections.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                    </select>
+                  )}
+                </div>
+              )}
+              {visibleStarterBeats.map((beat) => {
                 const active = currentBeat.id === `starter-beat-${beat.id}`;
                 return (
                   <button
@@ -3367,7 +4189,7 @@ function BeatSwitcherSheet({
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold">{beat.title}</span>
                       <span className="mt-1 block truncate text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                        {[beat.producer, beat.genre, "Included"].filter(Boolean).join(" - ")}
+                        {[beat.producer, beat.genre, beat.featured ? "Featured" : "Included"].filter(Boolean).join(" - ")}
                       </span>
                     </span>
                     <span className="shrink-0 text-[10px] font-semibold text-gold">{active ? "Active" : "Use"}</span>
@@ -3527,7 +4349,7 @@ function NewSongSheet({
 
         <div className="mt-5">
           <div className="label-hw">Start writing in</div>
-          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [overscroll-behavior-x:contain] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
             {mobileSections.slice(0, 4).map((item) => (
               <button
                 key={item.name}
@@ -3836,6 +4658,9 @@ function MobileHome({
   onToggleRecording,
   onSetActiveSection,
   onToggleBeat,
+  onSeekBeat,
+  onCommitBeatSeek,
+  onChangeBeat,
   onContinue,
   songs,
   projects,
@@ -3846,9 +4671,15 @@ function MobileHome({
   studioPack,
   studioPacks,
   studioDna,
-  canUseStudioPack,
+  studioAirPlaying,
+  getStudioPackAccess,
+  onUnlockStudioPack,
+  onOpenMembership,
   onStudioPack,
+  onPreviewStudioPack,
   onStudioDna,
+  onToggleStudioAir,
+  onStudioAirVolume,
 }: {
   completionPct: number;
   boothReady: BoothReadyResult;
@@ -3886,6 +4717,9 @@ function MobileHome({
   onToggleRecording: () => void;
   onSetActiveSection: (index: number) => void;
   onToggleBeat: () => void;
+  onSeekBeat: (seconds: number) => void;
+  onCommitBeatSeek: () => void;
+  onChangeBeat: () => void;
   onContinue: () => void;
   songs: SongRow[];
   projects: ProjectRow[];
@@ -3896,16 +4730,22 @@ function MobileHome({
   studioPack: StudioPack;
   studioPacks: StudioPack[];
   studioDna: StudioDna;
-  canUseStudioPack: (id: StudioPackId) => boolean;
+  studioAirPlaying: boolean;
+  getStudioPackAccess: (id: StudioPackId) => StudioRoomAccess;
+  onUnlockStudioPack: (id: StudioPackId) => void;
+  onOpenMembership: () => void;
   onStudioPack: (id: StudioPackId) => void;
+  onPreviewStudioPack: (id: StudioPackId) => void;
   onStudioDna: () => void;
+  onToggleStudioAir: (index: number) => void;
+  onStudioAirVolume: (volume: number) => void;
 }) {
   const section = mobileSections[activeSection];
   const [studioPackSheetOpen, setStudioPackSheetOpen] = useState(false);
+  const [studioAirOpen, setStudioAirOpen] = useState(false);
   const previewLines = (sectionContent[section.name] || "").split("\n").filter((line) => line.trim());
   const songTitle = activeSong?.title ?? "Untitled Song";
   const projectTitle = getProjectTitle(activeSong) ?? "No project selected";
-  const hasPlayableBeat = selectedBeat.id !== EMPTY_BEAT.id && Boolean(selectedBeat.previewUrl || selectedBeat.audioUrl);
   const sessionStatus = signedIn
     ? saveStatus === "saving"
       ? "Saving..."
@@ -3917,7 +4757,7 @@ function MobileHome({
 
   return (
     <div className="flex-1 overflow-y-auto pb-32">
-      <section className="relative h-[252px] overflow-hidden">
+      <section className="relative h-[288px] overflow-hidden">
         <img
           src={studioPack.image}
           alt={studioPack.label}
@@ -3929,9 +4769,8 @@ function MobileHome({
         />
         <div className="absolute inset-0 transition-colors duration-700" style={{ background: studioPack.overlay }} />
         <div className="absolute bottom-8 left-5 right-5">
-          <div className="label-hw text-gold/85">{studioPack.eyebrow}</div>
-          <h1 className="mt-2 max-w-[22rem] text-[30px] font-semibold leading-[1.05]">{studioPack.headline}</h1>
-          <div className="mt-2 flex items-center gap-2">
+          <h1 className="max-w-[22rem] text-[30px] font-semibold leading-[1.05]">{studioPack.headline}</h1>
+          <div className="mt-3 flex items-center gap-2">
             <button
               type="button"
               onClick={() => setStudioPackSheetOpen(true)}
@@ -3943,21 +4782,17 @@ function MobileHome({
             </button>
             <button
               type="button"
-              onClick={onStudioDna}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-gold/25 bg-black/38 text-gold backdrop-blur-md"
-              aria-label="Set Studio DNA"
-              title="Studio DNA"
+              onClick={() => setStudioAirOpen(true)}
+              className={cn(
+                "relative grid h-10 w-10 shrink-0 place-items-center rounded-full border bg-black/38 backdrop-blur-md",
+                studioAirPlaying ? "border-gold/45 text-gold" : "border-gold/25 text-gold/75",
+              )}
+              aria-label="Open room ambience"
+              title="Room ambience"
             >
-              <Sparkles className="h-3.5 w-3.5" />
+              <Headphones className="h-3.5 w-3.5" />
+              {studioAirPlaying && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-300" />}
             </button>
-          </div>
-          <p className="mt-1 max-w-[17rem] text-xs leading-5 text-white/58">{studioPack.line}</p>
-          <div className="mt-3 flex max-w-[19rem] flex-wrap gap-1.5">
-            {studioPack.bestFor.slice(0, 3).map((tag) => (
-              <span key={tag} className="rounded-full border border-gold/20 bg-black/42 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-gold/90">
-                {tag}
-              </span>
-            ))}
           </div>
         </div>
       </section>
@@ -4018,7 +4853,7 @@ function MobileHome({
                 <div className="pt-8 text-xs tabular-nums text-white/85">{completionPct}%</div>
               </div>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/12">
-                <div className="h-full rounded-full bg-[var(--amber)] shadow-[0_0_14px_rgba(255,176,32,0.55)] transition-[width] duration-500 ease-out motion-reduce:transition-none" style={{ width: `${completionPct}%` }} />
+                <div className="h-full rounded-full bg-[var(--amber)] shadow-[0_0_14px_rgba(246,199,72,0.55)] transition-[width] duration-500 ease-out motion-reduce:transition-none" style={{ width: `${completionPct}%` }} />
               </div>
             </div>
           </div>
@@ -4035,20 +4870,15 @@ function MobileHome({
           </div>
         </div>
 
-        <button onClick={onContinue} className="gold-seal mt-3 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl px-5 text-base font-semibold">
-          {hasPlayableBeat ? <Play className="h-4 w-4" fill="currentColor" /> : null}
-          {hasPlayableBeat ? "Press play & continue" : "Open Writer Flow"}
-          <ChevronRight className="h-5 w-5" />
-        </button>
-        {!projects.length && (
-          <button type="button" onClick={onNewSong} className="mx-auto mt-1 flex min-h-10 items-center gap-2 px-3 text-xs font-semibold text-white/65">
+        {projects.length <= 1 && (
+          <button type="button" onClick={onNewSong} className="ml-auto mt-2 flex min-h-10 items-center gap-2 px-1 text-xs font-semibold text-white/65">
             <FolderPlus className="h-4 w-4 text-gold" />
             New song
           </button>
         )}
       </section>
 
-      {projects.length > 0 && (
+      {projects.length > 1 && (
         <MobileProjectRail
           projects={projects}
           songs={songs}
@@ -4077,22 +4907,20 @@ function MobileHome({
           </div>
           <MobileSectionTabs sectionContent={sectionContent} activeSection={activeSection} onSetActiveSection={onSetActiveSection} preview />
           <div className="rounded-xl border border-border bg-black/35 p-3">
-            <div className="flex items-center gap-3 rounded-2xl border border-gold/15 bg-[#151516] px-3 py-2">
-              <button onClick={onToggleBeat} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gold text-black" aria-label={playing ? "Pause beat" : "Play beat"}>
-                {playing ? <Pause className="h-4 w-4" fill="currentColor" /> : <Play className="h-4 w-4" fill="currentColor" />}
-              </button>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">{selectedBeat.title}</div>
-                <div className="mt-0.5 truncate text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                  {formatDuration(beatCurrentTime)} / {formatDuration(beatDuration)} - {selectedBeat.producer ?? "Selected beat"}
-                </div>
-                <BeatWaveform beat={selectedBeat} currentTime={beatCurrentTime} duration={beatDuration} active={playing} compact />
-                {beatError && <div className="mt-1 text-[10px] text-rec">{beatError}</div>}
-              </div>
-              <button onClick={onToggleRecording} className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full border", recording ? "border-rec bg-rec/20 text-rec" : "border-rec/50 bg-rec/12 text-rec")} aria-label={recording ? "Stop recording" : "Record rough take"}>
-                <Mic className="h-4 w-4" />
-              </button>
-            </div>
+            <PadTransport
+              beat={selectedBeat}
+              playing={playing}
+              recording={recording}
+              compact={false}
+              currentTime={beatCurrentTime}
+              duration={beatDuration}
+              error={beatError}
+              onToggleBeat={onToggleBeat}
+              onSeek={onSeekBeat}
+              onSeekCommit={onCommitBeatSeek}
+              onChangeBeat={onChangeBeat}
+              onToggleRecording={onToggleRecording}
+            />
             <RoughTakeStrip
               compact
               recording={recording}
@@ -4112,6 +4940,7 @@ function MobileHome({
             <button
               type="button"
               onClick={onContinue}
+              data-testid="open-writer-flow"
               className="mt-3 min-h-[112px] w-full rounded-xl px-1 py-2 text-left font-mono text-[13px] leading-7 text-white/90 outline-none transition-colors hover:bg-white/[0.025] focus-visible:ring-2 focus-visible:ring-gold/45"
               aria-label={`Continue writing ${section.name}`}
             >
@@ -4120,8 +4949,8 @@ function MobileHome({
               ) : (
                 <p className="text-white/40">Tap to start {section.name}...</p>
               )}
-              <span className="mt-2 flex items-center gap-1 text-xs font-sans text-white/40">
-                Continue in Writer Flow
+              <span className="mt-3 flex items-center justify-between border-t border-white/8 pt-3 text-xs font-sans font-semibold text-gold">
+                Continue {section.name}
                 <ChevronRight className="h-3.5 w-3.5" />
               </span>
             </button>
@@ -4175,7 +5004,7 @@ function MobileHome({
             environmentIntel={environmentIntel}
           />
         </MobileDrawer>
-        <MobileDrawer title="Booth Ready">
+        <MobileDrawer title="Record Readiness">
           <BoothReadyPanel
             result={boothReady}
             environmentIntel={environmentIntel}
@@ -4192,20 +5021,37 @@ function MobileHome({
             }}
           />
         </MobileDrawer>
-        <MobileDrawer title="Studio Air">
-          <StudioAirPanel studioPack={studioPack} />
-        </MobileDrawer>
       </section>
       <StudioPackSheet
         open={studioPackSheetOpen}
         active={studioPack.id}
         packs={studioPacks}
-        canUseStudioPack={canUseStudioPack}
+        getStudioPackAccess={getStudioPackAccess}
         onClose={() => setStudioPackSheetOpen(false)}
+        onUnlock={onUnlockStudioPack}
+        onPreview={onPreviewStudioPack}
+        onOpenMembership={() => {
+          setStudioPackSheetOpen(false);
+          onOpenMembership();
+        }}
+        onStudioDna={() => {
+          setStudioPackSheetOpen(false);
+          onStudioDna();
+        }}
         onSelect={(id) => {
           onStudioPack(id);
           setStudioPackSheetOpen(false);
         }}
+      />
+      <StudioAirSheet
+        open={studioAirOpen}
+        studioPack={studioPack}
+        activeIndex={studioDna.studioAir.activeIndex}
+        playing={studioAirPlaying}
+        volume={studioDna.studioAir.volume}
+        onClose={() => setStudioAirOpen(false)}
+        onToggle={onToggleStudioAir}
+        onVolume={onStudioAirVolume}
       />
     </div>
   );
@@ -4215,19 +5061,29 @@ function StudioPackSheet({
   open,
   active,
   packs,
-  canUseStudioPack,
+  getStudioPackAccess,
   onClose,
+  onUnlock,
+  onPreview,
+  onOpenMembership,
+  onStudioDna,
   onSelect,
 }: {
   open: boolean;
   active: StudioPackId;
   packs: StudioPack[];
-  canUseStudioPack: (id: StudioPackId) => boolean;
+  getStudioPackAccess: (id: StudioPackId) => StudioRoomAccess;
   onClose: () => void;
+  onUnlock: (id: StudioPackId) => void;
+  onPreview: (id: StudioPackId) => void;
+  onOpenMembership: () => void;
+  onStudioDna: () => void;
   onSelect: (id: StudioPackId) => void;
 }) {
   const [previewId, setPreviewId] = useState<StudioPackId>(active);
   const previewPack = getStudioPack(previewId);
+  const previewAccess = getStudioPackAccess(previewPack.id);
+  const previewProduct = studioRoomProducts.find((item) => item.id === getStudioRoomProductId(previewPack.id));
 
   useEffect(() => {
     if (open) setPreviewId(active);
@@ -4244,9 +5100,14 @@ function StudioPackSheet({
             <h2 className="mt-2 text-2xl font-semibold">Choose the room.</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Change the environment without crowding the writing screen.</p>
           </div>
-          <button type="button" onClick={onClose} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Close studio packs">
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button type="button" onClick={onStudioDna} className="grid h-10 w-10 place-items-center rounded-full border border-gold/25 bg-gold/8 text-gold" aria-label="Set Studio DNA" title="Studio DNA">
+              <Sparkles className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Close studio packs">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
         <div className="max-h-[calc(82svh-8rem)] space-y-3 overflow-y-auto p-4">
           <div className="overflow-hidden rounded-2xl border border-gold/25 bg-gold/8">
@@ -4254,30 +5115,56 @@ function StudioPackSheet({
               <img src={previewPack.image} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: previewPack.position }} loading="lazy" decoding="async" draggable={false} />
               <div className="absolute inset-0" style={{ background: previewPack.overlay }} />
               <div className="absolute bottom-4 left-4 right-4">
-                <div className="label-hw text-gold/85">{canUseStudioPack(previewPack.id) ? "Available" : "Locked Preview"}</div>
+                <div className="label-hw text-gold/85">{previewAccess.available ? previewAccess.badge : "Locked Preview"}</div>
                 <div className="mt-1 text-2xl font-semibold">{previewPack.label}</div>
                 <p className="mt-2 text-sm leading-relaxed text-white/70">{previewPack.line}</p>
               </div>
             </div>
             <div className="p-3">
               <p className="text-sm leading-relaxed text-muted-foreground">{previewPack.writingCue}</p>
-              <button
-                type="button"
-                onClick={() => canUseStudioPack(previewPack.id) && onSelect(previewPack.id)}
-                disabled={!canUseStudioPack(previewPack.id)}
-                className={cn(
-                  "mt-3 min-h-11 w-full rounded-xl px-4 text-sm font-semibold",
-                  canUseStudioPack(previewPack.id) ? "gold-seal text-black" : "border border-white/10 bg-white/[0.03] text-muted-foreground",
-                )}
-              >
-                {canUseStudioPack(previewPack.id) ? `Use ${previewPack.label}` : "Locked - Checkout Required"}
-              </button>
+              {previewAccess.available ? (
+                <button type="button" onClick={() => onSelect(previewPack.id)} className="gold-seal mt-3 min-h-11 w-full rounded-xl px-4 text-sm font-semibold text-black">
+                  Use {previewPack.label}
+                </button>
+              ) : (
+                <>
+                  {process.env.NODE_ENV !== "production" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onPreview(previewPack.id);
+                        onClose();
+                      }}
+                      className="mt-3 min-h-11 w-full rounded-xl border border-white/15 bg-white/[0.06] px-4 text-sm font-semibold text-white"
+                    >
+                      Preview locally
+                    </button>
+                  )}
+                  <button type="button" onClick={() => onUnlock(previewPack.id)} className="gold-seal mt-3 min-h-11 w-full rounded-xl px-4 text-sm font-semibold text-black">
+                    Unlock Room {previewProduct ? `- ${previewProduct.price}` : ""}
+                  </button>
+                  {previewAccess.requiredPlan && (
+                    <button type="button" onClick={onOpenMembership} className="mt-2 min-h-10 w-full rounded-xl border border-gold/25 bg-gold/8 px-4 text-xs font-semibold text-gold">
+                      Included with Prep Studio {previewAccess.requiredPlan === "elite" ? "Elite" : "Pro"}
+                    </button>
+                  )}
+                  <p className="mt-2 text-center text-[11px] leading-relaxed text-muted-foreground">
+                    Own it permanently{previewAccess.requiredPlan ? ", or use it while membership is active" : " through Studio Store"}.
+                  </p>
+                  {process.env.NODE_ENV !== "production" && (
+                    <p className="mt-1 text-center text-[10px] leading-relaxed text-white/40">
+                      Local preview does not grant ownership or membership access.
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
             {packs.map((pack) => {
-              const locked = !canUseStudioPack(pack.id);
+              const access = getStudioPackAccess(pack.id);
+              const locked = !access.available;
               const previewing = previewId === pack.id;
               return (
                 <button
@@ -4294,7 +5181,7 @@ function StudioPackSheet({
                     <div className="absolute inset-0" style={{ background: pack.overlay }} />
                     <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2">
                       <span className="rounded-full border border-gold/20 bg-black/60 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-gold">
-                        {locked ? "Locked" : pack.id === "midnight" ? "Included" : "Owned"}
+                        {access.badge}
                       </span>
                       {active === pack.id ? (
                         <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-gold text-black">
@@ -4319,7 +5206,7 @@ function StudioPackSheet({
           <div className="rounded-2xl border border-white/10 bg-black/24 p-3">
             <div className="label-hw text-gold/80">Pack Access</div>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Midnight Session is included while RapWriter is in build mode. Premium rooms are preview-only until checkout unlocks them.
+              Membership unlocks room access while active. Studio Store purchases remain yours permanently.
             </p>
           </div>
         </div>
@@ -4328,74 +5215,94 @@ function StudioPackSheet({
   );
 }
 
-function StudioAirPanel({ studioPack }: { studioPack: StudioPack }) {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [volume, setVolume] = useState(16);
-  const engineRef = useRef<{ context: AudioContext; source: AudioBufferSourceNode; gain: GainNode } | null>(null);
+function StudioAirSheet({
+  open,
+  studioPack,
+  activeIndex,
+  playing,
+  volume,
+  onClose,
+  onToggle,
+  onVolume,
+}: {
+  open: boolean;
+  studioPack: StudioPack;
+  activeIndex: number;
+  playing: boolean;
+  volume: number;
+  onClose: () => void;
+  onToggle: (index: number) => void;
+  onVolume: (volume: number) => void;
+}) {
+  if (!open) return null;
 
-  const stopAmbience = useCallback(() => {
-    const engine = engineRef.current;
-    engineRef.current = null;
-    if (!engine) return;
-    try {
-      engine.source.stop();
-    } catch {
-      // The source may have already ended during a room switch.
-    }
-    void engine.context.close();
-    setPlaying(false);
-  }, []);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/68 px-4 pb-4 backdrop-blur-sm">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label="Room ambience"
+        className="max-h-[72svh] w-full max-w-[430px] overflow-hidden rounded-3xl border border-white/10 bg-[#111113] shadow-[0_-24px_80px_rgba(0,0,0,0.55)]"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 p-5">
+          <div>
+            <div className="label-hw text-gold/85">Room Ambience</div>
+            <h2 className="mt-2 text-2xl font-semibold">Set the room.</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Optional atmosphere for focus. The beat and lyrics stay in control.</p>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Close room ambience">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="max-h-[calc(72svh-8rem)] overflow-y-auto p-4">
+          <StudioAirPanel
+            studioPack={studioPack}
+            activeIndex={activeIndex}
+            playing={playing}
+            volume={volume}
+            onToggle={onToggle}
+            onVolume={onVolume}
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
 
-  useEffect(() => () => stopAmbience(), [stopAmbience]);
-
-  useEffect(() => {
-    const engine = engineRef.current;
-    if (!engine) return;
-    engine.gain.gain.setTargetAtTime(volume / 100, engine.context.currentTime, 0.08);
-  }, [volume]);
-
-  const toggleAmbience = (index: number) => {
-    if (playing && activeIndex === index) {
-      stopAmbience();
-      return;
-    }
-
-    stopAmbience();
-    const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const context = new AudioContextClass();
-    const source = context.createBufferSource();
-    const gain = context.createGain();
-    const filter = context.createBiquadFilter();
-    const ambience = studioPack.ambience[index] ?? studioPack.ambience[0];
-    source.buffer = createAmbientBuffer(context, `${studioPack.id}-${ambience.title}`);
-    source.loop = true;
-    filter.type = "lowpass";
-    filter.frequency.value = ambience.title.toLowerCase().includes("rain") ? 5200 : 2400;
-    gain.gain.value = volume / 100;
-    source.connect(filter).connect(gain).connect(context.destination);
-    source.start();
-    engineRef.current = { context, source, gain };
-    setActiveIndex(index);
-    setPlaying(true);
-  };
-
+function StudioAirPanel({
+  studioPack,
+  activeIndex,
+  playing,
+  volume,
+  onToggle,
+  onVolume,
+}: {
+  studioPack: StudioPack;
+  activeIndex: number;
+  playing: boolean;
+  volume: number;
+  onToggle: (index: number) => void;
+  onVolume: (volume: number) => void;
+}) {
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-gold/20 bg-gold/8 p-3">
-        <div className="label-hw text-gold/85">{studioPack.label}</div>
-        <p className="mt-2 text-sm leading-relaxed text-white/72">{studioPack.writingCue}</p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="label-hw text-gold/85">{studioPack.label}</div>
+          <span className={cn("rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]", playing ? "bg-emerald-400/12 text-emerald-300" : "bg-white/8 text-muted-foreground")}>{playing ? "On" : "Off"}</span>
+        </div>
+        <p className="mt-2 text-sm leading-relaxed text-white/72">Sound under the beat. Quiet enough to keep the writing in focus.</p>
       </div>
       <div className="space-y-2">
         {studioPack.ambience.map((item, index) => (
           <button
             type="button"
             key={item.title}
-            onClick={() => toggleAmbience(index)}
+            onClick={() => onToggle(index)}
+            aria-pressed={playing && activeIndex === index}
             className={cn(
               "flex w-full items-start gap-3 rounded-xl border p-3 text-left",
-              activeIndex === index ? "border-gold/35 bg-gold/8" : "border-white/10 bg-black/24",
+              playing && activeIndex === index ? "border-gold/35 bg-gold/8" : "border-white/10 bg-black/24",
             )}
           >
             <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full border border-gold/20 bg-gold/10 text-[11px] font-semibold text-gold">
@@ -4420,18 +5327,11 @@ function StudioAirPanel({ studioPack }: { studioPack: StudioPack }) {
           min="4"
           max="32"
           value={volume}
-          onChange={(event) => setVolume(Number(event.target.value))}
+          onChange={(event) => onVolume(Number(event.target.value))}
           className="mt-3 h-1.5 w-full accent-[var(--amber)]"
           aria-label="Studio ambience volume"
         />
-        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">Ambient room tone stays below the beat and stops when you leave the studio.</p>
-      </div>
-      <div className="flex flex-wrap gap-2 pt-1">
-        {studioPack.bestFor.map((tag) => (
-          <span key={tag} className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {tag}
-          </span>
-        ))}
+        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">Your choice is remembered with this session. Studio Air stays off after refresh and pauses before recording.</p>
       </div>
     </div>
   );
@@ -4544,6 +5444,7 @@ function MobileProjectRail({
 }
 
 function MobileWriter({
+  readinessLaunchToken,
   activeSection,
   sectionContent,
   saveStatus,
@@ -4580,10 +5481,14 @@ function MobileWriter({
   onPrepareForBooth,
   studioPack,
   studioDna,
+  studioAirPlaying,
   artistMembership,
   onUpgrade,
+  onToggleStudioAir,
+  onStudioAirVolume,
   producerActions,
 }: {
+  readinessLaunchToken: number;
   activeSection: number;
   sectionContent: Record<string, string>;
   saveStatus: "saved" | "saving" | "error";
@@ -4620,14 +5525,23 @@ function MobileWriter({
   onPrepareForBooth: () => void;
   studioPack: StudioPack;
   studioDna: StudioDna;
+  studioAirPlaying: boolean;
   artistMembership: WorkspaceMembership | null;
   onUpgrade: () => void;
+  onToggleStudioAir: (index: number) => void;
+  onStudioAirVolume: (volume: number) => void;
   producerActions: ProducerActionControls;
 }) {
   const section = mobileSections[activeSection];
   const sectionText = sectionContent[section.name] ?? "";
   const [penView, setPenView] = useState(false);
   const [ghostwriterOpen, setGhostwriterOpen] = useState(false);
+  const [studioAirOpen, setStudioAirOpen] = useState(false);
+  const [readinessOpen, setReadinessOpen] = useState(false);
+  const [transportCompact, setTransportCompact] = useState(false);
+  const writerScrollRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const editorPositionsRef = useRef<Record<string, { selectionStart: number; selectionEnd: number; scrollTop: number }>>({});
   const sectionBars = countBars(sectionText);
   const sectionWords = sectionText.trim() ? sectionText.trim().split(/\s+/).length : 0;
   const progressPct = Math.min(100, Math.round((sectionBars / section.target) * 100));
@@ -4637,21 +5551,73 @@ function MobileWriter({
   const hasHistory = artistMembership?.entitlements.version_history === true;
   const hasGhostwriter = artistMembership?.entitlements.ghostwriter === true;
 
+  useEffect(() => {
+    if (readinessLaunchToken > 0) setReadinessOpen(true);
+  }, [readinessLaunchToken]);
+
+  const rememberEditorPosition = useCallback((sectionName: string, editor = editorRef.current) => {
+    if (!editor) return;
+    editorPositionsRef.current[sectionName] = {
+      selectionStart: editor.selectionStart,
+      selectionEnd: editor.selectionEnd,
+      scrollTop: editor.scrollTop,
+    };
+  }, []);
+
+  const switchSection = useCallback((index: number) => {
+    if (index === activeSection) return;
+    rememberEditorPosition(section.name);
+    onSetActiveSection(index);
+  }, [activeSection, onSetActiveSection, rememberEditorPosition, section.name]);
+
+  useEffect(() => {
+    if (penView) return;
+    const frame = window.requestAnimationFrame(() => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      const savedPosition = editorPositionsRef.current[section.name];
+      if (savedPosition) {
+        const textLength = editor.value.length;
+        editor.setSelectionRange(
+          Math.min(savedPosition.selectionStart, textLength),
+          Math.min(savedPosition.selectionEnd, textLength),
+        );
+        editor.scrollTop = savedPosition.scrollTop;
+      }
+      editor.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [penView, section.name]);
+
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#050506]">
+    <div
+      ref={writerScrollRef}
+      data-testid="writer-scroll"
+      onScroll={(event) => setTransportCompact(event.currentTarget.scrollTop > 180)}
+      className="relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#050506]"
+    >
       <div
         className="pointer-events-none absolute inset-0 bg-cover opacity-[0.17] blur-[1px] saturate-[0.78]"
         style={{ backgroundImage: `url('${studioPack.image}')`, backgroundPosition: studioPack.position }}
       />
       <div className="pointer-events-none absolute inset-0 opacity-80" style={{ background: studioPack.overlay }} />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,176,32,0.12),transparent_42%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(246,199,72,0.12),transparent_42%)]" />
       <div className="relative z-10 flex items-center justify-between border-b border-white/10 bg-black/52 px-5 py-3 backdrop-blur-xl">
         <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Exit writer">
           <X className="h-5 w-5" />
         </button>
-        <div className="text-center">
+        <div className="min-w-0 text-center">
           <div className="label-hw text-gold">Writer Flow</div>
-          <div className="mt-1 max-w-[13.5rem] truncate text-xs text-muted-foreground">{studioPack.label}</div>
+          <button
+            type="button"
+            onClick={() => setStudioAirOpen(true)}
+            className="mx-auto mt-1 flex max-w-[13.5rem] items-center gap-1.5 text-xs text-muted-foreground"
+            aria-label="Open room ambience"
+          >
+            <Headphones className={cn("h-3 w-3 shrink-0", studioAirPlaying && "text-gold")} />
+            <span className="truncate">{studioPack.label}</span>
+            {studioAirPlaying && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-300" />}
+          </button>
         </div>
         <button
           type="button"
@@ -4668,8 +5634,11 @@ function MobileWriter({
         </button>
       </div>
 
+      <div className="sticky top-0 z-30 border-b border-white/10 bg-[#070708]/94 backdrop-blur-xl">
+        <MobileSectionTabs sectionContent={sectionContent} activeSection={activeSection} onSetActiveSection={switchSection} />
+      </div>
+
       <div className="relative z-10 bg-[#070708]/88 backdrop-blur-xl">
-        <MobileSectionTabs sectionContent={sectionContent} activeSection={activeSection} onSetActiveSection={onSetActiveSection} />
         <div className="border-b border-white/10 px-5 pb-4 pt-3">
           <div className="flex items-end justify-between gap-4">
             <div>
@@ -4682,7 +5651,7 @@ function MobileWriter({
             </div>
           </div>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-gold shadow-[0_0_16px_rgba(255,176,32,0.5)] transition-[width] duration-500 ease-out motion-reduce:transition-none" style={{ width: `${progressPct}%` }} />
+            <div className="h-full rounded-full bg-gold shadow-[0_0_16px_rgba(246,199,72,0.5)] transition-[width] duration-500 ease-out motion-reduce:transition-none" style={{ width: `${progressPct}%` }} />
           </div>
           <div key={momentum.label} className="mt-3 flex min-h-12 items-center gap-3 border-t border-white/10 pt-3 animate-[fade-in_240ms_ease-out] motion-reduce:animate-none">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gold/10 text-gold">
@@ -4697,11 +5666,12 @@ function MobileWriter({
       </div>
 
       <div className="relative z-10 flex flex-none flex-col px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
-        <div className="mb-3">
+        <div className="sticky top-16 z-20 mb-3 transition-[padding] duration-200">
           <PadTransport
             beat={selectedBeat}
             playing={playing}
             recording={recording}
+            compact={transportCompact}
             currentTime={beatCurrentTime}
             duration={beatDuration}
             error={beatError}
@@ -4727,14 +5697,21 @@ function MobileWriter({
             onSave={onSaveRoughTake}
           />
         </div>
-        <div className="overflow-hidden rounded-2xl border border-white/12 bg-black/26 shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_18px_50px_rgba(0,0,0,0.26)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 focus-within:border-gold/28 focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_0_0_3px_rgba(255,176,32,0.055),0_18px_50px_rgba(0,0,0,0.3)]">
+        <div className="overflow-hidden rounded-2xl border border-white/12 bg-black/26 shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_18px_50px_rgba(0,0,0,0.26)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 focus-within:border-gold/28 focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_0_0_3px_rgba(246,199,72,0.055),0_18px_50px_rgba(0,0,0,0.3)]">
           {penView ? (
             <PenView sectionName={section.name} text={sectionText} />
           ) : (
             <textarea
+              ref={editorRef}
               autoFocus
               value={sectionText}
-              onChange={(event) => onChange(event.target.value)}
+              onChange={(event) => {
+                onChange(event.target.value);
+                rememberEditorPosition(section.name, event.currentTarget);
+              }}
+              onSelect={(event) => rememberEditorPosition(section.name, event.currentTarget)}
+              onScroll={(event) => rememberEditorPosition(section.name, event.currentTarget)}
+              onBlur={(event) => rememberEditorPosition(section.name, event.currentTarget)}
               placeholder={`Start ${section.name}...`}
               aria-label={`${section.name} lyrics`}
               spellCheck={false}
@@ -4802,7 +5779,7 @@ function MobileWriter({
               })}
             </div>
           </MobileDrawer>
-          <MobileDrawer title="Booth Ready">
+          <MobileDrawer title="Record Readiness" open={readinessOpen} onOpenChange={setReadinessOpen}>
             <BoothReadyPanel
               result={boothReady}
               environmentIntel={environmentIntel}
@@ -4811,20 +5788,17 @@ function MobileWriter({
                   onToggleRecording();
                   return;
                 }
-                if (boothReady.primaryAction === "save_take") onSaveRoughTake();
+                if (boothReady.primaryAction === "save_take") {
+                  onSaveRoughTake();
+                  return;
+                }
+                if (boothReady.score >= 75) {
+                  onPrepareForBooth();
+                  return;
+                }
+                setGhostwriterOpen(true);
               }}
             />
-            <button
-              type="button"
-              onClick={onPrepareForBooth}
-              className="mt-3 flex min-h-12 w-full items-center justify-between rounded-xl border border-gold/35 bg-gold/10 px-4 text-sm font-semibold text-gold"
-            >
-              <span className="inline-flex items-center gap-2"><Download className="h-4 w-4" />Prepare for Booth</span>
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </MobileDrawer>
-          <MobileDrawer title="Studio Air">
-            <StudioAirPanel studioPack={studioPack} />
           </MobileDrawer>
         </div>
       </div>
@@ -4839,6 +5813,16 @@ function MobileWriter({
         membership={artistMembership}
         onUpgrade={onUpgrade}
         onClose={() => setGhostwriterOpen(false)}
+      />
+      <StudioAirSheet
+        open={studioAirOpen}
+        studioPack={studioPack}
+        activeIndex={studioDna.studioAir.activeIndex}
+        playing={studioAirPlaying}
+        volume={studioDna.studioAir.volume}
+        onClose={() => setStudioAirOpen(false)}
+        onToggle={onToggleStudioAir}
+        onVolume={onStudioAirVolume}
       />
     </div>
   );
@@ -5047,48 +6031,6 @@ function getWritingMomentum(sectionName: string, sectionBars: number, target: nu
   };
 }
 
-function PadActionBar({ actions, compact = false }: { actions: PadActions; compact?: boolean }) {
-  const actionItems = [
-    { label: "Hook", icon: Save, onClick: actions.onSaveHook },
-    { label: "Song", icon: Briefcase, onClick: actions.onSaveSong },
-    { label: "Beat", icon: Heart, onClick: actions.onFavoriteBeat },
-    { label: "Project", icon: FolderPlus, onClick: actions.onAddBeatToProject },
-  ];
-
-  return (
-    <div className={cn("border-t border-white/10", compact ? "mt-3 pt-3" : "mt-3")}>
-      <div className="grid grid-cols-4 gap-2">
-        {actionItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.label}
-              onClick={item.onClick}
-              disabled={actions.status.state === "saving"}
-              className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/[0.03] px-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-gold/30 hover:text-gold disabled:opacity-55"
-            >
-              <Icon className="h-4 w-4" />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
-      </div>
-      {actions.status.message && (
-        <div
-          className={cn(
-            "mt-2 rounded-full px-3 py-1.5 text-center text-[11px]",
-            actions.status.state === "error"
-              ? "border border-rec/25 bg-rec/10 text-rec"
-              : "border border-gold/20 bg-gold/8 text-gold",
-          )}
-        >
-          {actions.status.message}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function MobileSectionTabs({
   sectionContent,
   activeSection,
@@ -5100,8 +6042,19 @@ function MobileSectionTabs({
   onSetActiveSection: (index: number) => void;
   preview?: boolean;
 }) {
+  const railRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const rail = railRef.current;
+    const activeTab = rail?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+    if (!rail || !activeTab) return;
+    const centeredLeft = activeTab.offsetLeft - (rail.clientWidth - activeTab.clientWidth) / 2;
+    rail.scrollTo({ left: Math.max(0, centeredLeft), behavior: "smooth" });
+  }, [activeSection]);
+
   return (
     <div
+      ref={railRef}
       role="tablist"
       aria-label="Song sections"
       className={cn(
@@ -5121,7 +6074,7 @@ function MobileSectionTabs({
             preview
               ? "border-white/10 bg-black/20"
               : "border-white/12 bg-black/24 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]",
-            activeSection === index && "border-gold/50 bg-gold/12 text-gold shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_0_18px_rgba(255,176,32,0.08)]",
+            activeSection === index && "border-gold/50 bg-gold/12 text-gold shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_0_18px_rgba(246,199,72,0.08)]",
           )}
         >
           {item.name} <span className="tabular-nums opacity-70">{countBars(sectionContent[item.name])}/{item.target}</span>
@@ -5135,6 +6088,7 @@ function PadTransport({
   beat,
   playing,
   recording,
+  compact,
   currentTime,
   duration,
   error,
@@ -5147,6 +6101,7 @@ function PadTransport({
   beat: SelectedBeat;
   playing: boolean;
   recording: boolean;
+  compact: boolean;
   currentTime: number;
   duration: number;
   error: string | null;
@@ -5157,8 +6112,11 @@ function PadTransport({
   onToggleRecording: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-gold/15 bg-[#151516] px-3 py-2">
-      <button onClick={onToggleBeat} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gold text-black" aria-label={playing ? "Pause beat" : "Play beat"}>
+    <div className={cn(
+      "flex items-center border border-gold/15 bg-[#151516]/96 shadow-[0_14px_32px_rgba(0,0,0,0.42)] backdrop-blur-xl transition-[height,border-radius,padding,gap] duration-200",
+      compact ? "h-14 gap-2 rounded-xl px-2 py-1" : "gap-3 rounded-2xl px-3 py-2",
+    )}>
+      <button onClick={onToggleBeat} className={cn("grid shrink-0 place-items-center rounded-full bg-gold text-black", compact ? "h-9 w-9" : "h-11 w-11")} aria-label={playing ? "Pause beat" : "Play beat"}>
         {playing ? <Pause className="h-4 w-4" fill="currentColor" /> : <Play className="h-4 w-4" fill="currentColor" />}
       </button>
       <div className="min-w-0 flex-1">
@@ -5167,23 +6125,24 @@ function PadTransport({
           <button
             type="button"
             onClick={onChangeBeat}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.035] text-muted-foreground transition-colors hover:border-gold/30 hover:text-gold"
+            className={cn("grid shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.035] text-muted-foreground transition-colors hover:border-gold/30 hover:text-gold", compact ? "h-7 w-7" : "h-8 w-8")}
             aria-label="Change beat"
             title="Change beat"
           >
             <RefreshCw className="h-3.5 w-3.5" />
           </button>
         </div>
-        <div className="mt-0.5 truncate text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <div className={cn("mt-0.5 truncate text-[10px] uppercase tracking-[0.14em] text-muted-foreground", compact && "hidden")}>
           {formatDuration(currentTime)} / {formatDuration(duration)} - {[beat.producer, beat.bpm ? `${beat.bpm} BPM` : null, beat.key].filter(Boolean).join(" - ")}
         </div>
-        <BeatWaveform beat={beat} currentTime={currentTime} duration={duration} active={playing || recording} recording={recording} onSeek={onSeek} onSeekCommit={onSeekCommit} />
+        <BeatWaveform beat={beat} currentTime={currentTime} duration={duration} active={playing || recording} recording={recording} compact={compact} onSeek={onSeek} onSeekCommit={onSeekCommit} />
         {error && <div className="mt-1 text-[10px] text-rec">{error}</div>}
       </div>
       <button
         onClick={onToggleRecording}
         className={cn(
-          "grid h-11 w-11 shrink-0 place-items-center rounded-full border",
+          "grid shrink-0 place-items-center rounded-full border",
+          compact ? "h-9 w-9" : "h-11 w-11",
           recording ? "border-rec bg-rec/18 text-rec" : "border-rec/50 bg-rec/12 text-rec",
         )}
         aria-label={recording ? "Stop recording" : "Record rough take"}
@@ -5216,8 +6175,15 @@ function BeatWaveform({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const waveSurferRef = useRef<{ destroy: () => void; setTime: (time: number) => void } | null>(null);
   const [waveReady, setWaveReady] = useState(false);
-  const previewUrl = getBeatPreviewUrl(beat);
+  const previewUrl = resolveBeatPreviewUrl(beat);
   const progressPct = recording ? 100 : getProgressPct(currentTime, duration);
+  const seekFromPointer = (clientX: number, target: HTMLInputElement) => {
+    if (!onSeek || duration <= 0) return;
+    const bounds = target.getBoundingClientRect();
+    if (bounds.width <= 0) return;
+    const ratio = Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width));
+    onSeek(ratio * duration);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -5241,7 +6207,7 @@ function BeatWaveform({
           barGap: 2,
           barRadius: 2,
           waveColor: "rgba(255,255,255,0.18)",
-          progressColor: recording ? "rgba(255,71,87,0.95)" : "rgba(255,176,32,0.95)",
+          progressColor: recording ? "rgba(255,71,87,0.95)" : "rgba(246,199,72,0.95)",
         });
         waveSurfer.on("ready", () => {
           if (!mounted) return;
@@ -5273,7 +6239,7 @@ function BeatWaveform({
           <>
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute top-1/2 z-[1] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/60 bg-gold shadow-[0_0_10px_rgba(255,176,32,0.65)]"
+              className="pointer-events-none absolute top-1/2 z-[1] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/60 bg-gold shadow-[0_0_10px_rgba(246,199,72,0.65)]"
               style={{ left: `${progressPct}%` }}
             />
             <input
@@ -5283,10 +6249,27 @@ function BeatWaveform({
               step={0.05}
               value={Math.min(currentTime, duration)}
               onChange={(event) => onSeek(Number(event.target.value))}
-              onPointerUp={onSeekCommit}
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId);
+                seekFromPointer(event.clientX, event.currentTarget);
+              }}
+              onPointerMove={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  seekFromPointer(event.clientX, event.currentTarget);
+                }
+              }}
+              onPointerUp={(event) => {
+                seekFromPointer(event.clientX, event.currentTarget);
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+                onSeekCommit?.();
+              }}
+              onPointerCancel={onSeekCommit}
               onKeyUp={onSeekCommit}
               onBlur={onSeekCommit}
               aria-label={`Seek ${beat.title}`}
+              aria-valuetext={`${formatDuration(currentTime)} of ${formatDuration(duration)}`}
               className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 [touch-action:none]"
             />
           </>
@@ -5323,7 +6306,7 @@ function SyntheticWaveform({
             className={cn(
               "w-[2px] rounded-full transition-colors",
               lit ? (recording ? "bg-rec" : "bg-gold") : "bg-white/16",
-              active && lit && "shadow-[0_0_8px_rgba(255,176,32,0.55)]",
+              active && lit && "shadow-[0_0_8px_rgba(246,199,72,0.55)]",
             )}
             style={{ height: `${height}%` }}
           />
@@ -5368,7 +6351,7 @@ function RoughTakeStrip({
   const reviewBeatRef = useRef<HTMLAudioElement | null>(null);
   const [reviewPlaying, setReviewPlaying] = useState(false);
   const [reviewTime, setReviewTime] = useState(0);
-  const beatPreviewUrl = beat ? getBeatPreviewUrl(beat) : null;
+  const beatPreviewUrl = beat ? resolveBeatPreviewUrl(beat) : null;
 
   useEffect(() => {
     audioRef.current?.pause();
@@ -5528,7 +6511,7 @@ function TakeWaveform({
             className={cn(
               "w-[2px] rounded-full transition-colors",
               lit ? (saved ? "bg-emerald-300" : "bg-gold") : "bg-white/16",
-              active && lit && "shadow-[0_0_8px_rgba(255,176,32,0.55)]",
+              active && lit && "shadow-[0_0_8px_rgba(246,199,72,0.55)]",
             )}
             style={{ height: `${height}%` }}
           />
@@ -5547,6 +6530,7 @@ function BoothReadyPanel({
   environmentIntel: EnvironmentIntelligence;
   onPrimaryAction: () => void;
 }) {
+  const readiness = getRecordReadiness(result);
   const metrics = [
     ["Structure", result.metrics.structure],
     ["Completion", result.metrics.completion],
@@ -5561,106 +6545,103 @@ function BoothReadyPanel({
       <div className="rounded-2xl border border-gold/20 bg-gold/8 p-4">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <div className="label-hw text-gold/80">Booth Ready Score</div>
+            <div className="label-hw text-gold/80">Record Readiness</div>
+            <div className="mt-2 text-xl font-semibold text-white">{readiness.label}</div>
             <div className="mt-2 flex items-baseline gap-1">
               <span className="text-4xl font-semibold text-gold">{result.score}</span>
               <span className="text-sm text-muted-foreground">/100</span>
             </div>
           </div>
-          <div className={cn("rounded-full px-3 py-1 text-xs", result.locked ? "bg-white/8 text-muted-foreground" : "bg-emerald-500/14 text-emerald-300")}>
-            {result.locked ? "Locked" : "Preview"}
+          <div className={cn("rounded-full px-3 py-1 text-xs", readiness.certified ? "bg-emerald-500/14 text-emerald-300" : "bg-white/8 text-muted-foreground")}>
+            {readiness.certified ? "Certified" : "In progress"}
           </div>
         </div>
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{result.locked ? result.lockedReason : result.nextAction}</p>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{readiness.detail}</p>
+        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
+          <div className="label-hw text-white/45">Best next action</div>
+          <p className="mt-1.5 text-sm font-medium leading-relaxed text-white/88">{result.nextAction}</p>
+        </div>
         <button onClick={onPrimaryAction} className="gold-seal mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold">
           {result.primaryActionLabel}
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-black/24 p-3">
-        <div className="label-hw text-gold/80">{environmentIntel.boothFocusTitle}</div>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{environmentIntel.boothFocusBody}</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {environmentIntel.focusMetrics.map((item) => (
-            <span key={item} className="rounded-full border border-gold/20 bg-gold/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.13em] text-gold">
-              {item}
-            </span>
-          ))}
-        </div>
-      </div>
+      <RecordReadinessJourney readiness={readiness} />
 
-      <BoothFeedbackUnlocks result={result} environmentIntel={environmentIntel} />
-
-      <div className="grid grid-cols-2 gap-2">
-        <BoothReadyLane title="Lyrics" score={result.lyricScore} detail={result.locked ? "Draft check" : "Review unlocked"} />
-        <BoothReadyLane
-          title="Performance"
-          score={result.performanceScore}
-          detail={result.performance.takeSaved ? "Take saved" : result.performance.takeExists ? "Take unsaved" : "No take yet"}
-        />
-      </div>
-
-      <PerformanceRead performance={result.performance} />
-
-      <div className="rounded-xl border border-white/10 bg-black/24 p-3">
-        <div className="label-hw">Readiness checklist</div>
-        <div className="mt-3 space-y-2">
-          {result.checklist.map((item) => (
-            <div key={item.label} className="flex items-start gap-2">
-              <span
-                className={cn(
-                  "mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px]",
-                  item.complete ? "border-emerald-400/30 bg-emerald-500/14 text-emerald-300" : "border-white/15 bg-white/5 text-muted-foreground",
-                )}
-              >
-                {item.complete ? <Check className="h-3 w-3" /> : ""}
-              </span>
-              <span className="min-w-0">
-                <span className={cn("block text-sm font-medium", item.complete ? "text-white/90" : "text-muted-foreground")}>{item.label}</span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{item.detail}</span>
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-white/10 bg-black/24 p-3">
-        <div className="label-hw">What improved</div>
-        <div className="mt-2 space-y-1 text-sm leading-relaxed text-muted-foreground">
-          {result.improvements.map((item) => (
-            <div key={item} className="flex gap-2">
-              <span className="text-gold">+</span>
-              <span>{item}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        {metrics.map(([label, value]) => (
-          <div key={label}>
-            <div className="mb-1 flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">{label}</span>
-              <span className="tabular-nums text-white/80">{value}</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full rounded-full bg-gold" style={{ width: `${value}%` }} />
+      <details className="group rounded-xl border border-white/10 bg-black/24">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 text-sm font-semibold text-white/78">
+          Why this status?
+          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="space-y-4 border-t border-white/10 p-3">
+          <div>
+            <div className="label-hw text-gold/80">{environmentIntel.boothFocusTitle}</div>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{environmentIntel.boothFocusBody}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {environmentIntel.focusMetrics.map((item) => (
+                <span key={item} className="rounded-full border border-gold/20 bg-gold/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.13em] text-gold">
+                  {item}
+                </span>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
 
-      {result.blockers.length > 0 && (
-        <div className="rounded-xl border border-white/10 bg-black/24 p-3">
-          <div className="label-hw">What is holding it back</div>
-          <ul className="mt-2 space-y-1 text-sm leading-relaxed text-muted-foreground">
-            {result.blockers.map((blocker) => (
-              <li key={blocker}>- {blocker}</li>
+          <div className="grid grid-cols-2 gap-2">
+            <BoothReadyLane title="Lyrics" score={result.lyricScore} detail={result.locked ? "Draft check" : "Review active"} />
+            <BoothReadyLane
+              title="Performance"
+              score={result.performanceScore}
+              detail={result.performance.takeSaved ? "Take saved" : result.performance.takeExists ? "Take unsaved" : "No take yet"}
+            />
+          </div>
+
+          <PerformanceRead performance={result.performance} />
+
+          <div>
+            <div className="label-hw">Readiness checks</div>
+            <div className="mt-3 space-y-2">
+              {result.checklist.map((item) => (
+                <div key={item.label} className="flex items-start gap-2">
+                  <span
+                    className={cn(
+                      "mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px]",
+                      item.complete ? "border-emerald-400/30 bg-emerald-500/14 text-emerald-300" : "border-white/15 bg-white/5 text-muted-foreground",
+                    )}
+                  >
+                    {item.complete ? <Check className="h-3 w-3" /> : ""}
+                  </span>
+                  <span className="min-w-0">
+                    <span className={cn("block text-sm font-medium", item.complete ? "text-white/90" : "text-muted-foreground")}>{item.label}</span>
+                    <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{item.detail}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2 border-t border-white/10 pt-4">
+            {metrics.map(([label, value]) => (
+              <div key={label}>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{label}</span>
+                  <span className="tabular-nums text-white/80">{value}</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-gold" style={{ width: `${value}%` }} />
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
+
+          {result.blockers.length > 0 && (
+            <div className="border-t border-white/10 pt-4">
+              <div className="label-hw">Certification notes</div>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{result.blockers[0]}</p>
+            </div>
+          )}
         </div>
-      )}
+      </details>
     </div>
   );
 }
@@ -5727,69 +6708,37 @@ function PerformanceRead({ performance }: { performance: BoothReadyResult["perfo
   );
 }
 
-function BoothFeedbackUnlocks({ result, environmentIntel }: { result: BoothReadyResult; environmentIntel: EnvironmentIntelligence }) {
-  const metricEntries = Object.entries(result.metrics) as Array<[keyof BoothReadyResult["metrics"], number]>;
-  const [weakestMetric, weakestScore] = [...metricEntries].sort((a, b) => a[1] - b[1])[0];
-  const [strongestMetric, strongestScore] = [...metricEntries].sort((a, b) => b[1] - a[1])[0];
-  const tiers = [
-    {
-      threshold: 0,
-      title: "Session Read",
-      body: `${formatMetricName(strongestMetric)} is leading at ${strongestScore}. ${formatMetricName(weakestMetric)} is the clearest place to gain points.`,
-    },
-    {
-      threshold: 35,
-      title: "Producer Pass",
-      body: environmentIntel.producerNotes[0] ?? environmentIntel.missionCue,
-    },
-    {
-      threshold: 60,
-      title: "Performance Pass",
-      body: result.performance.takeSaved
-        ? `The saved take is now part of the score. Tighten ${formatMetricName(weakestMetric).toLowerCase()} before the next recording.`
-        : `Record and save a rough take so cadence, breath control, and delivery can influence the score.`,
-    },
-    {
-      threshold: 80,
-      title: "Certification Notes",
-      body: result.blockers.length ? `Final blocker: ${result.blockers[0]}` : "The record has cleared the core writing and performance checks. Run one final clean take.",
-    },
-  ];
-  const nextTier = tiers.find((tier) => tier.threshold > result.score);
-
+function RecordReadinessJourney({ readiness }: { readiness: RecordReadiness }) {
   return (
     <div className="rounded-xl border border-white/10 bg-black/24 p-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="label-hw">Feedback unlocks</div>
-        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gold">
-          {nextTier ? `${nextTier.threshold - result.score} to next` : "All open"}
-        </span>
-      </div>
-      <div className="mt-3 space-y-2">
-        {tiers.map((tier) => {
-          const unlocked = result.score >= tier.threshold;
+      <div className="label-hw">Record journey</div>
+      <div className="mt-3 grid grid-cols-4 gap-1.5">
+        {readiness.stages.map((stage, index) => {
+          const complete = index < readiness.currentIndex || readiness.certified;
+          const active = index === readiness.currentIndex && !readiness.certified;
           return (
-            <div key={tier.title} className={cn("rounded-xl border p-3", unlocked ? "border-gold/20 bg-gold/8" : "border-white/8 bg-white/[0.02]")}>
-              <div className="flex items-center gap-2">
-                <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full border", unlocked ? "border-gold/30 bg-gold/12 text-gold" : "border-white/10 text-white/30")}>
-                  {unlocked ? <Check className="h-3 w-3" /> : <LockKeyhole className="h-3 w-3" />}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className={cn("text-sm font-semibold", unlocked ? "text-white/88" : "text-white/38")}>{tier.title}</div>
-                  {!unlocked && <div className="mt-0.5 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Unlocks at {tier.threshold}</div>}
-                </div>
+            <div key={stage.id} className="min-w-0 text-center">
+              <div
+                className={cn(
+                  "mx-auto grid h-7 w-7 place-items-center rounded-full border text-[10px] font-semibold",
+                  complete
+                    ? "border-emerald-400/30 bg-emerald-500/14 text-emerald-300"
+                    : active
+                      ? "border-gold/45 bg-gold/14 text-gold"
+                      : "border-white/10 bg-white/[0.03] text-white/28",
+                )}
+              >
+                {complete ? <Check className="h-3.5 w-3.5" /> : index + 1}
               </div>
-              {unlocked && <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{tier.body}</p>}
+              <div className={cn("mt-2 text-[9px] font-semibold leading-tight", active ? "text-gold" : complete ? "text-white/72" : "text-white/30")}>
+                {stage.label}
+              </div>
             </div>
           );
         })}
       </div>
     </div>
   );
-}
-
-function formatMetricName(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function BoothReadyLane({ title, score, detail }: { title: string; score: number; detail: string }) {
@@ -5807,11 +6756,16 @@ function BoothReadyLane({ title, score, detail }: { title: string; score: number
   );
 }
 
-function MobileDrawer({ title, children, defaultOpen = false }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+function MobileDrawer({ title, children, defaultOpen = false, open: controlledOpen, onOpenChange }: { title: string; children: ReactNode; defaultOpen?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    if (controlledOpen === undefined) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   return (
     <div className="rounded-2xl border border-white/10 bg-[#111113]">
-      <button onClick={() => setOpen((value) => !value)} className="flex w-full items-center justify-between px-4 py-3 text-left">
+      <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-4 py-3 text-left">
         <span className="label-hw">{title}</span>
         <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
@@ -5825,9 +6779,11 @@ function MobileLocker({
   starterBeats,
   songs,
   hooks,
+  roughTakes,
   sessionSongs,
   activeStudioPack,
   productUnlocks,
+  orders,
   loading,
   signedIn,
   error,
@@ -5846,9 +6802,11 @@ function MobileLocker({
   starterBeats: StarterBeat[];
   songs: SongLockerRow[];
   hooks: HookLockerRow[];
+  roughTakes: RoughTakeRow[];
   sessionSongs: SongRow[];
   activeStudioPack: StudioPack;
   productUnlocks: ProductUnlock[];
+  orders: CommerceOrderRow[];
   loading: boolean;
   signedIn: boolean;
   error: string | null;
@@ -5869,11 +6827,12 @@ function MobileLocker({
   const [query, setQuery] = useState("");
   const [songFilter, setSongFilter] = useState<"all" | "draft" | "ready">("all");
   const [beatFilter, setBeatFilter] = useState<"all" | "included" | "private" | "favorite" | "licensed">("all");
+  const [starterCollection, setStarterCollection] = useState("all");
   const [creativeDnaOpen, setCreativeDnaOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const visibleProductUnlocks = productUnlocks.filter((unlock) => unlock.category !== "Producer Style");
-  const purchaseCount = 1 + visibleProductUnlocks.length;
+  const purchaseCount = visibleProductUnlocks.length;
   const savedCount = songs.length + hooks.length + beats.length;
   const collectionCount = savedCount + starterBeats.length + purchaseCount;
   const boothReadyCount = songs.filter((song) => song.booth_ready).length;
@@ -5881,6 +6840,9 @@ function MobileLocker({
   const favoriteProducer = mostFrequent(beats.map((beat) => beat.producer).filter((value): value is string => Boolean(value))) ?? "Not enough saves yet";
   const favoriteMood = mostFrequent(beats.map((beat) => beat.mood).filter((value): value is string => Boolean(value))) ?? "Still taking shape";
   const sessionSongIds = new Set(sessionSongs.map((song) => song.id));
+  const takesForSong = (song: SongLockerRow) => song.song_id
+    ? roughTakes.filter((take) => take.song_id === song.song_id)
+    : [];
   const tabs: Array<{ id: LockerTab; label: string; count: number; icon: typeof Save }> = [
     { id: "songs", label: "Songs", count: songs.length, icon: Save },
     { id: "hooks", label: "Hooks", count: hooks.length, icon: Pencil },
@@ -5906,15 +6868,17 @@ function MobileLocker({
     return matchesQuery && matchesFilter;
   });
   const visibleStarterBeats = starterBeats.filter((beat) => {
-    const matchesQuery = !normalizedQuery || [beat.title, beat.producer, beat.genre, beat.mood, beat.key, ...beat.tags].filter(Boolean).join(" ").toLowerCase().includes(normalizedQuery);
+    const matchesQuery = !normalizedQuery || [beat.title, beat.producer, beat.genre, beat.mood, beat.key, beat.collection, ...beat.tags, ...beat.writingFit].filter(Boolean).join(" ").toLowerCase().includes(normalizedQuery);
     const matchesFilter = Boolean(normalizedQuery) || beatFilter === "all" || beatFilter === "included";
-    return matchesQuery && matchesFilter;
+    const matchesCollection = Boolean(normalizedQuery) || starterCollection === "all" || beat.collectionSlug === starterCollection;
+    return matchesQuery && matchesFilter && matchesCollection;
   });
+  const starterCollections = Array.from(new Map(starterBeats.filter((beat) => beat.collectionSlug && beat.collection).map((beat) => [beat.collectionSlug!, beat.collection!])).entries());
+  const displayedStarterBeats = !normalizedQuery && beatFilter === "all" ? visibleStarterBeats.slice(0, 4) : visibleStarterBeats;
   const visibleUnlocks = visibleProductUnlocks.filter((unlock) =>
     !normalizedQuery || [unlock.title, unlock.category, unlock.detail].join(" ").toLowerCase().includes(normalizedQuery),
   );
-  const activeRoomMatchesQuery = !normalizedQuery || [activeStudioPack.label, "Studio Room", activeStudioPack.writingCue].join(" ").toLowerCase().includes(normalizedQuery);
-  const globalSearchCount = visibleSongs.length + visibleHooks.length + visibleBeats.length + visibleStarterBeats.length + visibleUnlocks.length + (activeRoomMatchesQuery ? 1 : 0);
+  const globalSearchCount = visibleSongs.length + visibleHooks.length + visibleBeats.length + visibleStarterBeats.length + visibleUnlocks.length;
 
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
@@ -5961,9 +6925,9 @@ function MobileLocker({
         <LockerEmpty title="Studio sync is off." body="Sign in once and your drafts, saved hooks, favorite beats, and owned studio pieces travel with you." actionLabel="Sign in" onAction={onAuthRequired} />
       ) : (
         <>
-          <section className="mt-5 border-y border-white/10 py-3" aria-label="Artist summary">
+          <section className="mt-5 border-y border-white/10 py-3" aria-label="Locker snapshot">
             <div className="flex items-center justify-between gap-3">
-              <div className="label-hw text-white/48">Artist Summary</div>
+              <div className="label-hw text-white/48">Locker snapshot</div>
               {error ? (
                 <button type="button" onClick={onAuthRequired} className="flex items-center gap-1 text-[11px] font-semibold text-gold">Reconnect Vault <ChevronRight className="h-3.5 w-3.5" /></button>
               ) : (
@@ -5971,9 +6935,9 @@ function MobileLocker({
               )}
             </div>
             <div className="mt-3 grid grid-cols-3 divide-x divide-white/10">
-              <LockerSummaryMetric value={collectionCount} label="Collection" />
+              <LockerSummaryMetric value={collectionCount} label="Saved items" />
               <LockerSummaryMetric value={boothReadyCount} label="Booth Ready" />
-              <LockerSummaryMetric value={beats.length + starterBeats.length} label="Beat Locker" />
+              <LockerSummaryMetric value={beats.length + starterBeats.length} label="Beats" />
             </div>
           </section>
 
@@ -6039,17 +7003,23 @@ function MobileLocker({
               onChange={(value) => setBeatFilter(value as typeof beatFilter)}
             />
           )}
+          {!normalizedQuery && tab === "beats" && beatFilter === "included" && starterCollections.length > 1 && (
+            <LockerFilterRow
+              items={[{ id: "all", label: "All collections" }, ...starterCollections.map(([id, label]) => ({ id, label }))]}
+              active={starterCollection}
+              onChange={setStarterCollection}
+            />
+          )}
 
           {loading ? (
             <LockerLoading />
           ) : normalizedQuery ? (
             <div className="mt-4 space-y-3">
               <div className="flex items-center justify-between gap-3"><div className="label-hw text-white/52">Vault Results</div><div className="text-[11px] tabular-nums text-gold">{globalSearchCount}</div></div>
-              {visibleSongs.map((song) => <LockerSongCard key={`search-${song.id}`} song={song} live={sessionSongIds.has(song.song_id ?? "")} onResume={() => onResumeSong(song)} onPrepare={() => onPrepareSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
+              {visibleSongs.map((song) => <LockerSongCard key={`search-${song.id}`} song={song} takes={takesForSong(song)} live={sessionSongIds.has(song.song_id ?? "")} onResume={() => onResumeSong(song)} onPrepare={() => onPrepareSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
               {visibleHooks.map((hook) => <LockerHookCard key={`search-${hook.id}`} hook={hook} onUse={() => onUseHook(hook)} onRemove={() => onRemove("hooks", hook.id)} />)}
               {visibleStarterBeats.map((beat) => <StarterBeatCard key={`search-starter-${beat.id}`} beat={beat} onUse={() => onUseStarterBeat(beat)} />)}
               {visibleBeats.map((beat) => <LockerBeatCard key={`search-${beat.id}`} beat={beat} onUse={() => onUseBeat(beat)} onRemove={() => onRemove("beats", beat.id)} />)}
-              {activeRoomMatchesQuery && <LockerPurchaseCard title={activeStudioPack.label} meta="Active Studio Room" body={activeStudioPack.writingCue} state="Active" image={activeStudioPack.image} position={activeStudioPack.position} overlay={activeStudioPack.overlay} />}
               {visibleUnlocks.map((unlock) => <LockerOwnedCard key={`search-${unlock.id}`} unlock={unlock} />)}
               {globalSearchCount === 0 && <LockerEmpty title="Nothing in your Vault matches." body="Try a title, producer, mood, room, license, or saved date." />}
             </div>
@@ -6063,26 +7033,38 @@ function MobileLocker({
                   </button>
                 </div>
               )}
-              {tab === "songs" && visibleSongs.map((song) => <LockerSongCard key={song.id} song={song} live={sessionSongIds.has(song.song_id ?? "")} onResume={() => onResumeSong(song)} onPrepare={() => onPrepareSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
+              {tab === "songs" && visibleSongs.map((song) => <LockerSongCard key={song.id} song={song} takes={takesForSong(song)} live={sessionSongIds.has(song.song_id ?? "")} onResume={() => onResumeSong(song)} onPrepare={() => onPrepareSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
               {tab === "songs" && visibleSongs.length === 0 && <LockerEmpty title={normalizedQuery ? "No songs match." : "No saved songs yet."} body="Save a song from the writing pad and it will be ready to resume here." actionLabel="Open Studio" onAction={onGoToStudio} />}
 
               {tab === "hooks" && visibleHooks.map((hook) => <LockerHookCard key={hook.id} hook={hook} onUse={() => onUseHook(hook)} onRemove={() => onRemove("hooks", hook.id)} />)}
               {tab === "hooks" && visibleHooks.length === 0 && <LockerEmpty title={normalizedQuery ? "No hooks match." : "No hooks saved yet."} body="Capture the lines worth returning to, then reuse them in any session." actionLabel="Write a Hook" onAction={onGoToStudio} />}
 
               {tab === "beats" && visibleStarterBeats.length > 0 && <div className="flex items-center justify-between gap-3 px-1"><div className="label-hw text-gold/75">Included with RapWriter</div><div className="text-[10px] text-muted-foreground">Full session use</div></div>}
-              {tab === "beats" && visibleStarterBeats.map((beat) => <StarterBeatCard key={beat.id} beat={beat} onUse={() => onUseStarterBeat(beat)} />)}
+              {tab === "beats" && displayedStarterBeats.map((beat) => <StarterBeatCard key={beat.id} beat={beat} onUse={() => onUseStarterBeat(beat)} />)}
+              {tab === "beats" && beatFilter === "all" && visibleStarterBeats.length > displayedStarterBeats.length && (
+                <button type="button" onClick={() => setBeatFilter("included")} className="min-h-11 w-full rounded-xl border border-gold/25 bg-gold/8 text-xs font-semibold text-gold">
+                  See all {visibleStarterBeats.length} included beats
+                </button>
+              )}
               {tab === "beats" && visibleBeats.length > 0 && visibleStarterBeats.length > 0 && <div className="px-1 pt-2 label-hw text-white/45">Saved and licensed</div>}
               {tab === "beats" && visibleBeats.map((beat) => <LockerBeatCard key={beat.id} beat={beat} onUse={() => onUseBeat(beat)} onRemove={() => onRemove("beats", beat.id)} />)}
               {tab === "beats" && visibleBeats.length === 0 && visibleStarterBeats.length === 0 && <LockerEmpty title={normalizedQuery ? "No beats match." : "No beats saved yet."} body="Favorite a beat in Studio Store and keep the pocket close." actionLabel="Browse Beats" onAction={onGoToMarket} />}
 
               {tab === "purchases" && (
-                <>
-                  {activeRoomMatchesQuery && <LockerPurchaseCard title={activeStudioPack.label} meta="Active Studio Room" body={activeStudioPack.writingCue} state="Active" image={activeStudioPack.image} position={activeStudioPack.position} overlay={activeStudioPack.overlay} />}
-                  {visibleUnlocks.map((unlock) => <LockerOwnedCard key={unlock.id} unlock={unlock} />)}
-                  {visibleUnlocks.length === 0 && !activeRoomMatchesQuery && normalizedQuery && <LockerEmpty title="No owned items match." body="Try another search or browse the full studio collection." actionLabel="Explore Market" onAction={onGoToMarket} />}
-                  {visibleProductUnlocks.length === 0 && !normalizedQuery && <LockerEmpty title="Your first room is ready." body="New rooms, vocal chains, ambience, and themes will join Midnight Session here." actionLabel="Explore Market" onAction={onGoToMarket} />}
-                </>
-              )}
+                  <>
+                    {visibleUnlocks.map((unlock) => <LockerOwnedCard key={unlock.id} unlock={unlock} />)}
+                  {visibleUnlocks.length === 0 && normalizedQuery && <LockerEmpty title="No owned items match." body="Try another search or browse the full studio collection." actionLabel="Explore Market" onAction={onGoToMarket} />}
+                    {visibleProductUnlocks.length === 0 && !normalizedQuery && <LockerEmpty title="No owned studio assets yet." body="Rooms and creative assets you purchase from Studio Store will live here permanently." actionLabel="Explore Market" onAction={onGoToMarket} />}
+                    {orders.length > 0 && (
+                      <div className="mt-5 border-t border-white/10 pt-4">
+                        <div className="label-hw mb-2 text-gold/80">Receipts</div>
+                        <div className="space-y-2">
+                          {orders.slice(0, 8).map((order) => <LockerReceiptRow key={order.id} order={order} />)}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
             </div>
           )}
           <PrivateBeatImportSheet open={importOpen} onClose={() => setImportOpen(false)} onImport={onImportBeat} />
@@ -6246,9 +7228,10 @@ function LockerLoading() {
   );
 }
 
-function LockerSongCard({ song, live, onResume, onPrepare, onRemove }: { song: SongLockerRow; live: boolean; onResume: () => void; onPrepare: () => void; onRemove: () => void }) {
+function LockerSongCard({ song, takes, live, onResume, onPrepare, onRemove }: { song: SongLockerRow; takes: RoughTakeRow[]; live: boolean; onResume: () => void; onPrepare: () => void; onRemove: () => void }) {
   const progress = lockerSongProgress(song);
   const bars = lockerSnapshotNumber(song.snapshot, "totalBars", "total_bars");
+  const [takesOpen, setTakesOpen] = useState(false);
   return (
     <article className="rounded-2xl border border-white/10 bg-[#111113] p-4">
       <div className="flex items-start justify-between gap-3">
@@ -6263,6 +7246,28 @@ function LockerSongCard({ song, live, onResume, onPrepare, onRemove }: { song: S
         <div className="min-w-0 flex-1"><div className="h-1.5 overflow-hidden rounded-full bg-white/8"><div className="h-full rounded-full bg-gold" style={{ width: `${progress}%` }} /></div><div className="mt-1.5 text-[10px] text-muted-foreground">{progress}% written</div></div>
         <div className="flex shrink-0 items-center gap-2"><LockerRemoveButton label={`Remove ${song.title}`} onRemove={onRemove} /><button type="button" onClick={onPrepare} className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-white/68 transition-colors hover:border-gold/25 hover:text-gold" aria-label={`Prepare ${song.title} for Booth`} title="Prepare for Booth"><FileText className="h-4 w-4" /></button><button type="button" onClick={onResume} className="flex min-h-10 items-center gap-2 rounded-xl border border-gold/25 bg-gold/8 px-3 text-xs font-semibold text-gold"><Play className="h-3.5 w-3.5 fill-current" />Resume</button></div>
       </div>
+      {takes.length > 0 && (
+        <div className="mt-3 border-t border-white/8 pt-3">
+          <button type="button" onClick={() => setTakesOpen((current) => !current)} className="flex min-h-9 w-full items-center justify-between gap-3 text-left" aria-expanded={takesOpen}>
+            <span className="inline-flex items-center gap-2 text-[11px] font-semibold text-white/68"><Mic className="h-3.5 w-3.5 text-gold" />{takes.length} saved {takes.length === 1 ? "take" : "takes"}</span>
+            <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", takesOpen && "rotate-180")} />
+          </button>
+          {takesOpen && (
+            <div className="mt-2 space-y-2">
+              {takes.slice(0, 3).map((take, index) => (
+                <div key={take.id} className="rounded-xl border border-white/8 bg-black/24 p-2.5">
+                  <div className="mb-2 flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
+                    <span>{index === 0 ? "Latest" : formatShortDate(take.created_at)} / {take.section_name}</span>
+                    <span className="tabular-nums">{formatDuration(take.duration_seconds)}</span>
+                  </div>
+                  <audio controls preload="none" src={take.signed_url} className="h-9 w-full" />
+                </div>
+              ))}
+              {takes.length > 3 && <div className="px-1 text-[10px] text-muted-foreground">Showing the 3 newest takes.</div>}
+            </div>
+          )}
+        </div>
+      )}
     </article>
   );
 }
@@ -6304,8 +7309,8 @@ function StarterBeatCard({ beat, onUse }: { beat: StarterBeat; onUse: () => void
         </div>
         <div className="min-w-0 flex-1 py-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="label-hw text-gold/80">Starter Beat</span>
-            <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-300">Included</span>
+            <span className="label-hw text-gold/80">{beat.collection ?? "RapWriter Originals"}</span>
+            <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-300">{beat.featured ? "Featured" : "Included"}</span>
           </div>
           <h2 className="mt-2 truncate text-base font-semibold">{beat.title}</h2>
           <div className="mt-1 truncate text-[11px] text-muted-foreground">{beat.producer}</div>
@@ -6395,41 +7400,6 @@ function starterBeatArt(beat: StarterBeat) {
   if (beat.artworkUrl) return `center / cover no-repeat url('${beat.artworkUrl}')`;
   if (beat.genre?.toLowerCase().includes("trap")) return "linear-gradient(145deg, #25110b 0%, #100d12 55%, #6f2f0d 125%)";
   return "linear-gradient(145deg, #112126 0%, #0c0d10 56%, #6b5418 125%)";
-}
-
-function LockerPurchaseCard({
-  title,
-  meta,
-  body,
-  state,
-  image,
-  position,
-  overlay,
-}: {
-  title: string;
-  meta: string;
-  body: string;
-  state: string;
-  image: string;
-  position: string;
-  overlay: string;
-}) {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-gold/25 bg-[#111113]">
-      <div className="relative h-28">
-        <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: position }} loading="lazy" decoding="async" draggable={false} />
-        <div className="absolute inset-0" style={{ background: overlay }} />
-        <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-3">
-          <div>
-            <div className="label-hw text-gold/85">{meta}</div>
-            <div className="mt-1 text-lg font-semibold">{title}</div>
-          </div>
-          <span className="rounded-full bg-gold px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-black">{state}</span>
-        </div>
-      </div>
-      <p className="p-4 text-sm leading-relaxed text-muted-foreground">{body}</p>
-    </div>
-  );
 }
 
 function LockerEmpty({ title, body, actionLabel, onAction }: { title: string; body: string; actionLabel?: string; onAction?: () => void }) {
@@ -6640,6 +7610,7 @@ function MobileProfile({
   completionPct,
   boothReady,
   activeStudioPack,
+  membership,
   profile,
   lockerCounts,
   loading,
@@ -6649,11 +7620,16 @@ function MobileProfile({
   error,
   onAuthRequired,
   onExpandWorkspace,
+  onProfileAvatar,
+  onProfileIdentity,
   onSignOut,
+  onOpenStudio,
+  onOpenMarket,
 }: {
   completionPct: number;
   boothReady: BoothReadyResult;
   activeStudioPack: StudioPack;
+  membership: MembershipSnapshot | null;
   profile: ProfileRow | null;
   lockerCounts: { beats: number; songs: number; hooks: number };
   loading: boolean;
@@ -6663,20 +7639,36 @@ function MobileProfile({
   error: string | null;
   onAuthRequired: () => void;
   onExpandWorkspace: () => Promise<void>;
+  onProfileAvatar: (file: File | null) => Promise<ProfileRow | null>;
+  onProfileIdentity: (artistName: string) => Promise<ProfileRow | null>;
   onSignOut: () => Promise<void>;
+  onOpenStudio: () => void;
+  onOpenMarket: () => void;
 }) {
   const [workspaceUpgradeStatus, setWorkspaceUpgradeStatus] = useState<"idle" | "saving" | "error">("idle");
   const [workspaceUpgradeError, setWorkspaceUpgradeError] = useState<string | null>(null);
+  const [avatarStatus, setAvatarStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const artistName = profile?.artist_name || profile?.display_name || profile?.email?.split("@")[0] || "RapWriter Artist";
+  const [identityEditorOpen, setIdentityEditorOpen] = useState(false);
+  const [artistNameDraft, setArtistNameDraft] = useState(artistName);
+  const [identityStatus, setIdentityStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [identityError, setIdentityError] = useState<string | null>(null);
   const joinedLabel = profile?.created_at
     ? new Intl.DateTimeFormat("en", { month: "short", year: "numeric" }).format(new Date(profile.created_at))
     : "Private beta";
   const vaultTotal = lockerCounts.songs + lockerCounts.hooks + lockerCounts.beats;
   const boothLabel = boothReady.locked ? "Keep writing" : `${boothReady.score}/100`;
   const profileLabel = accountTypeLabel(profile?.account_type);
-  const canAccessProducer = hasProducerWorkspace(profile?.account_type);
-  const canAccessArtist = hasArtistWorkspace(profile?.account_type);
-  const canExpandWorkspace = profile?.account_type === "artist" || profile?.account_type === "producer";
+  const canAccessProducer = Boolean(membership?.producer) || hasProducerWorkspace(profile?.account_type);
+  const canAccessArtist = Boolean(membership?.artist) || hasArtistWorkspace(profile?.account_type);
+  const canExpandWorkspace = !canAccessProducer || !canAccessArtist;
+  const membershipLabel = [membership?.artist?.plan.name, membership?.producer?.plan.name].filter(Boolean).join(" + ");
+
+  useEffect(() => {
+    if (!identityEditorOpen) setArtistNameDraft(artistName);
+  }, [artistName, identityEditorOpen]);
 
   const expandWorkspace = async () => {
     setWorkspaceUpgradeStatus("saving");
@@ -6687,6 +7679,42 @@ function MobileProfile({
     } catch (upgradeError) {
       setWorkspaceUpgradeStatus("error");
       setWorkspaceUpgradeError(upgradeError instanceof Error ? upgradeError.message : "Workspace could not be added.");
+    }
+  };
+
+  const changeAvatar = async (file: File | null) => {
+    if (file && file.size > 5 * 1024 * 1024) {
+      setAvatarStatus("error");
+      setAvatarError("Choose a photo smaller than 5 MB.");
+      return;
+    }
+    setAvatarStatus("saving");
+    setAvatarError(null);
+    try {
+      await onProfileAvatar(file);
+      setAvatarStatus("idle");
+    } catch (avatarUploadError) {
+      setAvatarStatus("error");
+      setAvatarError(avatarUploadError instanceof Error ? avatarUploadError.message : "Profile photo could not be updated.");
+    }
+  };
+
+  const saveArtistIdentity = async () => {
+    const nextName = artistNameDraft.trim();
+    if (nextName.length < 2) {
+      setIdentityStatus("error");
+      setIdentityError("Enter an artist name with at least 2 characters.");
+      return;
+    }
+    setIdentityStatus("saving");
+    setIdentityError(null);
+    try {
+      await onProfileIdentity(nextName);
+      setIdentityStatus("idle");
+      setIdentityEditorOpen(false);
+    } catch (identitySaveError) {
+      setIdentityStatus("error");
+      setIdentityError(identitySaveError instanceof Error ? identitySaveError.message : "Artist identity could not be updated.");
     }
   };
 
@@ -6704,7 +7732,7 @@ function MobileProfile({
             </div>
           </div>
           <div className="p-5">
-          <div className="grid h-16 w-16 place-items-center rounded-2xl border border-gold/35 bg-black p-2 shadow-[0_0_26px_rgba(255,176,32,0.18)]">
+          <div className="grid h-16 w-16 place-items-center rounded-2xl border border-gold/35 bg-black p-2 shadow-[0_0_26px_rgba(246,199,72,0.18)]">
             <img src="/brand/rapwriter-mark.webp" alt="" className="h-full w-full object-contain" draggable={false} />
           </div>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
@@ -6727,23 +7755,73 @@ function MobileProfile({
         <div className="relative px-4 pb-4 pt-5">
           <img src={activeStudioPack.image} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20" style={{ objectPosition: activeStudioPack.position }} draggable={false} />
           <div className="absolute inset-0" style={{ background: activeStudioPack.overlay }} />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_82%_0%,rgba(255,176,32,0.18),transparent_34%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_82%_0%,rgba(246,199,72,0.18),transparent_34%)]" />
           <div className="relative flex items-center gap-3">
-            <div className="grid h-18 w-18 place-items-center rounded-2xl border border-gold/35 bg-black p-2 shadow-[0_0_26px_rgba(255,176,32,0.18)]">
-              <img src="/brand/rapwriter-mark.webp" alt="" className="h-full w-full object-contain" draggable={false} />
+            <div className="shrink-0 text-center">
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0] ?? null;
+                  event.currentTarget.value = "";
+                  if (file) void changeAvatar(file);
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={avatarStatus === "saving"}
+                className="relative grid h-18 w-18 place-items-center overflow-hidden rounded-2xl border border-gold/35 bg-black p-2 shadow-[0_0_26px_rgba(246,199,72,0.18)] disabled:opacity-60"
+                aria-label="Change profile photo"
+                title="Change profile photo"
+              >
+                <img
+                  src={profile?.avatar_url || "/brand/rapwriter-mark.webp"}
+                  alt=""
+                  className={cn("h-full w-full", profile?.avatar_url ? "rounded-xl object-cover" : "object-contain")}
+                  draggable={false}
+                />
+                <span className="absolute bottom-1 right-1 grid h-6 w-6 place-items-center rounded-lg border border-gold/35 bg-black/85 text-gold shadow-lg">
+                  {avatarStatus === "saving" ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Camera className="h-3 w-3" />}
+                </span>
+              </button>
+              {profile?.avatar_url && (
+                <button type="button" onClick={() => void changeAvatar(null)} disabled={avatarStatus === "saving"} className="mt-1 text-[9px] font-semibold text-white/45 hover:text-gold disabled:opacity-50">
+                  Use crown
+                </button>
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <div className="truncate text-xl font-semibold">{loading ? "Loading artist..." : artistName}</div>
                 <ShieldCheck className="h-4 w-4 shrink-0 text-gold" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setArtistNameDraft(artistName);
+                    setIdentityError(null);
+                    setIdentityEditorOpen(true);
+                  }}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-white/10 text-white/55 transition-colors hover:border-gold/30 hover:text-gold"
+                  aria-label="Edit artist name"
+                  title="Edit artist name"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
               </div>
               <div className="mt-1 text-xs text-muted-foreground">Member since {joinedLabel}</div>
               <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-gold">
                 <Crown className="h-3 w-3" />
                 {emailVerified ? "Verified account" : "Email confirmation pending"}
               </div>
+              {membershipLabel && (
+                <div className="mt-2 truncate text-[10px] font-semibold text-white/55">{membershipLabel}</div>
+              )}
             </div>
           </div>
+          {avatarError && <p className="relative mt-2 text-xs text-rec">{avatarError}</p>}
 
           <div className="relative mt-5 grid grid-cols-[1fr_auto] gap-3 rounded-2xl border border-white/10 bg-black/35 p-3">
             <div>
@@ -6756,7 +7834,7 @@ function MobileProfile({
               <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Complete</div>
             </div>
             <div className="col-span-2 h-1.5 overflow-hidden rounded-full bg-white/12">
-              <div className="h-full rounded-full bg-gold shadow-[0_0_18px_rgba(255,176,32,0.6)]" style={{ width: `${completionPct}%` }} />
+              <div className="h-full rounded-full bg-gold shadow-[0_0_18px_rgba(246,199,72,0.6)]" style={{ width: `${completionPct}%` }} />
             </div>
           </div>
         </div>
@@ -6781,7 +7859,11 @@ function MobileProfile({
       </div>
 
       <div id="profile-membership" className="scroll-mt-4 pt-4">
-        <MembershipCard />
+        <MembershipCard
+          initialMembership={membership}
+          onOpenStudio={onOpenStudio}
+          onOpenMarket={onOpenMarket}
+        />
       </div>
 
       <div className="mt-4 space-y-2">
@@ -6795,7 +7877,8 @@ function MobileProfile({
           />
         )}
         {canAccessProducer && <MobileProfileRow icon={Headphones} title="Producer HQ" value="Catalog, storefront, and business" href="/producer" />}
-        {isAdmin && <MobileProfileRow icon={LockKeyhole} title="Control room" value="Admin tools and catalog ops" href="/admin" muted />}
+        <MobileProfileRow icon={LifeBuoy} title="Support" value="Get help and track support tickets" href="/support" />
+        {isAdmin && <MobileProfileRow icon={LockKeyhole} title="Control room" value="Staff tools and catalog review" href="/admin" muted />}
       </div>
       {workspaceUpgradeStatus === "saving" && <p className="mt-3 text-xs text-gold">Preparing your combined workspace...</p>}
       {workspaceUpgradeError && <p className="mt-3 text-xs text-rec">{workspaceUpgradeError}</p>}
@@ -6803,14 +7886,66 @@ function MobileProfile({
       <button onClick={() => void onSignOut()} className="mt-4 w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-muted-foreground">
         Sign out
       </button>
+
+      {identityEditorOpen && (
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/80 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:py-6">
+          <section role="dialog" aria-modal="true" aria-labelledby="artist-identity-title" className="w-full max-w-[400px] rounded-3xl border border-gold/25 bg-[#111113] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.72)]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="label-hw text-gold">Artist identity</div>
+                <h2 id="artist-identity-title" className="mt-2 text-xl font-semibold">How should artists know you?</h2>
+              </div>
+              <button type="button" onClick={() => setIdentityEditorOpen(false)} disabled={identityStatus === "saving"} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 text-muted-foreground disabled:opacity-40" aria-label="Close artist identity editor"><X className="h-4 w-4" /></button>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">This name appears in your artist workspace. Your Producer HQ brand stays separate.</p>
+            <label className="mt-5 block">
+              <span className="label-hw text-white/50">Artist name</span>
+              <input value={artistNameDraft} onChange={(event) => setArtistNameDraft(event.target.value)} maxLength={80} disabled={identityStatus === "saving"} autoFocus className="mt-2 min-h-12 w-full rounded-xl border border-white/12 bg-black/40 px-4 text-sm font-semibold outline-none focus:border-gold/50 disabled:opacity-50" />
+            </label>
+            {identityError && <p className="mt-3 text-xs leading-5 text-rec">{identityError}</p>}
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setIdentityEditorOpen(false)} disabled={identityStatus === "saving"} className="min-h-12 rounded-xl border border-white/10 text-sm font-semibold text-white/70 disabled:opacity-40">Cancel</button>
+              <button type="button" onClick={() => void saveArtistIdentity()} disabled={identityStatus === "saving" || artistNameDraft.trim().length < 2} className="gold-seal min-h-12 rounded-xl px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-35">{identityStatus === "saving" ? "Saving..." : "Save artist name"}</button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
+  );
+}
+
+function LockerReceiptRow({ order }: { order: CommerceOrderRow }) {
+  const item = order.commerce_order_items[0];
+  const statusLabel = order.status.replace(/_/g, " ");
+  const amount = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: order.currency.toUpperCase(),
+  }).format(order.total_cents / 100);
+  return (
+    <article className="flex min-h-16 items-center gap-3 rounded-xl border border-white/10 bg-black/24 px-3 py-2.5">
+      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-white/10 text-gold"><FileText className="h-4 w-4" /></div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-xs font-semibold">{item?.title ?? order.order_number}</div>
+        <div className="mt-1 text-[9px] uppercase tracking-[0.12em] text-white/45">{order.order_number} / {formatShortDate(order.created_at)}</div>
+      </div>
+      <div className="shrink-0 text-right">
+        <div className="text-xs font-semibold text-gold">{amount}</div>
+        <div className="mt-1 text-[9px] capitalize text-white/45">{statusLabel}</div>
+      </div>
+      {item?.item_type === "beat_license" && order.status === "fulfilled" && (
+        <a href={`/api/orders/${order.id}/license`} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-gold/20 text-gold" aria-label="Download beat license" title="Download license">
+          <Download className="h-4 w-4" />
+        </a>
+      )}
+    </article>
   );
 }
 
 function AccountControls({ email, onSignOut }: { email: string | null; onSignOut: () => Promise<void> }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
-  const [deleteArmed, setDeleteArmed] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   const exportAccount = async () => {
     setBusy(true);
@@ -6836,11 +7971,7 @@ function AccountControls({ email, onSignOut }: { email: string | null; onSignOut
   };
 
   const deleteAccount = async () => {
-    if (!deleteArmed) {
-      setDeleteArmed(true);
-      setStatus("Tap delete again to permanently remove this account and its studio data.");
-      return;
-    }
+    if (deleteConfirmation !== "DELETE") return;
 
     setBusy(true);
     setStatus("Deleting account...");
@@ -6852,39 +7983,74 @@ function AccountControls({ email, onSignOut }: { email: string | null; onSignOut
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error ?? "Account deletion failed.");
+      setDeleteDialogOpen(false);
       await onSignOut();
       window.location.assign("/");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Account deletion failed.");
-      setDeleteArmed(false);
       setBusy(false);
     }
   };
 
   return (
-    <details className="mt-4 rounded-2xl border border-white/10 bg-[#111113]">
-      <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold/20 bg-gold/8 text-gold">
-          <Settings className="h-4 w-4" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold">Account settings</span>
-          <span className="mt-0.5 block truncate text-xs text-muted-foreground">{email ?? "Exports and account controls"}</span>
-        </span>
-        <ChevronDown className="h-4 w-4 text-muted-foreground" />
-      </summary>
-      <div className="border-t border-white/10 p-3">
-        <button onClick={() => void exportAccount()} disabled={busy} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-gold/25 bg-gold/8 px-4 text-sm font-semibold text-gold disabled:opacity-50">
-          <Download className="h-4 w-4" />
-          Export my data
-        </button>
-        <button onClick={() => void deleteAccount()} disabled={busy} className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-rec/25 bg-rec/8 px-4 text-sm font-semibold text-rec disabled:opacity-50">
-          <Trash2 className="h-4 w-4" />
-          {deleteArmed ? "Confirm permanent deletion" : "Delete account"}
-        </button>
-        {status && <p className="mt-3 px-1 text-xs leading-5 text-muted-foreground">{status}</p>}
-      </div>
-    </details>
+    <>
+      <details className="mt-4 rounded-2xl border border-white/10 bg-[#111113]">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold/20 bg-gold/8 text-gold">
+            <Settings className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">Account settings</span>
+            <span className="mt-0.5 block truncate text-xs text-muted-foreground">{email ?? "Exports and account controls"}</span>
+          </span>
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        </summary>
+        <div className="border-t border-white/10 p-3">
+          <button onClick={() => void exportAccount()} disabled={busy} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-gold/25 bg-gold/8 px-4 text-sm font-semibold text-gold disabled:opacity-50">
+            <Download className="h-4 w-4" />
+            Export my data
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setDeleteConfirmation("");
+              setStatus("");
+              setDeleteDialogOpen(true);
+            }}
+            disabled={busy}
+            className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-rec/25 bg-rec/8 px-4 text-sm font-semibold text-rec disabled:opacity-50"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete account
+          </button>
+          {status && <p className="mt-3 px-1 text-xs leading-5 text-muted-foreground">{status}</p>}
+        </div>
+      </details>
+
+      {deleteDialogOpen && (
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/80 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:py-6">
+          <section role="dialog" aria-modal="true" aria-labelledby="delete-account-title" className="w-full max-w-[400px] rounded-3xl border border-rec/25 bg-[#111113] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.72)]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="label-hw text-rec">Permanent action</div>
+                <h2 id="delete-account-title" className="mt-2 text-xl font-semibold">Delete this account?</h2>
+              </div>
+              <button type="button" onClick={() => setDeleteDialogOpen(false)} disabled={busy} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 text-muted-foreground disabled:opacity-40" aria-label="Close account deletion"><X className="h-4 w-4" /></button>
+            </div>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">This permanently removes your songs, projects, Locker, rough takes, and account access. Export your data first if you need a copy.</p>
+            <label className="mt-5 block">
+              <span className="label-hw text-white/50">Type DELETE to continue</span>
+              <input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value.toUpperCase())} disabled={busy} autoFocus aria-label="Account deletion confirmation" className="mt-2 min-h-12 w-full rounded-xl border border-white/12 bg-black/40 px-4 text-sm font-semibold outline-none focus:border-rec/50 disabled:opacity-50" />
+            </label>
+            {status && <p className="mt-3 text-xs leading-5 text-rec">{status}</p>}
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setDeleteDialogOpen(false)} disabled={busy} className="min-h-12 rounded-xl border border-white/10 text-sm font-semibold text-white/70 disabled:opacity-40">Keep account</button>
+              <button type="button" onClick={() => void deleteAccount()} disabled={busy || deleteConfirmation !== "DELETE"} className="min-h-12 rounded-xl border border-rec/35 bg-rec px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">{busy ? "Deleting..." : "Delete permanently"}</button>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -6945,7 +8111,7 @@ function MobileProfileRow({
 
 function MobileBottomNav({ activeNav, onChange }: { activeNav: MobileNavView; onChange: (view: MobileNavView) => void }) {
   return (
-    <nav className="fixed bottom-0 left-1/2 z-40 grid h-[84px] w-full max-w-[430px] -translate-x-1/2 grid-cols-4 border-t border-white/10 bg-black/90 px-2 pb-4 pt-2 backdrop-blur-xl">
+    <nav data-testid="app-dock" aria-label="RapWriter navigation" className="fixed bottom-0 left-1/2 z-40 grid h-[84px] w-full max-w-[430px] -translate-x-1/2 grid-cols-4 border-t border-white/10 bg-black/90 px-2 pb-4 pt-2 backdrop-blur-xl">
       {navItems.map((item) => {
         const Icon = item.icon;
         return (
@@ -7094,13 +8260,22 @@ function blankSections() {
   }, {});
 }
 
-function readMobileDraftRecord(): MobileDraftRecord | null {
+function mobileDraftStorageKey(ownerId: string | null) {
+  return `${MOBILE_DRAFT_KEY}:${ownerId ?? "guest"}`;
+}
+
+function readMobileDraftRecord(ownerId: string | null): MobileDraftRecord | null {
   try {
-    const raw = window.localStorage.getItem(MOBILE_DRAFT_KEY);
+    const ownerKey = mobileDraftStorageKey(ownerId);
+    const guestKey = mobileDraftStorageKey(null);
+    const raw = window.localStorage.getItem(ownerKey)
+      ?? (ownerId ? window.localStorage.getItem(guestKey) : null)
+      ?? window.localStorage.getItem(MOBILE_DRAFT_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
     const candidate = parsed as Record<string, unknown>;
+    if (typeof candidate.ownerId === "string" && candidate.ownerId !== ownerId) return null;
 
     if (candidate.version === 3 && candidate.sections && typeof candidate.sections === "object" && !Array.isArray(candidate.sections)) {
       const sections = normalizeDraftSections(candidate.sections);
@@ -7153,7 +8328,7 @@ function readMobileDraftRecord(): MobileDraftRecord | null {
       sections: legacySections,
       activeSection: "Hook",
       beat: EMPTY_BEAT,
-      studioPackId: "midnight",
+      studioPackId: defaultStudioRoomId,
       studioDna: defaultStudioDna,
       playbackPositionSeconds: 0,
     };
@@ -7164,7 +8339,7 @@ function readMobileDraftRecord(): MobileDraftRecord | null {
 
 function writeMobileDraftRecord(draft: MobileDraftRecord) {
   try {
-    window.localStorage.setItem(MOBILE_DRAFT_KEY, JSON.stringify(draft));
+    window.localStorage.setItem(mobileDraftStorageKey(draft.ownerId), JSON.stringify(draft));
   } catch {
     // The editor remains usable even if browser storage is unavailable.
   }
@@ -7183,13 +8358,24 @@ function normalizeStudioDna(value: unknown, fallbackEnvironment: StudioPackId): 
   const candidate = value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+  const airCandidate = candidate.studioAir && typeof candidate.studioAir === "object" && !Array.isArray(candidate.studioAir)
+    ? candidate.studioAir as Record<string, unknown>
+    : {};
+  const activeIndex = typeof airCandidate.activeIndex === "number" && Number.isInteger(airCandidate.activeIndex)
+    ? Math.max(0, Math.min(2, airCandidate.activeIndex))
+    : defaultStudioDna.studioAir.activeIndex;
+  const volume = typeof airCandidate.volume === "number" && Number.isFinite(airCandidate.volume)
+    ? Math.max(4, Math.min(32, airCandidate.volume))
+    : defaultStudioDna.studioAir.volume;
   return {
     environment: getStudioPack(typeof candidate.environment === "string" ? candidate.environment : fallbackEnvironment).id,
     goal: typeof candidate.goal === "string" ? candidate.goal : defaultStudioDna.goal,
     style: typeof candidate.style === "string" ? candidate.style : defaultStudioDna.style,
     mood: typeof candidate.mood === "string" ? candidate.mood : defaultStudioDna.mood,
     producer: typeof candidate.producer === "string" ? candidate.producer : defaultStudioDna.producer,
+    studioAir: { activeIndex, volume },
   };
+
 }
 
 function validIsoDate(value: unknown) {
@@ -7328,11 +8514,6 @@ function getSmartTitleSeed(beat: SelectedBeat) {
     .filter(Boolean)
     .slice(0, 3);
   return words.length ? `${words.join(" ")} Draft` : "Untitled Draft";
-}
-
-function beatTitleFromSong(song: SongRow) {
-  const title = song.beat_snapshot?.title;
-  return typeof title === "string" && title.trim() ? title : "No beat selected";
 }
 
 function beatSnapshotFromSong(song: SongRow | null) {
@@ -7595,7 +8776,7 @@ function scoreBoothReady(
       : !takeSaved
         ? "Save the rough take so Booth Ready can remember it."
         : score >= 75
-      ? "Booth Ready preview unlocked. Start rehearsing the take."
+      ? "Booth Ready certified. Rehearse once more, then prepare the studio handoff."
       : blockers[0] ?? "Strengthen the hook or finish another section.";
   const primaryAction: BoothReadyResult["primaryAction"] = locked
     ? "write"
@@ -7610,7 +8791,9 @@ function scoreBoothReady(
       : primaryAction === "save_take"
         ? "Keep Rough Take"
         : primaryAction === "review"
-          ? "Open Writer Flow"
+          ? score >= 75
+            ? "Prepare for Booth"
+            : "Open Producer Pass"
           : hookBars < 4
             ? `Write ${Math.max(1, 4 - hookBars)} Hook Bars`
             : `Write ${Math.max(1, 12 - verse1Bars)} Verse Bars`;
@@ -7695,6 +8878,63 @@ function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(Number.isFinite(value) ? value : 0)));
 }
 
+function getRecordReadiness(result: BoothReadyResult): RecordReadiness {
+  const stages: RecordReadinessStage[] = [
+    { id: "draft", label: "Draft" },
+    { id: "session_ready", label: "Session Ready" },
+    { id: "producer_pass", label: "Producer Pass" },
+    { id: "booth_ready", label: "Booth Ready" },
+  ];
+  const sessionReady = !result.locked && result.metrics.completion >= 45;
+  const producerPassReady =
+    sessionReady &&
+    result.lyricScore >= 55 &&
+    result.metrics.structure >= 55 &&
+    result.metrics.hook >= 45;
+  const certified =
+    producerPassReady &&
+    result.score >= 75 &&
+    result.metrics.completion >= 75 &&
+    result.metrics.cadence >= 55 &&
+    result.performance.takeSaved;
+  const currentIndex = certified ? 3 : producerPassReady ? 2 : sessionReady ? 1 : 0;
+
+  if (certified) {
+    return {
+      currentIndex,
+      label: "Booth Ready Certified",
+      detail: "The record has cleared its core writing, structure, cadence, and rough-take checks.",
+      stages,
+      certified,
+    };
+  }
+  if (producerPassReady) {
+    return {
+      currentIndex,
+      label: "Producer Pass",
+      detail: "The song is built. Resolve the highest-impact lyric or performance note before certification.",
+      stages,
+      certified,
+    };
+  }
+  if (sessionReady) {
+    return {
+      currentIndex,
+      label: "Session Ready",
+      detail: "The structure is ready for rehearsal. Record a rough take and listen for what the page cannot reveal.",
+      stages,
+      certified,
+    };
+  }
+  return {
+    currentIndex,
+    label: "Draft",
+    detail: "Build the hook and first verse until the record has enough structure for a meaningful review.",
+    stages,
+    certified,
+  };
+}
+
 function getSongState(completionPct: number, boothScore: number): { label: string; tone: "muted" | "gold" | "green" } {
   if (completionPct >= 75 && boothScore >= 70) return { label: "Booth Ready", tone: "green" };
   if (completionPct >= 55) return { label: "Session Ready", tone: "gold" };
@@ -7774,16 +9014,6 @@ function getBeatDurationSeconds(beat: SelectedBeat) {
     if (Number.isFinite(mins) && Number.isFinite(secs)) return mins * 60 + secs;
   }
   return 222;
-}
-
-function getBeatPreviewUrl(beat: SelectedBeat) {
-  const producerBeatId = beat.id.match(PRODUCER_BEAT_ID)?.[1];
-  if (producerBeatId) return `/api/marketplace/beats/${producerBeatId}/media?kind=audio`;
-  const catalogId = typeof beat.catalogId === "string" ? beat.catalogId : null;
-  if (catalogId && RAW_BEAT_UUID.test(catalogId)) return `/api/marketplace/beats/${catalogId}/media?kind=audio`;
-  if (typeof beat.previewUrl === "string" && beat.previewUrl.trim()) return beat.previewUrl;
-  if (typeof beat.audioUrl === "string" && beat.audioUrl.trim()) return beat.audioUrl;
-  return null;
 }
 
 function trackMarketplaceEvent(eventType: "beat_play" | "beat_favorite" | "beat_add", beatId: string) {

@@ -3,12 +3,13 @@ import { requireRole } from "@/lib/api/auth";
 import { parseJson } from "@/lib/api/json";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
 import { producerUpgradeAccountType, type AccountType } from "@/lib/account-role";
+import { getProducerBeatPreviewPath, PRODUCER_BEAT_BUCKET } from "@/lib/producer-beat-media";
 import { getProducerBeatBlockers, getProducerProfileBlockers } from "@/lib/producer-release";
 import { getMembershipForUser } from "@/lib/server/membership";
 import { producerProfileUpsertSchema } from "@/lib/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const BUCKET = "producer-beats";
+const BUCKET = PRODUCER_BEAT_BUCKET;
 
 async function signProducerBeatAssets(
   supabase: Awaited<ReturnType<typeof requireRole>>["supabase"],
@@ -16,14 +17,18 @@ async function signProducerBeatAssets(
 ) {
   const audioPath = typeof beat.audio_path === "string" ? beat.audio_path : null;
   const artworkPath = typeof beat.artwork_path === "string" ? beat.artwork_path : null;
-  const [audio, artwork] = await Promise.all([
+  const previewPath = getProducerBeatPreviewPath(beat.metadata);
+  const [audio, preview, artwork] = await Promise.all([
     audioPath ? supabase.storage.from(BUCKET).createSignedUrl(audioPath, 60 * 60) : Promise.resolve({ data: null, error: null }),
+    previewPath ? supabase.storage.from(BUCKET).createSignedUrl(previewPath, 60 * 60) : Promise.resolve({ data: null, error: null }),
     artworkPath ? supabase.storage.from(BUCKET).createSignedUrl(artworkPath, 60 * 60) : Promise.resolve({ data: null, error: null }),
   ]);
 
   return {
     ...beat,
     audio_url: audio.data?.signedUrl ?? null,
+    preview_url: preview.data?.signedUrl ?? null,
+    preview_ready: Boolean(previewPath),
     artwork_url: artwork.data?.signedUrl ?? null,
   };
 }
@@ -56,8 +61,16 @@ export async function GET() {
 
   if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
 
-  const [beatsResult, playlistsResult, settingsResult, billingResult, metricsResult, reviewsResult, servicesResult, collaborationsResult] = await Promise.all([
+  const [beatsResult, creditedBeatsResult, playlistsResult, settingsResult, billingResult, metricsResult, reviewsResult, servicesResult, collaborationsResult, salesResult, earningsResult] = await Promise.all([
     supabase.from("producer_beats").select("*").eq("owner_id", user.id).order("created_at", { ascending: false }),
+    profile
+      ? supabase
+          .from("starter_beats")
+          .select("id, title, producer_name, duration_seconds, bpm, musical_key, genre, mood, tags, status, is_featured, artwork_path, updated_at")
+          .eq("producer_profile_id", profile.id)
+          .eq("source_type", "producer_donated")
+          .order("updated_at", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
     supabase.from("producer_playlists").select("*, producer_playlist_items(*)").eq("owner_id", user.id).order("created_at", { ascending: false }),
     supabase.from("producer_business_settings").select("*").eq("owner_id", user.id).maybeSingle(),
     supabase.from("producer_billing_accounts").select("*").eq("owner_id", user.id).maybeSingle(),
@@ -65,11 +78,24 @@ export async function GET() {
     supabase.from("producer_release_reviews").select("*").eq("producer_owner_id", user.id).order("created_at", { ascending: false }).limit(20),
     supabase.from("producer_services").select("id, service_type, title, description, starting_price_cents, turnaround_days, is_active, created_at, updated_at").eq("owner_id", user.id).order("created_at", { ascending: false }),
     supabase.from("producer_collaboration_requests").select("id, artist_id, title, brief, budget_cents, status, response_note, counter_price_cents, created_at, updated_at, producer_services(title), producer_beats(title)").eq("producer_id", user.id).order("updated_at", { ascending: false }).limit(20),
+    supabase
+      .from("commerce_orders")
+      .select("id, order_number, status, currency, total_cents, platform_fee_cents, seller_earnings_cents, created_at, fulfilled_at, commerce_order_items(id, title, license_name, item_type)")
+      .eq("seller_owner_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("producer_earnings_ledger")
+      .select("id, order_id, status, currency, gross_cents, platform_fee_cents, net_cents, available_at, paid_at, created_at")
+      .eq("producer_owner_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(50),
   ]);
 
   if (beatsResult.error) return NextResponse.json({ error: beatsResult.error.message }, { status: 500 });
+  if (creditedBeatsResult.error) return NextResponse.json({ error: creditedBeatsResult.error.message }, { status: 500 });
   if (playlistsResult.error) return NextResponse.json({ error: playlistsResult.error.message }, { status: 500 });
-  for (const result of [settingsResult, billingResult, metricsResult, reviewsResult, servicesResult, collaborationsResult]) {
+  for (const result of [settingsResult, billingResult, metricsResult, reviewsResult, servicesResult, collaborationsResult, salesResult, earningsResult]) {
     if (result.error && !isMissingRelation(result.error)) return NextResponse.json({ error: result.error.message }, { status: 500 });
   }
 
@@ -83,6 +109,11 @@ export async function GET() {
   return NextResponse.json({
     profile,
     beats: signedBeats,
+    credited_beats: (creditedBeatsResult.data ?? []).map((beat) => ({
+      ...beat,
+      audio_url: `/api/starter-beats/${beat.id}/media?kind=audio`,
+      artwork_url: beat.artwork_path ? `/api/starter-beats/${beat.id}/media?kind=artwork` : null,
+    })),
     playlists: playlistsResult.data ?? [],
     business: settingsResult.data ?? null,
     billing: billingResult.data ?? { plan: "free", stripe_status: "not_connected", payouts_enabled: false, charges_enabled: false, verification: {} },
@@ -92,6 +123,8 @@ export async function GET() {
     reviews: reviewsResult.data ?? [],
     services: servicesResult.data ?? [],
     collaborations: collaborationsResult.data ?? [],
+    sales: salesResult.data ?? [],
+    earnings: earningsResult.data ?? [],
     release_readiness: buildReleaseReadiness(profile, beatsResult.data ?? [], profileBlockers, beatReadiness),
     foundation_ready: !settingsResult.error && !servicesResult.error && !collaborationsResult.error,
   });
@@ -128,6 +161,8 @@ export async function POST(request: Request) {
     instagram_url: parsed.data.instagram_url || null,
     youtube_url: parsed.data.youtube_url || null,
     beatstars_url: parsed.data.beatstars_url || null,
+    airbit_url: parsed.data.airbit_url || null,
+    traktrain_url: parsed.data.traktrain_url || null,
   };
 
   const { data, error } = await supabase

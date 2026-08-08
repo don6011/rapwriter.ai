@@ -6,8 +6,12 @@ import type { Beat } from "@/lib/marketplace";
 import { loadApprovedMarketplaceCatalog } from "@/lib/server/marketplace-catalog";
 import { BrandLogo } from "@/components/BrandLogo";
 import { AdminSignIn } from "./admin-sign-in";
-import { AdminOpsBoard } from "./admin-ops-board";
 import { AdminReviewBoard } from "./admin-review-board";
+import { AdminUserManagement } from "./admin-user-management";
+import { AdminOrderManagement } from "./admin-order-management";
+import { AdminGrowthCampaigns } from "./admin-growth-campaigns";
+import { AdminSupportCenter } from "./admin-support-center";
+import { AdminAiControlCenter } from "./admin-ai-control-center";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -114,12 +118,22 @@ export default async function AdminPage({
     );
   }
 
-  if (!adminSession.isAdmin) {
+  if (adminSession.isRestricted) {
     return (
       <Gate
-        title="Admin access not enabled"
-        body="This account is signed in, but it has not been granted the admin role."
-        detail={`Signed in as ${adminSession.user.email ?? "unknown account"}. An existing admin must grant access in the database.`}
+        title="Account access restricted"
+        body={adminSession.restriction?.reason ?? "This account cannot open the Control Room. Contact a RapWriter owner for assistance."}
+        detail={adminSession.restriction?.expires_at ? `Restriction ends ${new Date(adminSession.restriction.expires_at).toLocaleString()}.` : "An owner must restore this account."}
+      />
+    );
+  }
+
+  if (!adminSession.isStaff) {
+    return (
+      <Gate
+        title="Control Room access not enabled"
+        body="This account is signed in, but it has not been assigned a moderator or admin role."
+        detail={`Signed in as ${adminSession.user.email ?? "unknown account"}. An admin can assign moderator access from Account Operations.`}
       />
     );
   }
@@ -143,7 +157,7 @@ export default async function AdminPage({
           <div className="flex items-center gap-3">
             <BrandLogo compact />
             <div>
-              <div className="label-hw hidden text-gold sm:block">RapWriter Admin</div>
+              <div className="label-hw hidden text-gold sm:block">{adminSession.isAdmin ? "RapWriter Admin" : "RapWriter Moderator"}</div>
               <h1 className="whitespace-nowrap text-lg font-semibold sm:text-xl">Control Room</h1>
             </div>
           </div>
@@ -181,7 +195,14 @@ export default async function AdminPage({
 
         <AdminReviewBoard />
 
-        {beats.length > 0 && <AdminOpsBoard beats={beats} />}
+        <AdminSupportCenter />
+        <AdminAiControlCenter />
+
+        {adminSession.isAdmin && <AdminOrderManagement />}
+
+        {adminSession.isAdmin && <AdminGrowthCampaigns />}
+
+        {adminSession.isAdmin && <AdminUserManagement />}
 
         <details className="panel mt-5 rounded-2xl">
           <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4">
@@ -190,7 +211,9 @@ export default async function AdminPage({
             <span className="max-w-[55%] truncate text-xs text-muted-foreground">{userEmail}</span>
           </summary>
           <div className="border-t border-border px-4 py-3 text-xs leading-5 text-muted-foreground">
-            Admin authority is stored in Supabase and checked again on every protected request.
+            {adminSession.isAdmin
+              ? "Admin authority is stored in Supabase and checked again on every protected request."
+              : "Moderator access is limited to reviewing producer profiles and beat submissions. User and inventory controls remain owner-only."}
           </div>
         </details>
 

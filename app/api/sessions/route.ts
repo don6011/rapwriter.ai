@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api/auth";
 import { parseJson } from "@/lib/api/json";
 import { sessionUpsertSchema } from "@/lib/schemas";
+import { updateStudioDnaFromCompletedSession } from "@/lib/server/studio-dna";
 
 function sectionsFromRows(rows: Array<{ title: string; content: string }>) {
   return rows.reduce<Record<string, string>>((acc, row) => {
@@ -46,7 +47,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { supabase, response } = await requireUser();
+  const { supabase, user, response } = await requireUser();
   if (response) return response;
 
   const parsed = await parseJson(request, sessionUpsertSchema);
@@ -83,6 +84,18 @@ export async function POST(request: Request) {
       { error: "A newer version of this session is already saved.", code: "SESSION_CONFLICT", session: result.session ?? null },
       { status: 409 },
     );
+  }
+
+  const savedSessionId = typeof result?.session?.id === "string" ? result.session.id : null;
+  if (savedSessionId && parsed.data.completion_pct >= 75) {
+    await updateStudioDnaFromCompletedSession({
+      supabase,
+      ownerId: user.id,
+      sessionId: savedSessionId,
+      sections: parsed.data.section_content,
+      studioDna: parsed.data.studio_dna ?? {},
+      beat: parsed.data.beat_snapshot ?? {},
+    }).catch(() => undefined);
   }
 
   return NextResponse.json({ session: result?.session ?? null });

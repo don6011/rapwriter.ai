@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { getAnyCatalogProduct } from "@/lib/product-catalog";
+import { fulfillCommerceOrder, transitionCommerceOrder, type CommerceOrderStatus } from "@/lib/server/commerce";
 import { createStripeClient, syncStripeSubscription } from "@/lib/server/stripe-billing";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { syncConnectedAccount } from "@/lib/server/stripe-connect";
 
 export async function POST(request: Request) {
   const stripe = createStripeClient();
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
         if (session.mode === "subscription" && session.subscription) {
           const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
           const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          await syncStripeSubscription(stripe, subscription);
+          await syncStripeSubscription(subscription);
         } else if (session.payment_status === "paid") {
           await fulfillOneTimeCheckout(session);
         }
@@ -49,8 +50,57 @@ export async function POST(request: Request) {
       case "customer.subscription.deleted": {
         const subscription = event.data.object;
         ownerId = subscription.metadata.user_id ?? null;
-        const synced = await syncStripeSubscription(stripe, subscription);
+        const synced = await syncStripeSubscription(subscription);
         ownerId = typeof synced.owner_id === "string" ? synced.owner_id : ownerId;
+        break;
+      }
+      case "account.updated": {
+        const account = event.data.object;
+        const synced = await syncConnectedAccount(account);
+        ownerId = typeof synced.owner_id === "string" ? synced.owner_id : null;
+        break;
+      }
+      case "checkout.session.expired": {
+        const session = event.data.object;
+        const orderId = session.metadata?.order_id;
+        ownerId = session.metadata?.user_id ?? null;
+        if (orderId) {
+          await transitionCommerceOrder({
+            orderId,
+            status: "canceled",
+            reason: "Stripe checkout session expired before payment.",
+            details: { providerEventId: event.id },
+          });
+        }
+        break;
+      }
+      case "charge.refunded": {
+        const charge = event.data.object;
+        const paymentId = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+        if (paymentId) {
+          const fullyRefunded = charge.amount_refunded >= charge.amount;
+          ownerId = await transitionProviderPayment(
+            paymentId,
+            fullyRefunded ? "refunded" : "refund_pending",
+            fullyRefunded ? "Stripe confirmed the full payment refund." : "Stripe reported a partial refund requiring review.",
+            event.id,
+          );
+        }
+        break;
+      }
+      case "charge.dispute.created": {
+        const dispute = event.data.object;
+        const paymentId = typeof dispute.payment_intent === "string" ? dispute.payment_intent : dispute.payment_intent?.id;
+        if (paymentId) ownerId = await transitionProviderPayment(paymentId, "disputed", "Stripe opened a payment dispute.", event.id);
+        break;
+      }
+      case "charge.dispute.closed": {
+        const dispute = event.data.object;
+        const paymentId = typeof dispute.payment_intent === "string" ? dispute.payment_intent : dispute.payment_intent?.id;
+        if (paymentId) {
+          const nextStatus = dispute.status === "won" || dispute.status === "warning_closed" ? "fulfilled" : "refunded";
+          ownerId = await transitionProviderPayment(paymentId, nextStatus, `Stripe closed the dispute as ${dispute.status}.`, event.id);
+        }
         break;
       }
       default:
@@ -121,77 +171,46 @@ export async function POST(request: Request) {
 
   async function fulfillOneTimeCheckout(session: Stripe.Checkout.Session) {
     const metadata = session.metadata ?? {};
-    if (metadata.checkout_kind === "beat_license") {
-      const userId = metadata.user_id;
-      const beatId = metadata.beat_id;
-      const license = metadata.license;
-      const title = metadata.beat_title;
-      if (!userId || !beatId || !license || !title) throw new Error("Missing beat license metadata");
-
-      let snapshot: Record<string, unknown> = {};
-      try {
-        snapshot = metadata.beat_snapshot ? JSON.parse(metadata.beat_snapshot) as Record<string, unknown> : {};
-      } catch {
-        snapshot = {};
-      }
-      const priceCents = session.amount_total ?? Number(metadata.price_cents || 0);
-      const { error } = await admin.from("beat_locker").upsert(
-        {
-          owner_id: userId,
-          beat_id: beatId,
-          title,
-          producer: metadata.producer || null,
-          bpm: numberOrNull(snapshot.bpm),
-          musical_key: stringOrNull(snapshot.key),
-          mood: stringOrNull(snapshot.mood),
-          license,
-          price: Math.round(priceCents / 100),
-          stripe_checkout_session_id: session.id,
-          beat_snapshot: {
-            ...snapshot,
-            purchase: {
-              currency: session.currency ?? "usd",
-              priceCents,
-              stripePaymentIntentId: typeof session.payment_intent === "string" ? session.payment_intent : null,
-            },
-          },
-        },
-        { onConflict: "owner_id,beat_id,license" },
-      );
-      if (error) throw new Error(error.message);
-      return;
+    const orderId = metadata.order_id ?? session.client_reference_id;
+    const paymentId = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
+    if (!orderId || !paymentId || session.amount_total === null || !session.currency) {
+      throw new Error("Checkout is missing its RapWriter order reference");
     }
-
-    if (metadata.checkout_kind !== "product_entitlement") return;
-    const userId = metadata.user_id;
-    const productId = metadata.product_id;
-    if (!userId || !productId) throw new Error("Missing entitlement metadata");
-    const product = getAnyCatalogProduct(productId);
-    if (!product) throw new Error("Unknown marketplace product");
-
-    const { error } = await admin.from("product_entitlements").upsert(
-      {
-        owner_id: userId,
-        product_id: product.id,
-        product_type: product.type,
-        title: product.title,
-        price_cents: product.priceCents,
-        currency: session.currency ?? "usd",
-        source: "stripe",
-        stripe_checkout_session_id: session.id,
-        stripe_payment_intent_id: typeof session.payment_intent === "string" ? session.payment_intent : null,
-        metadata: { detail: product.detail, price: product.price, tags: product.tags },
-      },
-      { onConflict: "owner_id,product_id" },
-    );
-    if (error) throw new Error(error.message);
+    await fulfillCommerceOrder({
+      orderId,
+      providerCheckoutId: session.id,
+      providerPaymentId: paymentId,
+      amountCents: session.amount_total,
+      currency: session.currency,
+    });
   }
-}
 
-function numberOrNull(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : null;
-}
+  async function transitionProviderPayment(paymentId: string, requestedStatus: CommerceOrderStatus, reason: string, providerEventId: string) {
+    const { data: order, error } = await admin
+      .from("commerce_orders")
+      .select("id, buyer_id, status")
+      .eq("provider", "stripe")
+      .eq("provider_payment_id", paymentId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!order) return null;
+    if (order.status === requestedStatus) return order.buyer_id as string | null;
 
-function stringOrNull(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+    if (requestedStatus === "refund_pending" && order.status === "refund_pending") return order.buyer_id as string | null;
+    if (requestedStatus === "refunded" && ["paid", "fulfilled"].includes(order.status)) {
+      await transitionCommerceOrder({
+        orderId: order.id,
+        status: "refund_pending",
+        reason: "Stripe reported a refund in progress.",
+        details: { providerEventId },
+      });
+    }
+    await transitionCommerceOrder({
+      orderId: order.id,
+      status: requestedStatus,
+      reason,
+      details: { providerEventId, providerPaymentId: paymentId },
+    });
+    return order.buyer_id as string | null;
+  }
 }

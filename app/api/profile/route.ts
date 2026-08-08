@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api/auth";
 import { parseJson } from "@/lib/api/json";
-import { accountRoleSchema } from "@/lib/schemas";
+import { profilePatchSchema } from "@/lib/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
@@ -36,46 +36,52 @@ export async function PATCH(request: Request) {
   const { supabase, user, response } = await requireUser();
   if (response) return response;
 
-  const parsed = await parseJson(request, accountRoleSchema);
+  const parsed = await parseJson(request, profilePatchSchema);
   if (parsed.response) return parsed.response;
 
-  const admin = createAdminClient();
-  const roles = parsed.data.account_type === "artist"
-    ? ["artist"]
-    : parsed.data.account_type === "producer"
-      ? ["producer"]
-      : ["artist", "producer"];
-  const rolesToRemove = ["artist", "producer"].filter((role) => !roles.includes(role));
+  if (parsed.data.account_type) {
+    const admin = createAdminClient();
+    const roles = parsed.data.account_type === "artist"
+      ? ["artist"]
+      : parsed.data.account_type === "producer"
+        ? ["producer"]
+        : ["artist", "producer"];
+    const rolesToRemove = ["artist", "producer"].filter((role) => !roles.includes(role));
 
-  if (rolesToRemove.length) {
-    const { error: roleRemovalError } = await admin
-      .from("user_roles")
-      .delete()
-      .eq("user_id", user.id)
-      .in("role", rolesToRemove);
-    if (roleRemovalError) return NextResponse.json({ error: roleRemovalError.message }, { status: 500 });
+    if (rolesToRemove.length) {
+      const { error: roleRemovalError } = await admin
+        .from("user_roles")
+        .delete()
+        .eq("user_id", user.id)
+        .in("role", rolesToRemove);
+      if (roleRemovalError) return NextResponse.json({ error: roleRemovalError.message }, { status: 500 });
+    }
+
+    const { error: roleError } = await admin.from("user_roles").upsert(
+      roles.map((role) => ({ user_id: user.id, role, granted_by: user.id })),
+      { onConflict: "user_id,role" },
+    );
+
+    if (roleError) return NextResponse.json({ error: roleError.message }, { status: 500 });
+
+    if (roles.includes("artist")) {
+      const { error: artistProfileError } = await admin
+        .from("artist_profiles")
+        .upsert({ owner_id: user.id }, { onConflict: "owner_id" });
+      if (artistProfileError) return NextResponse.json({ error: artistProfileError.message }, { status: 500 });
+    }
   }
 
-  const { error: roleError } = await admin.from("user_roles").upsert(
-    roles.map((role) => ({ user_id: user.id, role, granted_by: user.id })),
-    { onConflict: "user_id,role" },
-  );
-
-  if (roleError) return NextResponse.json({ error: roleError.message }, { status: 500 });
-
-  if (roles.includes("artist")) {
-    const { error: artistProfileError } = await admin
-      .from("artist_profiles")
-      .upsert({ owner_id: user.id }, { onConflict: "owner_id" });
-    if (artistProfileError) return NextResponse.json({ error: artistProfileError.message }, { status: 500 });
-  }
-
+  const updates = {
+    ...(parsed.data.account_type
+      ? { account_type: parsed.data.account_type, role_onboarding_completed: true }
+      : {}),
+    ...(parsed.data.display_name ? { display_name: parsed.data.display_name } : {}),
+    ...(parsed.data.artist_name ? { artist_name: parsed.data.artist_name } : {}),
+  };
   const { data: profile, error } = await supabase
     .from("profiles")
-    .update({
-      account_type: parsed.data.account_type,
-      role_onboarding_completed: true,
-    })
+    .update(updates)
     .eq("id", user.id)
     .select("*")
     .single();

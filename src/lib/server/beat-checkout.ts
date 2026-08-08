@@ -5,10 +5,14 @@ type ProducerTier = { license?: unknown; price?: unknown };
 
 export type ResolvedBeatCheckout = {
   beatId: string;
+  producerBeatId: string;
+  producerOwnerId: string;
+  producerProfileId: string;
   title: string;
   producer: string;
   license: string;
   priceCents: number;
+  licenseTerms: Record<string, unknown>;
   snapshot: Record<string, unknown>;
 };
 
@@ -19,7 +23,7 @@ export async function resolveBeatCheckout(beatId: string, requestedLicense: stri
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("producer_beats")
-    .select("id, title, bpm, musical_key, genre, mood, region, tags, duration_seconds, license_tiers, producer_profiles(display_name, status, is_public)")
+    .select("id, owner_id, producer_profile_id, title, bpm, musical_key, genre, mood, region, tags, duration_seconds, license_tiers, producer_profiles(display_name, status, is_public)")
     .eq("id", producerBeatId)
     .eq("status", "approved")
     .maybeSingle();
@@ -34,13 +38,32 @@ export async function resolveBeatCheckout(beatId: string, requestedLicense: stri
 
   const tier = findTier((data.license_tiers ?? []) as ProducerTier[], requestedLicense);
   if (!tier) return null;
+  const { data: business, error: businessError } = await admin
+    .from("producer_business_settings")
+    .select("default_license_terms, automatic_delivery")
+    .eq("producer_profile_id", data.producer_profile_id)
+    .maybeSingle();
+  if (businessError) throw new Error(businessError.message);
+
+  const licenseTerms = {
+    license: tier.license,
+    producer: producerProfile.display_name ?? "RapWriter Producer",
+    beatTitle: data.title,
+    defaultTerms: business?.default_license_terms ?? null,
+    automaticDelivery: business?.automatic_delivery ?? true,
+    capturedAt: new Date().toISOString(),
+  };
 
   return {
     beatId: `producer-beat-${data.id}`,
+    producerBeatId: data.id,
+    producerOwnerId: data.owner_id,
+    producerProfileId: data.producer_profile_id,
     title: data.title,
     producer: producerProfile.display_name ?? "RapWriter Producer",
     license: tier.license,
     priceCents: tier.price * 100,
+    licenseTerms,
     snapshot: {
       id: `producer-beat-${data.id}`,
       producerBeatId: data.id,

@@ -11,13 +11,13 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   }
 
+  const { user, response } = await requireUser();
+  if (response || !user) return response;
+
   const parsed = deleteSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "Type DELETE to confirm permanent account deletion." }, { status: 400 });
   }
-
-  const { user, response } = await requireUser();
-  if (response || !user) return response;
 
   let admin: ReturnType<typeof createAdminClient>;
   try {
@@ -33,6 +33,14 @@ export async function DELETE(request: Request) {
     admin.from("rough_takes").select("storage_bucket, storage_path").eq("owner_id", user.id),
     admin.from("beat_locker").select("beat_snapshot").eq("owner_id", user.id).eq("license", "Private Import"),
   ]);
+  const { data: collaborationRequests } = await admin
+    .from("producer_collaboration_requests")
+    .select("id")
+    .or(`artist_id.eq.${user.id},producer_id.eq.${user.id}`);
+  const collaborationIds = (collaborationRequests ?? []).map((item) => item.id);
+  const { data: collaborationDeliverables } = collaborationIds.length
+    ? await admin.from("producer_collaboration_deliverables").select("storage_bucket, storage_path").in("request_id", collaborationIds)
+    : { data: [] };
 
   if (ownAdminRole && (adminCount ?? 0) <= 1) {
     return NextResponse.json({ error: "Grant another admin before deleting the final admin account." }, { status: 409 });
@@ -54,6 +62,11 @@ export async function DELETE(request: Request) {
     const path = typeof snapshot.audioPath === "string" ? snapshot.audioPath : null;
     if (!path || !path.startsWith(`${user.id}/`)) continue;
     storageGroups.set("artist-beats", [...(storageGroups.get("artist-beats") ?? []), path]);
+  }
+  for (const deliverable of collaborationDeliverables ?? []) {
+    if (!deliverable.storage_path) continue;
+    const bucket = deliverable.storage_bucket || "collaboration-files";
+    storageGroups.set(bucket, [...(storageGroups.get(bucket) ?? []), deliverable.storage_path]);
   }
 
   for (const [bucket, paths] of storageGroups) {

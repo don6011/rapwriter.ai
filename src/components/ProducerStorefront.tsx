@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   AudioWaveform,
@@ -10,7 +11,6 @@ import {
   ChevronRight,
   ExternalLink,
   Globe2,
-  Heart,
   Handshake,
   Home,
   Instagram,
@@ -20,7 +20,6 @@ import {
   Share2,
   ShoppingCart,
   UserCircle,
-  Users,
   Youtube,
   X,
 } from "lucide-react";
@@ -28,6 +27,7 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { setPendingBeat, type Beat, type EmotionalTag, type License } from "@/lib/marketplace";
 import { cn } from "@/lib/utils";
 import { membershipAccessCopy, membershipAccessNotice } from "@/lib/client/membership-access";
+import { refreshActivityInbox } from "@/lib/client/activity-events";
 
 type StorefrontBeat = {
   id: string;
@@ -47,6 +47,7 @@ type StorefrontBeat = {
   artworkUrl: string | null;
   licenseTiers: Array<{ license: string; price: number }>;
   featured: boolean;
+  included: boolean;
 };
 
 type StorefrontPayload = {
@@ -65,7 +66,7 @@ type StorefrontPayload = {
     verified: boolean;
     avatarUrl: string | null;
     bannerUrl: string | null;
-    social: Record<"website" | "instagram" | "youtube" | "beatstars", string | null>;
+    social: Record<"website" | "instagram" | "youtube" | "beatstars" | "airbit" | "traktrain", string | null>;
   };
   beats: StorefrontBeat[];
   collections: Array<{ id: string; title: string; description: string | null; beatIds: string[] }>;
@@ -75,6 +76,28 @@ type StorefrontPayload = {
   following: boolean;
   signedIn: boolean;
   ownerPreview: boolean;
+};
+
+type ArtistProjectOption = {
+  id: string;
+  title: string;
+};
+
+type ArtistSongOption = {
+  id: string;
+  title: string;
+  project_id: string | null;
+};
+
+type WorkDraft = {
+  serviceId: string;
+  beatId: string;
+  projectId: string;
+  songId: string;
+  deadline: string;
+  title: string;
+  brief: string;
+  budget: string;
 };
 
 export function ProducerStorefront({ handle }: { handle: string }) {
@@ -90,8 +113,27 @@ export function ProducerStorefront({ handle }: { handle: string }) {
   const [workBusy, setWorkBusy] = useState(false);
   const [workComplete, setWorkComplete] = useState(false);
   const [workError, setWorkError] = useState<string | null>(null);
-  const [workDraft, setWorkDraft] = useState({ serviceId: "", beatId: "", title: "", brief: "", budget: "" });
+  const [workRequestId, setWorkRequestId] = useState<string | null>(null);
+  const [workContextLoading, setWorkContextLoading] = useState(false);
+  const [workContextLoaded, setWorkContextLoaded] = useState(false);
+  const [artistProjects, setArtistProjects] = useState<ArtistProjectOption[]>([]);
+  const [artistSongs, setArtistSongs] = useState<ArtistSongOption[]>([]);
+  const [workDraft, setWorkDraft] = useState<WorkDraft>({
+    serviceId: "",
+    beatId: "",
+    projectId: "",
+    songId: "",
+    deadline: "",
+    title: "",
+    brief: "",
+    budget: "",
+  });
+  const [returnToProducerHq, setReturnToProducerHq] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    setReturnToProducerHq(new URLSearchParams(window.location.search).get("from") === "producer-hq");
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -120,8 +162,54 @@ export function ProducerStorefront({ handle }: { handle: string }) {
 
   useEffect(() => () => audioRef.current?.pause(), []);
 
+  useEffect(() => {
+    if (!workOpen || workContextLoaded || workContextLoading) return;
+    let active = true;
+    setWorkContextLoading(true);
+    Promise.all([
+      fetch("/api/projects", { cache: "no-store", credentials: "same-origin" }),
+      fetch("/api/songs", { cache: "no-store", credentials: "same-origin" }),
+    ])
+      .then(async ([projectsResponse, songsResponse]) => {
+        if (projectsResponse.status === 401 || songsResponse.status === 401) return { projects: [], songs: [] };
+        const [projectsData, songsData] = await Promise.all([projectsResponse.json(), songsResponse.json()]);
+        if (!projectsResponse.ok) throw new Error(projectsData.error || "Could not load your projects.");
+        if (!songsResponse.ok) throw new Error(songsData.error || "Could not load your songs.");
+        return {
+          projects: (projectsData.projects ?? []) as ArtistProjectOption[],
+          songs: (songsData.songs ?? []) as ArtistSongOption[],
+        };
+      })
+      .then(({ projects, songs }) => {
+        if (!active) return;
+        setArtistProjects(projects);
+        setArtistSongs(songs);
+        const recentSong = songs[0];
+        setWorkDraft((current) => ({
+          ...current,
+          projectId: current.projectId || recentSong?.project_id || projects[0]?.id || "",
+          songId: current.songId || recentSong?.id || "",
+        }));
+      })
+      .catch((reason) => {
+        if (active) setWorkError(reason instanceof Error ? reason.message : "Could not load your project context.");
+      })
+      .finally(() => {
+        if (active) {
+          setWorkContextLoading(false);
+          setWorkContextLoaded(true);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [workContextLoaded, workContextLoading, workOpen]);
+
   const featuredBeat = useMemo(() => store?.beats.find((beat) => beat.featured) ?? store?.beats[0] ?? null, [store]);
   const location = store ? [store.profile.city, store.profile.state, store.profile.country].filter(Boolean).join(", ") : "";
+  const ownerContext = returnToProducerHq || Boolean(store?.ownerPreview);
+  const backHref = ownerContext ? "/producer" : "/?view=market";
+  const backLabel = ownerContext ? "Producer HQ" : "Studio Store";
 
   const togglePreview = (beat: StorefrontBeat) => {
     if (!beat.audioUrl) {
@@ -148,7 +236,9 @@ export function ProducerStorefront({ handle }: { handle: string }) {
       setProgress(0);
     });
     void audio.play()
-      .then(() => trackStorefrontBeatPlay(beat.marketplaceId))
+      .then(() => {
+        if (!beat.included) trackStorefrontBeatPlay(beat.marketplaceId);
+      })
       .catch(() => {
         setPlayingId(null);
         setNotice("Tap play again to start the preview.");
@@ -173,9 +263,13 @@ export function ProducerStorefront({ handle }: { handle: string }) {
       }
       if (!response.ok) throw new Error(data.error || "Could not update this producer.");
       setStore((current) => current ? { ...current, following: data.following, followerCount: data.followerCount } : current);
-      setNotice(data.following ? `${store.profile.displayName} added to your circle.` : "Producer removed from your circle.");
+      const message = data.following ? `${store.profile.displayName} added to your circle.` : "Producer removed from your circle.";
+      setNotice(message);
+      toast.success(message);
     } catch (reason) {
-      setNotice(reason instanceof Error ? reason.message : "Could not update this producer.");
+      const message = reason instanceof Error ? reason.message : "Could not update this producer.";
+      setNotice(message);
+      toast.error(message);
     } finally {
       setFollowBusy(false);
     }
@@ -188,7 +282,9 @@ export function ProducerStorefront({ handle }: { handle: string }) {
     try {
       if (usedNativeShare) await navigator.share(shareData);
       else await navigator.clipboard.writeText(window.location.href);
-      setNotice(usedNativeShare ? "Storefront shared." : "Storefront link copied.");
+      const message = usedNativeShare ? "Storefront shared." : "Storefront link copied.";
+      setNotice(message);
+      toast.success(message);
     } catch {
       // Closing the native share sheet should leave the page unchanged.
     }
@@ -230,12 +326,16 @@ export function ProducerStorefront({ handle }: { handle: string }) {
     setWorkDraft({
       serviceId: store.services[0]?.id ?? "",
       beatId,
+      projectId: artistSongs[0]?.project_id || artistProjects[0]?.id || "",
+      songId: artistSongs[0]?.id || "",
+      deadline: "",
       title: beatId ? `Build a record with ${store.profile.displayName}` : `Work with ${store.profile.displayName}`,
       brief: "",
       budget: "",
     });
     setWorkError(null);
     setWorkComplete(false);
+    setWorkRequestId(null);
     setWorkOpen(true);
   };
 
@@ -252,10 +352,13 @@ export function ProducerStorefront({ handle }: { handle: string }) {
         body: JSON.stringify({
           producer_profile_id: store.profile.id,
           producer_service_id: workDraft.serviceId || null,
+          project_id: workDraft.projectId || null,
+          song_id: workDraft.songId || null,
           beat_id: workDraft.beatId || null,
           title: workDraft.title,
           brief: workDraft.brief,
           budget_cents: workDraft.budget ? Math.round(Number(workDraft.budget) * 100) : null,
+          requested_deadline: workDraft.deadline || null,
         }),
       });
       const data = await response.json();
@@ -263,22 +366,27 @@ export function ProducerStorefront({ handle }: { handle: string }) {
       const access = membershipAccessNotice(data, response.status);
       if (access) throw new Error(membershipAccessCopy(access));
       if (!response.ok) throw new Error(data.error || "Could not send your request.");
+      setWorkRequestId(typeof data.request?.id === "string" ? data.request.id : null);
       setWorkComplete(true);
+      refreshActivityInbox();
+      toast.success("Request sent", { description: `${store.profile.displayName} will see it in Producer HQ.` });
     } catch (reason) {
-      setWorkError(reason instanceof Error ? reason.message : "Could not send your request.");
+      const message = reason instanceof Error ? reason.message : "Could not send your request.";
+      setWorkError(message);
+      toast.error(message);
     } finally {
       setWorkBusy(false);
     }
   };
 
-  if (loading) return <StorefrontState title="Opening storefront" body="Loading the producer catalog..." />;
-  if (error || !store) return <StorefrontState title="Storefront unavailable" body={error ?? "This producer is not public yet."} />;
+  if (loading) return <StorefrontState title="Opening storefront" body="Loading the producer catalog..." backHref={backHref} backLabel={backLabel} />;
+  if (error || !store) return <StorefrontState title="Storefront unavailable" body={error ?? "This producer is not public yet."} backHref={backHref} backLabel={backLabel} />;
 
   return (
     <main className="min-h-svh bg-[#060607] text-white">
       <div className="mx-auto min-h-svh w-full max-w-[430px] overflow-hidden border-x border-white/8 bg-[#09090a] shadow-[0_0_80px_rgba(0,0,0,0.75)]">
         <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-white/8 bg-black/88 px-4 backdrop-blur-xl">
-          <Link href="/?view=market" className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/[0.03] text-white/75" aria-label="Back to Studio Store">
+          <Link href={backHref} className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/[0.03] text-white/75" aria-label={`Back to ${backLabel}`}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <BrandLogo className="scale-90" />
@@ -303,7 +411,11 @@ export function ProducerStorefront({ handle }: { handle: string }) {
           <div className="relative flex min-h-[330px] flex-col justify-end px-5 pb-6 pt-20">
             <div className="flex items-end gap-4">
               <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-2xl border border-gold/35 bg-black/65 text-xl font-semibold text-gold shadow-[0_16px_45px_rgba(0,0,0,0.55)]">
-                {store.profile.avatarUrl ? <img src={store.profile.avatarUrl} alt="" className="h-full w-full object-cover" /> : initials(store.profile.displayName)}
+                <img
+                  src={store.profile.avatarUrl || "/brand/rapwriter-mark.webp"}
+                  alt=""
+                  className={store.profile.avatarUrl ? "h-full w-full object-cover" : "h-full w-full object-contain p-3"}
+                />
               </div>
               <div className="min-w-0 flex-1 pb-1">
                 <div className="flex items-center gap-2">
@@ -322,14 +434,21 @@ export function ProducerStorefront({ handle }: { handle: string }) {
                 <span key={tag} className="rounded-full border border-white/12 bg-black/35 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/68">{tag}</span>
               ))}
             </div>
-            <div className="mt-5 grid grid-cols-2 gap-2">
-              <button type="button" onClick={followProducer} disabled={followBusy} className={cn("min-h-12 rounded-xl px-4 text-sm font-semibold", store.following ? "border border-gold/30 bg-gold/10 text-gold" : "gold-seal text-black", followBusy && "opacity-60")}>
-                {followBusy ? "Updating..." : store.following ? "Following" : "Follow Producer"}
-              </button>
-              <button type="button" onClick={() => openWorkRequest()} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-gold/35 bg-gold/10 px-4 text-sm font-semibold text-gold">
-                <Handshake className="h-4 w-4" /> Work Together
-              </button>
-            </div>
+            {ownerContext ? (
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <Link href="/producer?view=setup" className="flex min-h-12 items-center justify-center rounded-xl border border-gold/35 bg-gold/10 px-4 text-sm font-semibold text-gold">Edit profile</Link>
+                <Link href="/producer?view=catalog" className="gold-seal flex min-h-12 items-center justify-center rounded-xl px-4 text-sm font-semibold text-black">Manage catalog</Link>
+              </div>
+            ) : (
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <button type="button" onClick={followProducer} disabled={followBusy} className={cn("min-h-12 rounded-xl px-4 text-sm font-semibold", store.following ? "border border-gold/30 bg-gold/10 text-gold" : "gold-seal text-black", followBusy && "opacity-60")}>
+                  {followBusy ? "Updating..." : store.following ? "Following" : "Follow Producer"}
+                </button>
+                <button type="button" onClick={() => openWorkRequest()} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-gold/35 bg-gold/10 px-4 text-sm font-semibold text-gold">
+                  <Handshake className="h-4 w-4" /> Work Together
+                </button>
+              </div>
+            )}
           </div>
         </section>
 
@@ -361,13 +480,21 @@ export function ProducerStorefront({ handle }: { handle: string }) {
                   <button type="button" onClick={() => writeToBeat(featuredBeat)} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-gold/30 bg-gold/10 px-3 text-sm font-semibold text-gold">
                     <Music2 className="h-4 w-4" /> Write
                   </button>
-                  <button type="button" onClick={() => licenseBeat(featuredBeat)} disabled={Boolean(checkoutBeatId)} className="gold-seal flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-black disabled:opacity-60">
-                    <ShoppingCart className="h-4 w-4" /> {checkoutBeatId === featuredBeat.id ? "Opening..." : `License $${featuredBeat.licenseTiers[0]?.price ?? 0}`}
-                  </button>
+                  {featuredBeat.included ? (
+                    <div className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-emerald-300/25 bg-emerald-400/10 px-3 text-sm font-semibold text-emerald-200">
+                      <BadgeCheck className="h-4 w-4" /> Included in RapWriter
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => licenseBeat(featuredBeat)} disabled={Boolean(checkoutBeatId)} className="gold-seal flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-black disabled:opacity-60">
+                      <ShoppingCart className="h-4 w-4" /> {checkoutBeatId === featuredBeat.id ? "Opening..." : `License $${featuredBeat.licenseTiers[0]?.price ?? 0}`}
+                    </button>
+                  )}
                 </div>
-                <button type="button" onClick={() => openWorkRequest(featuredBeat.id)} className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-white/72">
-                  <Handshake className="h-4 w-4 text-gold" /> Request a session with this beat
-                </button>
+                {!featuredBeat.included && (
+                  <button type="button" onClick={() => openWorkRequest(featuredBeat.id)} className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-white/72">
+                    <Handshake className="h-4 w-4 text-gold" /> Request a session with this beat
+                  </button>
+                )}
               </div>
             </div>
           </section>
@@ -393,9 +520,15 @@ export function ProducerStorefront({ handle }: { handle: string }) {
                   <button type="button" onClick={() => writeToBeat(beat)} className="flex min-h-10 items-center justify-between rounded-xl border border-white/10 bg-black/22 px-3 text-xs font-semibold text-white/72">
                     Write to this beat <ChevronRight className="h-4 w-4 text-gold" />
                   </button>
-                  <button type="button" onClick={() => licenseBeat(beat)} disabled={Boolean(checkoutBeatId)} className="grid min-h-10 min-w-11 place-items-center rounded-xl border border-gold/35 bg-gold/10 text-gold disabled:opacity-60" aria-label={`License ${beat.title}`} title={`License from $${beat.licenseTiers[0]?.price ?? 0}`}>
-                    <ShoppingCart className="h-4 w-4" />
-                  </button>
+                  {beat.included ? (
+                    <span className="grid min-h-10 min-w-11 place-items-center rounded-xl border border-emerald-300/25 bg-emerald-400/10 text-emerald-200" aria-label={`${beat.title} is included with RapWriter`} title="Included with RapWriter">
+                      <BadgeCheck className="h-4 w-4" />
+                    </span>
+                  ) : (
+                    <button type="button" onClick={() => licenseBeat(beat)} disabled={Boolean(checkoutBeatId)} className="grid min-h-10 min-w-11 place-items-center rounded-xl border border-gold/35 bg-gold/10 text-gold disabled:opacity-60" aria-label={`License ${beat.title}`} title={`License from $${beat.licenseTiers[0]?.price ?? 0}`}>
+                      <ShoppingCart className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -429,23 +562,34 @@ export function ProducerStorefront({ handle }: { handle: string }) {
           <WorkRequestSheet
             producer={store.profile.displayName}
             services={store.services}
-            beats={store.beats}
+            beats={store.beats.filter((beat) => !beat.included)}
+            projects={artistProjects}
+            songs={artistSongs}
             draft={workDraft}
             setDraft={setWorkDraft}
             busy={workBusy}
+            contextLoading={workContextLoading}
             complete={workComplete}
+            requestId={workRequestId}
             error={workError}
             onClose={() => setWorkOpen(false)}
             onSubmit={submitWorkRequest}
           />
         )}
 
-        <nav className="sticky bottom-0 z-40 grid h-20 grid-cols-4 border-t border-white/8 bg-black/94 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
-          <DockLink href="/" label="Studio" icon={Home} />
-          <DockLink href="/?view=locker" label="Locker" icon={Briefcase} />
-          <DockLink href="/?view=market" label="Market" icon={ShoppingCart} active />
-          <DockLink href="/?view=profile" label="Profile" icon={UserCircle} />
-        </nav>
+        {ownerContext ? (
+          <nav data-testid="producer-hq-dock" aria-label="Producer HQ" className="sticky bottom-0 z-40 grid h-20 grid-cols-2 border-t border-gold/20 bg-black/94 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
+            <DockLink href="/producer" label="Producer HQ" icon={Home} active />
+            <DockLink href="/producer?view=catalog" label="Manage catalog" icon={Briefcase} />
+          </nav>
+        ) : (
+          <nav data-testid="app-dock" aria-label="RapWriter navigation" className="sticky bottom-0 z-40 grid h-20 grid-cols-4 border-t border-white/8 bg-black/94 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
+            <DockLink href="/" label="Studio" icon={Home} />
+            <DockLink href="/?view=locker" label="Locker" icon={Briefcase} />
+            <DockLink href="/?view=market" label="Market" icon={ShoppingCart} active />
+            <DockLink href="/?view=profile" label="Profile" icon={UserCircle} />
+          </nav>
+        )}
       </div>
     </main>
   );
@@ -455,10 +599,14 @@ function WorkRequestSheet({
   producer,
   services,
   beats,
+  projects,
+  songs,
   draft,
   setDraft,
   busy,
+  contextLoading,
   complete,
+  requestId,
   error,
   onClose,
   onSubmit,
@@ -466,14 +614,23 @@ function WorkRequestSheet({
   producer: string;
   services: StorefrontPayload["services"];
   beats: StorefrontBeat[];
-  draft: { serviceId: string; beatId: string; title: string; brief: string; budget: string };
-  setDraft: Dispatch<SetStateAction<{ serviceId: string; beatId: string; title: string; brief: string; budget: string }>>;
+  projects: ArtistProjectOption[];
+  songs: ArtistSongOption[];
+  draft: WorkDraft;
+  setDraft: Dispatch<SetStateAction<WorkDraft>>;
   busy: boolean;
+  contextLoading: boolean;
   complete: boolean;
+  requestId: string | null;
   error: string | null;
   onClose: () => void;
   onSubmit: (event: FormEvent) => void;
 }) {
+  const availableSongs = draft.projectId
+    ? songs.filter((song) => song.project_id === draft.projectId)
+    : songs;
+  const requestHref = requestId ? `/collaborations?request=${encodeURIComponent(requestId)}` : "/collaborations";
+
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/72 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Work with ${producer}`}>
       <div className="max-h-[88svh] w-full max-w-[430px] overflow-y-auto rounded-t-3xl border border-white/12 bg-[#111113] px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl">
@@ -486,15 +643,56 @@ function WorkRequestSheet({
           <div className="mt-6 rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-5">
             <div className="font-semibold text-emerald-300">Request sent.</div>
             <p className="mt-2 text-sm text-white/65">The private room opens when {producer} accepts.</p>
-            <Link href="/collaborations" className="mt-4 flex min-h-11 items-center justify-center rounded-xl border border-emerald-300/25 px-4 text-sm font-semibold text-emerald-300">View requests</Link>
+            <Link href={requestHref} className="mt-4 flex min-h-11 items-center justify-center rounded-xl border border-emerald-300/25 px-4 text-sm font-semibold text-emerald-300">Track this request</Link>
           </div>
         ) : (
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             {services.length > 0 && <label className="block"><span className="label-hw">Service</span><select value={draft.serviceId} onChange={(event) => setDraft((value) => ({ ...value, serviceId: event.target.value }))} className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/45 px-3 text-sm"><option value="">General collaboration</option>{services.map((service) => <option key={service.id} value={service.id}>{service.title}{service.starting_price_cents != null ? ` - from $${Math.round(service.starting_price_cents / 100)}` : ""}</option>)}</select></label>}
             <label className="block"><span className="label-hw">Beat</span><select value={draft.beatId} onChange={(event) => setDraft((value) => ({ ...value, beatId: event.target.value }))} className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/45 px-3 text-sm"><option value="">No beat selected</option>{beats.map((beat) => <option key={beat.id} value={beat.id}>{beat.title}</option>)}</select></label>
+            <div className="rounded-2xl border border-white/8 bg-black/22 p-3">
+              <div className="label-hw text-gold/75">Your record</div>
+              <p className="mt-1 text-[11px] leading-4 text-muted-foreground">Attach the song so the request stays connected to the work.</p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <label className="block min-w-0">
+                  <span className="text-[9px] uppercase tracking-[0.12em] text-white/42">Project</span>
+                  <select
+                    value={draft.projectId}
+                    disabled={contextLoading}
+                    onChange={(event) => setDraft((value) => ({
+                      ...value,
+                      projectId: event.target.value,
+                      songId: songs.some((song) => song.id === value.songId && song.project_id === event.target.value) ? value.songId : "",
+                    }))}
+                    className="mt-2 min-h-11 w-full rounded-xl border border-white/10 bg-black/45 px-2 text-xs disabled:opacity-55"
+                  >
+                    <option value="">{contextLoading ? "Loading..." : "No project"}</option>
+                    {projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
+                  </select>
+                </label>
+                <label className="block min-w-0">
+                  <span className="text-[9px] uppercase tracking-[0.12em] text-white/42">Song</span>
+                  <select
+                    value={draft.songId}
+                    disabled={contextLoading}
+                    onChange={(event) => {
+                      const song = songs.find((item) => item.id === event.target.value);
+                      setDraft((value) => ({ ...value, songId: event.target.value, projectId: song?.project_id || value.projectId }));
+                    }}
+                    className="mt-2 min-h-11 w-full rounded-xl border border-white/10 bg-black/45 px-2 text-xs disabled:opacity-55"
+                  >
+                    <option value="">{contextLoading ? "Loading..." : "No song"}</option>
+                    {availableSongs.map((song) => <option key={song.id} value={song.id}>{song.title}</option>)}
+                  </select>
+                </label>
+              </div>
+            </div>
             <label className="block"><span className="label-hw">Request title</span><input required minLength={2} maxLength={120} value={draft.title} onChange={(event) => setDraft((value) => ({ ...value, title: event.target.value }))} className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/45 px-3 text-sm outline-none focus:border-gold/45" /></label>
             <label className="block"><span className="label-hw">Creative brief</span><textarea required minLength={20} maxLength={3000} rows={5} value={draft.brief} onChange={(event) => setDraft((value) => ({ ...value, brief: event.target.value }))} placeholder="What are you making, what do you need, and what should the record feel like?" className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-black/45 p-3 text-sm leading-relaxed outline-none focus:border-gold/45" /></label>
-            <label className="block"><span className="label-hw">Budget (optional)</span><input type="number" min="0" step="1" inputMode="numeric" value={draft.budget} onChange={(event) => setDraft((value) => ({ ...value, budget: event.target.value }))} placeholder="No payment is collected now" className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/45 px-3 text-sm outline-none focus:border-gold/45" /></label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block min-w-0"><span className="label-hw">Budget</span><input type="number" min="0" step="1" inputMode="numeric" value={draft.budget} onChange={(event) => setDraft((value) => ({ ...value, budget: event.target.value }))} placeholder="Optional" className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/45 px-3 text-sm outline-none focus:border-gold/45" /></label>
+              <label className="block min-w-0"><span className="label-hw">Target date</span><input type="date" min={new Date().toISOString().slice(0, 10)} value={draft.deadline} onChange={(event) => setDraft((value) => ({ ...value, deadline: event.target.value }))} className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/45 px-3 text-xs text-white outline-none focus:border-gold/45" /></label>
+            </div>
+            <p className="-mt-2 text-[10px] leading-4 text-white/38">No payment is collected now. Terms are confirmed after the producer responds.</p>
             {error && <div className="rounded-xl border border-gold/25 bg-gold/8 px-3 py-2 text-sm text-gold">{error}</div>}
             <button type="submit" disabled={busy} className="gold-seal min-h-12 w-full rounded-xl px-4 text-sm font-semibold text-black disabled:opacity-60">{busy ? "Sending..." : "Send Private Request"}</button>
             {error?.includes("Elite") && <Link href="/?view=profile&membership=elite" className="flex min-h-11 items-center justify-center rounded-xl border border-gold/25 text-sm font-semibold text-gold">View Prep Studio Elite</Link>}
@@ -505,14 +703,14 @@ function WorkRequestSheet({
   );
 }
 
-function StorefrontState({ title, body }: { title: string; body: string }) {
+function StorefrontState({ title, body, backHref, backLabel }: { title: string; body: string; backHref: string; backLabel: string }) {
   return (
     <main className="grid min-h-svh place-items-center bg-[#060607] px-6 text-white">
       <div className="w-full max-w-[390px] text-center">
         <BrandLogo className="justify-center" />
         <h1 className="mt-8 text-2xl font-semibold">{title}</h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{body}</p>
-        <Link href="/?view=market" className="gold-seal mt-7 inline-flex min-h-12 items-center gap-2 rounded-xl px-5 text-sm font-semibold text-black"><ArrowLeft className="h-4 w-4" /> Studio Store</Link>
+        <Link href={backHref} className="gold-seal mt-7 inline-flex min-h-12 items-center gap-2 rounded-xl px-5 text-sm font-semibold text-black"><ArrowLeft className="h-4 w-4" /> {backLabel}</Link>
       </div>
     </main>
   );
@@ -542,6 +740,8 @@ function SocialLinks({ social }: { social: StorefrontPayload["profile"]["social"
     { key: "instagram", label: "Instagram", icon: Instagram, href: social.instagram },
     { key: "youtube", label: "YouTube", icon: Youtube, href: social.youtube },
     { key: "beatstars", label: "BeatStars", icon: ExternalLink, href: social.beatstars },
+    { key: "airbit", label: "Airbit", icon: ExternalLink, href: social.airbit },
+    { key: "traktrain", label: "Traktrain", icon: ExternalLink, href: social.traktrain },
   ].filter((item) => item.href);
   if (!links.length) return null;
   return <section className="border-t border-white/8 px-5 py-7"><SectionHeading eyebrow="Connect" title="Follow the sound" /><div className="mt-4 grid grid-cols-2 gap-2">{links.map(({ key, label, icon: Icon, href }) => <a key={key} href={href ?? undefined} target="_blank" rel="noreferrer" className="flex min-h-12 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-white/70"><Icon className="h-4 w-4 text-gold" />{label}</a>)}</div></section>;
@@ -569,7 +769,7 @@ function toMarketplaceBeat(beat: StorefrontBeat, verified: boolean): Beat & { pr
     region: beat.region,
     tags: beat.tags,
     duration: beat.duration,
-    art: `url('${marketplaceBeatMediaUrl(beat.id, "artwork")}') center/cover`,
+    art: beat.artworkUrl ? `url('${beat.artworkUrl}') center/cover` : "linear-gradient(145deg,#09090a,#3b2a0d)",
     glyph: initials(beat.title),
     prices,
     plays: 0,
@@ -579,12 +779,8 @@ function toMarketplaceBeat(beat: StorefrontBeat, verified: boolean): Beat & { pr
     tracksFinished: 0,
     writingNow: 0,
     emotionalTags,
-    previewUrl: marketplaceBeatMediaUrl(beat.id, "audio"),
+    previewUrl: beat.audioUrl ?? undefined,
   };
-}
-
-function marketplaceBeatMediaUrl(beatId: string, kind: "audio" | "artwork") {
-  return `/api/marketplace/beats/${beatId}/media?kind=${kind}`;
 }
 
 function trackStorefrontBeatPlay(beatId: string) {

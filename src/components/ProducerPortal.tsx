@@ -10,6 +10,7 @@ import {
   BarChart3,
   Building2,
   Check,
+  Copy,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -19,14 +20,13 @@ import {
   FilePenLine,
   FolderPlus,
   Globe2,
-  Headphones,
+  Gift,
   Handshake,
   Loader2,
   LockKeyhole,
   Music,
   ListMusic,
   LayoutDashboard,
-  Play,
   Plus,
   Radio,
   RotateCcw,
@@ -40,6 +40,8 @@ import {
   X,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
+import { ActivityInbox } from "@/components/ActivityInbox";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import {
   MEMBERSHIP_ACCESS_EVENT,
@@ -47,6 +49,7 @@ import {
   notifyMembershipAccess,
   type MembershipAccessNotice,
 } from "@/lib/client/membership-access";
+import { createProducerBeatPreview } from "@/lib/audio-preview-client";
 import { getProducerUploadDraftBlockers } from "@/lib/producer-release";
 import type { MembershipSnapshot, PlanDefinition } from "@/lib/membership";
 import { cn } from "@/lib/utils";
@@ -67,6 +70,8 @@ type ProducerProfileRow = {
   instagram_url: string | null;
   youtube_url: string | null;
   beatstars_url: string | null;
+  airbit_url: string | null;
+  traktrain_url: string | null;
   status: "draft" | "submitted" | "approved" | "rejected";
   verified: boolean;
   is_public: boolean;
@@ -86,8 +91,27 @@ type ProducerBeatRow = {
   status: "draft" | "submitted" | "approved" | "rejected" | "archived";
   admin_notes: string | null;
   audio_url: string | null;
+  preview_url: string | null;
+  preview_ready: boolean;
   artwork_url: string | null;
   created_at: string;
+  updated_at: string;
+};
+
+type CreditedStarterBeatRow = {
+  id: string;
+  title: string;
+  producer_name: string;
+  duration_seconds: number;
+  bpm: number | null;
+  musical_key: string | null;
+  genre: string | null;
+  mood: string | null;
+  tags: string[];
+  status: "draft" | "published" | "archived";
+  is_featured: boolean;
+  audio_url: string;
+  artwork_url: string | null;
   updated_at: string;
 };
 
@@ -101,6 +125,13 @@ type ProducerPlaylistRow = {
 
 type CatalogFilter = "active" | ProducerBeatRow["status"];
 type ProducerView = "overview" | "catalog" | "upload" | "analytics" | "setup";
+
+const producerViews: ProducerView[] = ["overview", "catalog", "upload", "analytics", "setup"];
+
+function producerViewFromSearch(search: string): ProducerView {
+  const requested = new URLSearchParams(search).get("view");
+  return producerViews.includes(requested as ProducerView) ? requested as ProducerView : "overview";
+}
 
 type BeatEditorDraft = {
   title: string;
@@ -118,6 +149,7 @@ type BeatEditorDraft = {
 type ProducerPayload = {
   profile: ProducerProfileRow | null;
   beats: ProducerBeatRow[];
+  credited_beats: CreditedStarterBeatRow[];
   playlists: ProducerPlaylistRow[];
   business: ProducerBusinessRow | null;
   billing: ProducerBillingRow;
@@ -127,8 +159,48 @@ type ProducerPayload = {
   reviews: ProducerReleaseReview[];
   services: ProducerServiceRow[];
   collaborations: ProducerCollaborationRow[];
+  sales: ProducerSaleRow[];
+  earnings: ProducerEarningRow[];
   release_readiness: ProducerReleaseReadiness;
   foundation_ready: boolean;
+};
+
+type ProducerSaleRow = {
+  id: string;
+  order_number: string;
+  status: string;
+  currency: string;
+  total_cents: number;
+  platform_fee_cents: number;
+  seller_earnings_cents: number;
+  created_at: string;
+  fulfilled_at: string | null;
+  commerce_order_items: Array<{ id: string; title: string; license_name: string | null; item_type: string }>;
+};
+
+type ProducerEarningRow = {
+  id: string;
+  order_id: string;
+  status: "pending" | "available" | "held" | "paid" | "reversed";
+  currency: string;
+  gross_cents: number;
+  platform_fee_cents: number;
+  net_cents: number;
+  available_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+};
+
+type ProducerReferralSummary = {
+  code: string;
+  invited: number;
+  qualified: number;
+  rewards: {
+    promotion_credits: number;
+    founding_points: number;
+    featured_until: string | null;
+    referral_rewards: number;
+  };
 };
 
 type ProducerServiceRow = {
@@ -184,6 +256,8 @@ type ProducerBillingRow = {
   stripe_status: "not_connected" | "pending" | "restricted" | "active";
   payouts_enabled: boolean;
   charges_enabled: boolean;
+  details_submitted?: boolean;
+  requirements_due?: string[];
   verification: Record<string, boolean>;
 };
 
@@ -227,6 +301,12 @@ const emptyReleaseReadiness: ProducerReleaseReadiness = {
   beat_blockers: {},
   live_beat_count: 0,
 };
+const emptyReferralSummary: ProducerReferralSummary = {
+  code: "",
+  invited: 0,
+  qualified: 0,
+  rewards: { promotion_credits: 0, founding_points: 0, featured_until: null, referral_rewards: 0 },
+};
 
 const defaultGenres = ["Trap", "Melodic Rap", "Drill", "Soul", "Lo-fi", "R&B", "Boom Bap", "Club"];
 const producerSpecialties = ["Trap", "Southern", "Drill", "Boom Bap", "R&B", "Soul", "Melodic", "West Coast", "East Coast", "Club", "Lo-Fi", "Sample Based", "Experimental"];
@@ -261,8 +341,9 @@ function producerErrorStatus(error: unknown, fallback: string) {
 
 export function ProducerPortal() {
   const auth = useAuth();
-  const [payload, setPayload] = useState<ProducerPayload>({ profile: null, beats: [], playlists: [], business: null, billing: emptyBilling, membership: null, plans: [], metrics: emptyMetrics, reviews: [], services: [], collaborations: [], release_readiness: emptyReleaseReadiness, foundation_ready: true });
+  const [payload, setPayload] = useState<ProducerPayload>({ profile: null, beats: [], credited_beats: [], playlists: [], business: null, billing: emptyBilling, membership: null, plans: [], metrics: emptyMetrics, reviews: [], services: [], collaborations: [], sales: [], earnings: [], release_readiness: emptyReleaseReadiness, foundation_ready: true });
   const [membershipBusy, setMembershipBusy] = useState(false);
+  const [payoutBusy, setPayoutBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<{ tone: "idle" | "gold" | "green" | "red"; message: string }>({ tone: "idle", message: "" });
   const [authEmail, setAuthEmail] = useState("");
@@ -284,6 +365,8 @@ export function ProducerPortal() {
     instagram_url: "",
     youtube_url: "",
     beatstars_url: "",
+    airbit_url: "",
+    traktrain_url: "",
     business_email: "",
     contact_preference: "platform" as ProducerBusinessRow["contact_preference"],
     lease_price: "49",
@@ -306,6 +389,9 @@ export function ProducerPortal() {
     exclusive_price: "899",
   });
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [previewDuration, setPreviewDuration] = useState(0);
+  const [previewBusy, setPreviewBusy] = useState(false);
   const [artworkFile, setArtworkFile] = useState<File | null>(null);
   const [beatValidationVisible, setBeatValidationVisible] = useState(false);
   const [catalogFilter, setCatalogFilter] = useState<CatalogFilter>("active");
@@ -313,6 +399,8 @@ export function ProducerPortal() {
   const [editingBeat, setEditingBeat] = useState<ProducerBeatRow | null>(null);
   const [beatEditorDraft, setBeatEditorDraft] = useState<BeatEditorDraft>(() => emptyBeatEditorDraft());
   const [replacementAudio, setReplacementAudio] = useState<File | null>(null);
+  const [replacementPreview, setReplacementPreview] = useState<File | null>(null);
+  const [replacementPreviewDuration, setReplacementPreviewDuration] = useState(0);
   const [replacementArtwork, setReplacementArtwork] = useState<File | null>(null);
   const [deleteBeatArmed, setDeleteBeatArmed] = useState(false);
   const [playlistComposerOpen, setPlaylistComposerOpen] = useState(false);
@@ -324,6 +412,7 @@ export function ProducerPortal() {
   const [serviceComposerOpen, setServiceComposerOpen] = useState(false);
   const [serviceBusy, setServiceBusy] = useState(false);
   const [serviceDraft, setServiceDraft] = useState({ service_type: "custom_beat" as ProducerServiceRow["service_type"], title: "", description: "", starting_price: "", turnaround_days: "" });
+  const [referral, setReferral] = useState<ProducerReferralSummary>(emptyReferralSummary);
 
   const profile = payload.profile;
   const submittedCount = payload.beats.filter((beat) => beat.status === "submitted" || beat.status === "approved").length;
@@ -407,10 +496,65 @@ export function ProducerPortal() {
       .slice(0, 4);
   }, [payload.beats, payload.reviews]);
 
-  function changeView(view: ProducerView) {
+  function updateProducerLocation(view: ProducerView, panel: "service" | null, mode: "push" | "replace") {
+    const url = new URL(window.location.href);
+    if (view === "overview") url.searchParams.delete("view");
+    else url.searchParams.set("view", view);
+    if (panel) url.searchParams.set("panel", panel);
+    else url.searchParams.delete("panel");
+    const destination = `${url.pathname}${url.search}${url.hash}`;
+    const state = { ...window.history.state, rapwriterProducerView: view, rapwriterProducerPanel: panel };
+    if (mode === "replace") window.history.replaceState(state, "", destination);
+    else window.history.pushState(state, "", destination);
+  }
+
+  function changeView(view: ProducerView, mode: "push" | "replace" = "push") {
     setActiveView(view);
+    setServiceComposerOpen(false);
+    updateProducerLocation(view, null, mode);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  function changeServiceComposer(open: boolean, mode: "push" | "replace" = "push") {
+    setServiceComposerOpen(open);
+    updateProducerLocation(activeView, open ? "service" : null, mode);
+    if (open) window.setTimeout(() => document.getElementById("producer-services")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
+  function handleProducerBack() {
+    if (editingBeat) {
+      setEditingBeat(null);
+      return;
+    }
+    if (playlistComposerOpen) {
+      setPlaylistComposerOpen(false);
+      return;
+    }
+    if (serviceComposerOpen) {
+      if (window.history.state?.rapwriterProducerPanel === "service") window.history.back();
+      else changeServiceComposer(false, "replace");
+      return;
+    }
+    if (activeView !== "overview") {
+      if (window.history.state?.rapwriterProducerView === activeView) window.history.back();
+      else changeView("overview", "replace");
+      return;
+    }
+    window.location.assign("/");
+  }
+
+  useEffect(() => {
+    const syncProducerLocation = () => {
+      const view = producerViewFromSearch(window.location.search);
+      const panel = new URLSearchParams(window.location.search).get("panel");
+      setActiveView(view);
+      setServiceComposerOpen(view === "overview" && panel === "service");
+      window.scrollTo({ top: 0 });
+    };
+    syncProducerLocation();
+    window.addEventListener("popstate", syncProducerLocation);
+    return () => window.removeEventListener("popstate", syncProducerLocation);
+  }, []);
 
   useEffect(() => {
     if (auth.loading) return;
@@ -420,6 +564,35 @@ export function ProducerPortal() {
     }
     void loadProducer();
   }, [auth.loading, auth.sessionReady, auth.user]);
+
+  useEffect(() => {
+    if (!auth.sessionReady || !auth.user || typeof window === "undefined") return;
+    const connectState = new URLSearchParams(window.location.search).get("connect");
+    if (!connectState) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("connect");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    setPayoutBusy(true);
+    void fetch("/api/stripe/connect", { cache: "no-store", credentials: "same-origin" })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({})) as { status?: ProducerBillingRow["stripe_status"]; error?: string };
+        if (!response.ok) throw producerResponseError(data, response.status, "Payout status could not be refreshed.");
+        await loadProducer();
+        const message = data.status === "active"
+          ? "Payouts connected. Your approved beats can now accept licenses."
+          : data.status === "restricted"
+            ? "Stripe needs a little more information before payouts can open."
+            : "Payout verification is in progress.";
+        setStatus({ tone: data.status === "active" ? "green" : "gold", message });
+        toast.success(message);
+      })
+      .catch((error) => {
+        const nextStatus = producerErrorStatus(error, "Payout status could not be refreshed.");
+        setStatus(nextStatus);
+        toast.error(nextStatus.message);
+      })
+      .finally(() => setPayoutBusy(false));
+  }, [auth.sessionReady, auth.user]);
 
   useEffect(() => {
     if (!profile) return;
@@ -440,6 +613,8 @@ export function ProducerPortal() {
       instagram_url: profile.instagram_url ?? "",
       youtube_url: profile.youtube_url ?? "",
       beatstars_url: profile.beatstars_url ?? "",
+      airbit_url: profile.airbit_url ?? "",
+      traktrain_url: profile.traktrain_url ?? "",
       business_email: business?.business_email ?? auth.user?.email ?? "",
       contact_preference: business?.contact_preference ?? "platform",
       lease_price: String(licenses.lease ?? 49),
@@ -459,6 +634,27 @@ export function ProducerPortal() {
   }, [profile?.id, profile?.status]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const inviteCode = new URLSearchParams(window.location.search).get("ref")?.trim().toUpperCase();
+    if (inviteCode) {
+      window.localStorage.setItem("rapwriter:producer-invite", inviteCode);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("ref");
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+    const pendingCode = window.localStorage.getItem("rapwriter:producer-invite");
+    if (!profile?.id || !auth.user || !pendingCode) return;
+    void fetch("/api/producer/referrals", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: pendingCode }),
+    }).then((response) => {
+      if (response.ok || response.status === 422) window.localStorage.removeItem("rapwriter:producer-invite");
+    });
+  }, [auth.user, profile?.id]);
+
+  useEffect(() => {
     if (status.tone !== "green" || !status.message) return;
     const timeout = window.setTimeout(() => {
       setStatus({ tone: "idle", message: "" });
@@ -471,6 +667,11 @@ export function ProducerPortal() {
       const notice = (event as CustomEvent<MembershipAccessNotice>).detail;
       if (!notice || notice.audience !== "producer") return;
       setActiveView("overview");
+      setServiceComposerOpen(false);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("view");
+      url.searchParams.delete("panel");
+      window.history.replaceState({ ...window.history.state, rapwriterProducerView: "overview", rapwriterProducerPanel: null }, "", `${url.pathname}${url.search}${url.hash}`);
       setStatus({ tone: "gold", message: membershipAccessCopy(notice) });
     };
     window.addEventListener(MEMBERSHIP_ACCESS_EVENT, handleMembershipAccess);
@@ -480,10 +681,13 @@ export function ProducerPortal() {
   async function loadProducer() {
     setLoading(true);
     try {
-      const res = await fetch("/api/producer", { cache: "no-store", credentials: "same-origin" });
+      const [res, referralRes] = await Promise.all([
+        fetch("/api/producer", { cache: "no-store", credentials: "same-origin" }),
+        fetch("/api/producer/referrals", { cache: "no-store", credentials: "same-origin" }),
+      ]);
       const data = await res.json();
       if (res.status === 401) {
-        setPayload({ profile: null, beats: [], playlists: [], business: null, billing: emptyBilling, membership: null, plans: [], metrics: emptyMetrics, reviews: [], services: [], collaborations: [], release_readiness: emptyReleaseReadiness, foundation_ready: true });
+        setPayload({ profile: null, beats: [], credited_beats: [], playlists: [], business: null, billing: emptyBilling, membership: null, plans: [], metrics: emptyMetrics, reviews: [], services: [], collaborations: [], sales: [], earnings: [], release_readiness: emptyReleaseReadiness, foundation_ready: true });
         setStatus({ tone: "red", message: "Your producer session expired. Sign in again to continue." });
         return;
       }
@@ -491,6 +695,7 @@ export function ProducerPortal() {
       setPayload({
         profile: data.profile,
         beats: data.beats ?? [],
+        credited_beats: data.credited_beats ?? [],
         playlists: data.playlists ?? [],
         business: data.business ?? null,
         billing: data.billing ?? emptyBilling,
@@ -500,13 +705,32 @@ export function ProducerPortal() {
         reviews: data.reviews ?? [],
         services: data.services ?? [],
         collaborations: data.collaborations ?? [],
+        sales: data.sales ?? [],
+        earnings: data.earnings ?? [],
         release_readiness: data.release_readiness ?? emptyReleaseReadiness,
         foundation_ready: data.foundation_ready !== false,
       });
+      if (referralRes.ok) {
+        const referralData = await referralRes.json() as ProducerReferralSummary;
+        setReferral(referralData);
+      }
     } catch (err) {
       setStatus({ tone: "red", message: err instanceof Error ? err.message : "Could not load producer portal." });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function copyProducerInvite() {
+    if (!referral.code) return;
+    const inviteUrl = `${window.location.origin}/producer?ref=${encodeURIComponent(referral.code)}`;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setStatus({ tone: "green", message: "Producer invite link copied." });
+      toast.success("Producer invite link copied.");
+    } catch {
+      setStatus({ tone: "red", message: "Could not copy the invite link." });
+      toast.error("Could not copy the invite link.");
     }
   }
 
@@ -531,11 +755,14 @@ export function ProducerPortal() {
       const data = await res.json();
       if (!res.ok) throw producerResponseError(data, res.status, "Could not publish this service.");
       setServiceDraft({ service_type: "custom_beat", title: "", description: "", starting_price: "", turnaround_days: "" });
-      setServiceComposerOpen(false);
+      changeServiceComposer(false, "replace");
       setStatus({ tone: "green", message: "Service published to your storefront." });
+      toast.success("Service published to your storefront.");
       await loadProducer();
     } catch (error) {
-      setStatus(producerErrorStatus(error, "Could not publish this service."));
+      const nextStatus = producerErrorStatus(error, "Could not publish this service.");
+      setStatus(nextStatus);
+      toast.error(nextStatus.message);
     } finally {
       setServiceBusy(false);
     }
@@ -552,9 +779,14 @@ export function ProducerPortal() {
       });
       const data = await res.json();
       if (!res.ok) throw producerResponseError(data, res.status, "Could not update this service.");
+      const message = service.is_active ? "Service paused." : "Service published to your storefront.";
+      setStatus({ tone: "green", message });
+      toast.success(message);
       await loadProducer();
     } catch (error) {
-      setStatus(producerErrorStatus(error, "Could not update this service."));
+      const nextStatus = producerErrorStatus(error, "Could not update this service.");
+      setStatus(nextStatus);
+      toast.error(nextStatus.message);
     } finally {
       setServiceBusy(false);
     }
@@ -644,6 +876,75 @@ export function ProducerPortal() {
     }
   }
 
+  async function openPayoutSetup() {
+    setPayoutBusy(true);
+    setStatus({ tone: "gold", message: payload.billing.stripe_status === "active" ? "Opening payout dashboard..." : "Opening secure payout setup..." });
+    try {
+      const res = await fetch("/api/stripe/connect", { method: "POST", credentials: "same-origin" });
+      const data = await res.json().catch(() => ({})) as { url?: string; error?: string };
+      if (!res.ok || !data.url) throw producerResponseError(data, res.status, "Payout setup could not be opened.");
+      window.location.assign(data.url);
+    } catch (error) {
+      const nextStatus = producerErrorStatus(error, "Payout setup could not be opened.");
+      setStatus(nextStatus);
+      toast.error(nextStatus.message);
+      setPayoutBusy(false);
+    }
+  }
+
+  async function prepareNewBeatAudio(file: File | null) {
+    setAudioFile(file);
+    setPreviewFile(null);
+    setPreviewDuration(0);
+    if (!file) return;
+    setPreviewBusy(true);
+    setStatus({ tone: "gold", message: "Preparing secure 30-second preview..." });
+    try {
+      const preview = await createProducerBeatPreview(file);
+      setPreviewFile(preview.file);
+      setPreviewDuration(preview.durationSeconds);
+      setStatus({ tone: "green", message: "Beat audio and secure Store preview are ready." });
+    } catch (error) {
+      setStatus({ tone: "red", message: error instanceof Error ? error.message : "Could not create the Store preview." });
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
+
+  async function prepareReplacementAudio(file: File | null) {
+    setReplacementAudio(file);
+    setReplacementPreview(null);
+    setReplacementPreviewDuration(0);
+    if (!file) return;
+    setCatalogBusy(true);
+    setStatus({ tone: "gold", message: "Preparing replacement preview..." });
+    try {
+      const preview = await createProducerBeatPreview(file);
+      setReplacementPreview(preview.file);
+      setReplacementPreviewDuration(preview.durationSeconds);
+      setStatus({ tone: "green", message: "Replacement audio and secure preview are ready." });
+    } catch (error) {
+      setStatus({ tone: "red", message: error instanceof Error ? error.message : "Could not create the replacement preview." });
+    } finally {
+      setCatalogBusy(false);
+    }
+  }
+
+  async function prepareManualPreview(file: File | null) {
+    setReplacementPreview(null);
+    setReplacementPreviewDuration(0);
+    if (!file) return;
+    try {
+      const duration = await readAudioDuration(file);
+      if (duration > 30) throw new Error("Store previews must be 30 seconds or shorter.");
+      setReplacementPreview(file);
+      setReplacementPreviewDuration(duration);
+      setStatus({ tone: "green", message: "Secure Store preview is ready." });
+    } catch (error) {
+      setStatus({ tone: "red", message: error instanceof Error ? error.message : "Could not read the Store preview." });
+    }
+  }
+
   async function uploadBeat(event: FormEvent) {
     event.preventDefault();
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
@@ -667,6 +968,10 @@ export function ProducerPortal() {
       setStatus({ tone: "red", message: "Choose an audio file first." });
       return;
     }
+    if (!previewFile || !previewDuration) {
+      setStatus({ tone: "red", message: "Wait for the secure Store preview to finish before uploading." });
+      return;
+    }
     setStatus({ tone: "gold", message: "Reading beat audio..." });
     let durationSeconds: number;
     try {
@@ -681,6 +986,8 @@ export function ProducerPortal() {
     formData.append("submit", shouldSubmit ? "true" : "false");
     formData.append("duration_seconds", String(durationSeconds));
     formData.append("audio", audioFile);
+    formData.append("preview_audio", previewFile);
+    formData.append("preview_duration_seconds", String(previewDuration));
     if (artworkFile) formData.append("artwork", artworkFile);
 
     try {
@@ -690,6 +997,8 @@ export function ProducerPortal() {
       await loadProducer();
       setBeatDraft((current) => ({ ...current, title: "" }));
       setAudioFile(null);
+      setPreviewFile(null);
+      setPreviewDuration(0);
       setArtworkFile(null);
       setBeatValidationVisible(false);
       setStatus({ tone: "green", message: shouldSubmit ? "Beat submitted for Studio Store review." : "Beat uploaded as draft." });
@@ -715,6 +1024,8 @@ export function ProducerPortal() {
     setEditingBeat(beat);
     setBeatEditorDraft(beatEditorDraftFromBeat(beat));
     setReplacementAudio(null);
+    setReplacementPreview(null);
+    setReplacementPreviewDuration(0);
     setReplacementArtwork(null);
     setDeleteBeatArmed(false);
   }
@@ -723,6 +1034,10 @@ export function ProducerPortal() {
     if (!editingBeat) return;
     let replacementDuration: number | null = null;
     if ((action === "save" || action === "submit") && replacementAudio) {
+      if (!replacementPreview || !replacementPreviewDuration) {
+        setStatus({ tone: "red", message: "Wait for the secure replacement preview to finish." });
+        return;
+      }
       try {
         replacementDuration = await readAudioDuration(replacementAudio);
       } catch (error) {
@@ -740,6 +1055,10 @@ export function ProducerPortal() {
         formData.set("audio", replacementAudio);
         formData.set("duration_seconds", String(replacementDuration));
       }
+      if (replacementPreview) {
+        formData.set("preview_audio", replacementPreview);
+        formData.set("preview_duration_seconds", String(replacementPreviewDuration));
+      }
       if (replacementArtwork) formData.set("artwork", replacementArtwork);
     }
 
@@ -752,6 +1071,8 @@ export function ProducerPortal() {
       setEditingBeat(nextBeat);
       setBeatEditorDraft(beatEditorDraftFromBeat(nextBeat));
       setReplacementAudio(null);
+      setReplacementPreview(null);
+      setReplacementPreviewDuration(0);
       setReplacementArtwork(null);
       setDeleteBeatArmed(false);
       setStatus({ tone: "green", message: action === "submit" ? "Beat submitted for review." : action === "archive" ? "Beat archived." : action === "restore" ? "Beat restored as a draft." : "Beat draft saved." });
@@ -904,12 +1225,15 @@ export function ProducerPortal() {
   }
 
   return (
-    <ProducerShell>
+    <ProducerShell
+      signedIn
+      onBack={handleProducerBack}
+      backLabel={editingBeat || playlistComposerOpen || serviceComposerOpen || activeView !== "overview" ? "Back in Producer HQ" : "Back to Studio"}
+    >
       <div className="space-y-5 px-4 pb-32 pt-4 sm:px-5">
         <ProducerControlRoomHero
           profile={profile}
           metrics={payload.metrics}
-          beatCount={payload.beats.length}
           hasActivity={hasCatalogActivity}
           readiness={payload.release_readiness}
           onAnalytics={() => changeView("analytics")}
@@ -933,7 +1257,7 @@ export function ProducerPortal() {
           </div>
 
           {payload.release_readiness.phase !== "live" && (
-            <ReleasePipeline readiness={payload.release_readiness} profile={profile} beats={payload.beats} latestReview={payload.reviews[0]} onEditProfile={() => { setProfileEditMode(true); changeView("setup"); }} />
+            <ReleasePipeline readiness={payload.release_readiness} profile={profile} beats={payload.beats} latestReview={payload.reviews[0]} onAddBeat={() => changeView("upload")} onEditProfile={() => { setProfileEditMode(true); changeView("setup"); }} />
           )}
 
           {profile && (
@@ -941,7 +1265,7 @@ export function ProducerPortal() {
               services={payload.services}
               requests={payload.collaborations}
               composerOpen={serviceComposerOpen}
-              setComposerOpen={setServiceComposerOpen}
+              setComposerOpen={(open) => changeServiceComposer(open, open ? "push" : "replace")}
               draft={serviceDraft}
               setDraft={setServiceDraft}
               busy={serviceBusy}
@@ -975,9 +1299,9 @@ export function ProducerPortal() {
             beatCount={payload.beats.length}
             submittedCount={submittedCount}
             draftCount={draftCount}
-            onAddBeat={() => changeView("upload")}
             onCatalog={() => changeView("catalog")}
           />
+          {profile && referral.code && <ProducerInvitePanel referral={referral} onCopy={() => void copyProducerInvite()} />}
         </>}
 
         {activeView === "setup" && <>
@@ -1068,7 +1392,15 @@ export function ProducerPortal() {
                   <ProducerInput value={profileDraft.instagram_url} onChange={(instagram_url) => setProfileDraft((current) => ({ ...current, instagram_url }))} placeholder="Instagram" />
                   <ProducerInput value={profileDraft.youtube_url} onChange={(youtube_url) => setProfileDraft((current) => ({ ...current, youtube_url }))} placeholder="YouTube" />
                 </div>
-                <ProducerInput value={profileDraft.beatstars_url} onChange={(beatstars_url) => setProfileDraft((current) => ({ ...current, beatstars_url }))} placeholder="BeatStars" />
+                <div className="rounded-2xl border border-gold/20 bg-gold/[0.04] p-3">
+                  <div className="label-hw text-gold/80">Sell everywhere</div>
+                  <p className="mt-2 text-xs leading-relaxed text-white/62">Keep selling everywhere. RapWriter simply helps more artists discover your music while they&apos;re writing.</p>
+                  <div className="mt-3 space-y-2">
+                    <ProducerInput value={profileDraft.beatstars_url} onChange={(beatstars_url) => setProfileDraft((current) => ({ ...current, beatstars_url }))} placeholder="BeatStars storefront URL" />
+                    <ProducerInput value={profileDraft.airbit_url} onChange={(airbit_url) => setProfileDraft((current) => ({ ...current, airbit_url }))} placeholder="Airbit storefront URL" />
+                    <ProducerInput value={profileDraft.traktrain_url} onChange={(traktrain_url) => setProfileDraft((current) => ({ ...current, traktrain_url }))} placeholder="Traktrain storefront URL" />
+                  </div>
+                </div>
               </>
             )}
 
@@ -1097,6 +1429,10 @@ export function ProducerPortal() {
                   <option value="platform">RapWriter messages</option><option value="email">Public email</option><option value="website">External website</option><option value="social">Social links</option><option value="hidden">Contact hidden</option>
                 </select>
                 <ReadinessRow icon={Banknote} label="Payout account" value={payload.billing.stripe_status === "active" ? "Connected" : "Connect after review"} ready={payload.billing.stripe_status === "active"} />
+                <button type="button" onClick={openPayoutSetup} disabled={payoutBusy} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-gold/30 bg-gold/10 px-4 text-sm font-semibold text-gold disabled:opacity-50">
+                  {payoutBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {payload.billing.stripe_status === "active" ? "Open payout dashboard" : payload.billing.stripe_status === "restricted" ? "Finish payout verification" : "Connect payouts"}
+                </button>
                 <ReadinessRow icon={ShieldCheck} label="Studio Store verification" value={profile?.verified ? "RapWriter Verified" : "Manual review required"} ready={Boolean(profile?.verified)} />
                 <ReadinessRow icon={Globe2} label="Storefront" value={`${storefrontReadiness}% ready`} ready={payload.release_readiness.profile_ready} />
               </>
@@ -1161,7 +1497,13 @@ export function ProducerPortal() {
               <PriceInput label="Premium" value={beatDraft.premium_price} onChange={(premium_price) => setBeatDraft((current) => ({ ...current, premium_price }))} />
               <PriceInput label="Exclusive" value={beatDraft.exclusive_price} onChange={(exclusive_price) => setBeatDraft((current) => ({ ...current, exclusive_price }))} />
             </div>
-            <ProducerFileInput label="Beat audio" value={audioFile?.name ?? "Choose audio file"} accept="audio/*" onChange={setAudioFile} required />
+            <ProducerFileInput label="Beat audio" value={audioFile?.name ?? "Choose audio file"} accept="audio/*" onChange={(file) => void prepareNewBeatAudio(file)} required />
+            {audioFile && (
+              <div className={cn("flex min-h-10 items-center gap-2 rounded-xl border px-3 text-xs font-semibold", previewFile ? "border-emerald-400/25 bg-emerald-400/8 text-emerald-300" : "border-gold/20 bg-gold/8 text-gold")}>
+                {previewBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                {previewBusy ? "Preparing secure Store preview" : previewFile ? "30-second Store preview ready" : "Preview needs attention"}
+              </div>
+            )}
             <ProducerFileInput label="Release artwork" value={artworkFile?.name ?? "Choose cover image"} accept="image/*" onChange={setArtworkFile} />
             {beatValidationVisible && beatUploadBlockers.length > 0 && (
               <div className="border-y border-rec/20 py-3">
@@ -1172,10 +1514,10 @@ export function ProducerPortal() {
               </div>
             )}
             <div className="grid grid-cols-2 gap-2">
-              <button name="intent" value="draft" disabled={!profile} className="min-h-12 rounded-2xl border border-white/10 bg-white/[0.03] px-4 font-semibold text-muted-foreground disabled:opacity-45">
+              <button name="intent" value="draft" disabled={!profile || previewBusy} className="min-h-12 rounded-2xl border border-white/10 bg-white/[0.03] px-4 font-semibold text-muted-foreground disabled:opacity-45">
                 Save as Draft
               </button>
-              <button name="intent" value="submit" disabled={!canSubmitBeat} className="gold-seal min-h-12 rounded-2xl px-4 font-semibold disabled:opacity-45">
+              <button name="intent" value="submit" disabled={!canSubmitBeat || previewBusy} className="gold-seal min-h-12 rounded-2xl px-4 font-semibold disabled:opacity-45">
                 Submit Beat
               </button>
             </div>
@@ -1183,6 +1525,33 @@ export function ProducerPortal() {
         </section>}
 
         {activeView === "catalog" && <>
+        {(payload.credited_beats ?? []).length > 0 && (
+          <section className="rounded-3xl border border-gold/20 bg-[linear-gradient(145deg,rgba(246,199,72,0.08),rgba(17,17,19,0.96))] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="label-hw text-gold/85">RapWriter placements</div>
+                <h2 className="mt-1 text-xl font-semibold">Verified producer credits</h2>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">Stock beats you supplied to RapWriter. Admin manages availability; the public credit belongs to your catalog.</p>
+              </div>
+              <BadgeCheck className="mt-1 h-5 w-5 shrink-0 text-emerald-300" />
+            </div>
+            <div className="mt-4 space-y-2">
+              {(payload.credited_beats ?? []).map((beat) => (
+                <div key={beat.id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/24 p-3">
+                  <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl border border-gold/20 bg-gold/8 text-xs font-semibold text-gold">
+                    {beat.artwork_url ? <img src={beat.artwork_url} alt="" className="h-full w-full object-cover" /> : <Music className="h-5 w-5" />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">{beat.title}</span>
+                    <span className="mt-1 block truncate text-[11px] text-muted-foreground">{[beat.genre, beat.bpm ? `${beat.bpm} BPM` : null, "Included with RapWriter"].filter(Boolean).join(" · ")}</span>
+                  </span>
+                  <span className="rounded-full border border-emerald-300/20 bg-emerald-400/8 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.08em] text-emerald-200">Credited</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="rounded-3xl border border-white/10 bg-[#111113] p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -1215,7 +1584,7 @@ export function ProducerPortal() {
             </div>
             <span className="text-xs text-muted-foreground">{filteredBeats.length} shown</span>
           </div>
-          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [overscroll-behavior-x:contain] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
             {catalogFilters.map((filter) => (
               <button
                 key={filter.id}
@@ -1237,6 +1606,8 @@ export function ProducerPortal() {
         {activeView === "analytics" && (
           <ProducerAnalytics
             metrics={payload.metrics}
+            sales={payload.sales}
+            earnings={payload.earnings}
             beatCount={payload.beats.length}
             liveBeatCount={payload.release_readiness.live_beat_count}
             planLabel={planLabel}
@@ -1251,13 +1622,15 @@ export function ProducerPortal() {
         beat={editingBeat}
         draft={beatEditorDraft}
         audioFile={replacementAudio}
+        previewFile={replacementPreview}
         artworkFile={replacementArtwork}
         busy={catalogBusy}
         canSubmit={canSubmitBeat}
         submitHint={payload.release_readiness.next_action}
         deleteArmed={deleteBeatArmed}
         onDraft={setBeatEditorDraft}
-        onAudio={setReplacementAudio}
+        onAudio={(file) => void prepareReplacementAudio(file)}
+        onPreview={(file) => void prepareManualPreview(file)}
         onArtwork={setReplacementArtwork}
         onClose={() => setEditingBeat(null)}
         onSave={(action) => void saveEditedBeat(action)}
@@ -1310,16 +1683,35 @@ function readAudioDuration(file: File) {
   });
 }
 
-function ProducerShell({ children }: { children: React.ReactNode }) {
+function ProducerShell({
+  children,
+  signedIn = false,
+  onBack,
+  backLabel = "Back to Studio",
+}: {
+  children: React.ReactNode;
+  signedIn?: boolean;
+  onBack?: () => void;
+  backLabel?: string;
+}) {
   return (
     <main className="min-h-[100svh] bg-[#070708] text-foreground">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,176,32,0.16),transparent_34%),linear-gradient(180deg,rgba(0,0,0,0),#070708_62%)]" />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(246,199,72,0.16),transparent_34%),linear-gradient(180deg,rgba(0,0,0,0),#070708_62%)]" />
       <div className="relative z-10 mx-auto min-h-[100svh] w-full max-w-[430px] overflow-hidden bg-[#070708]/96">
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-white/10 bg-black/82 px-5 py-4 backdrop-blur-xl">
           <BrandLogo className="[&>span:first-child]:h-10 [&>span:first-child]:w-[9.25rem]" />
-          <Link href="/" className="grid h-10 w-10 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Back to studio">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
+          <div className="flex items-center gap-2">
+            {signedIn && <ActivityInbox signedIn onAuthRequired={() => undefined} />}
+            {onBack ? (
+              <button type="button" onClick={onBack} className="grid h-10 w-10 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label={backLabel}>
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+            ) : (
+              <Link href="/" className="grid h-10 w-10 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Back to Studio">
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+            )}
+          </div>
         </header>
         {children}
       </div>
@@ -1327,10 +1719,32 @@ function ProducerShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function ProducerInvitePanel({ referral, onCopy }: { referral: ProducerReferralSummary; onCopy: () => void }) {
+  return (
+    <section className="overflow-hidden rounded-3xl border border-gold/20 bg-[linear-gradient(145deg,rgba(246,199,72,0.09),rgba(17,17,19,0.98)_56%)] p-4">
+      <div className="flex items-start gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold/25 bg-gold/8 text-gold"><Gift className="h-4 w-4" /></span>
+        <div className="min-w-0 flex-1">
+          <div className="label-hw text-gold/85">Producer Invite</div>
+          <h2 className="mt-1 text-lg font-semibold">Bring another sound into the room.</h2>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">When their profile and first beat go live, you both receive 30 days of Producer Pro, launch credits, and featured eligibility.</p>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2 border-y border-white/8 py-3">
+        <ProducerMetric label="Invited" value={formatCount(referral.invited)} />
+        <ProducerMetric label="Qualified" value={formatCount(referral.qualified)} />
+        <ProducerMetric label="Credits" value={formatCount(referral.rewards.promotion_credits)} />
+      </div>
+      <button type="button" onClick={onCopy} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-gold/30 bg-gold/10 px-4 text-sm font-semibold text-gold">
+        <Copy className="h-4 w-4" />Copy invite link
+      </button>
+    </section>
+  );
+}
+
 function ProducerControlRoomHero({
   profile,
   metrics,
-  beatCount,
   hasActivity,
   readiness,
   onAnalytics,
@@ -1338,7 +1752,6 @@ function ProducerControlRoomHero({
 }: {
   profile: ProducerProfileRow | null;
   metrics: ProducerMetricsRow;
-  beatCount: number;
   hasActivity: boolean;
   readiness: ProducerReleaseReadiness;
   onAnalytics: () => void;
@@ -1347,12 +1760,12 @@ function ProducerControlRoomHero({
   return (
     <section className="relative isolate min-h-[300px] overflow-hidden rounded-3xl border border-gold/25 bg-black shadow-[0_18px_60px_rgba(0,0,0,0.45)]">
       <div
-        className="absolute inset-0 bg-cover bg-[position:64%_center] transition-transform duration-[1600ms] motion-safe:scale-[1.015]"
-        style={{ backgroundImage: "url('/studio/modern-hero-v2.webp')" }}
+        className="absolute inset-0 bg-cover bg-center transition-transform duration-[1600ms] motion-safe:scale-[1.015]"
+        style={{ backgroundImage: "url('/studio/producer-hq.webp')" }}
         aria-hidden="true"
       />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.18),rgba(0,0,0,0.5)_46%,rgba(3,3,4,0.98)_100%)]" aria-hidden="true" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_42%,rgba(255,176,32,0.12),transparent_36%)]" aria-hidden="true" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.34)_44%,rgba(3,3,4,0.98)_100%)]" aria-hidden="true" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_42%,rgba(246,199,72,0.12),transparent_36%)]" aria-hidden="true" />
 
       <div className="relative flex min-h-[300px] flex-col justify-between p-5">
         <div className="flex items-center justify-between gap-3">
@@ -1375,20 +1788,14 @@ function ProducerControlRoomHero({
               <HeroMetric label="Active beats" value={formatCount(readiness.live_beat_count)} />
               <HeroMetric label="Licenses" value={formatCount(metrics.sales)} />
             </div>
-          ) : (
-            <div className="mt-4 flex items-center gap-3 rounded-2xl border border-white/15 bg-black/48 px-3 py-3 backdrop-blur-md">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-gold/30 bg-gold/10 text-gold"><Radio className="h-4 w-4" /></span>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-white">First release setup</div>
-                <div className="mt-0.5 truncate text-xs text-white/55">{readiness.next_action}</div>
-              </div>
+          ) : null}
+
+          {hasActivity && (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button type="button" onClick={onAddBeat} className="gold-seal flex min-h-11 items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold"><Plus className="h-4 w-4" />Add beat</button>
+              <button type="button" onClick={onAnalytics} className="flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-black/45 px-4 text-sm font-semibold text-white backdrop-blur-md"><BarChart3 className="h-4 w-4 text-gold" />Analytics</button>
             </div>
           )}
-
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button type="button" onClick={onAddBeat} className="gold-seal flex min-h-11 items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold"><Plus className="h-4 w-4" />Add beat</button>
-            <button type="button" onClick={onAnalytics} className="flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-black/45 px-4 text-sm font-semibold text-white backdrop-blur-md"><BarChart3 className="h-4 w-4 text-gold" />Analytics</button>
-          </div>
         </div>
       </div>
     </section>
@@ -1410,7 +1817,6 @@ function ProducerOverviewActivity({
   beatCount,
   submittedCount,
   draftCount,
-  onAddBeat,
   onCatalog,
 }: {
   activity: Array<{ id: string; label: string; detail: string; at: string }>;
@@ -1418,26 +1824,9 @@ function ProducerOverviewActivity({
   beatCount: number;
   submittedCount: number;
   draftCount: number;
-  onAddBeat: () => void;
   onCatalog: () => void;
 }) {
-  if (beatCount === 0) {
-    return (
-      <section className="rounded-3xl border border-gold/20 bg-[linear-gradient(145deg,rgba(255,176,32,0.1),rgba(17,17,19,0.96)_58%)] p-5">
-        <div className="label-hw text-gold/85">Start your catalog</div>
-        <h2 className="mt-2 text-xl font-semibold">Three steps to go live.</h2>
-        <div className="mt-5 space-y-4">
-          {["Build your storefront", "Upload your first beat", "Publish to Studio Store"].map((step, index) => (
-            <div key={step} className="flex items-center gap-3 border-b border-white/8 pb-4 last:border-0 last:pb-0">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-gold/25 bg-gold/8 text-xs font-semibold text-gold">0{index + 1}</span>
-              <span className="text-sm font-semibold">{step}</span>
-            </div>
-          ))}
-        </div>
-        <button type="button" onClick={onAddBeat} className="gold-seal mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl px-4 font-semibold"><Plus className="h-4 w-4" />Add your first beat</button>
-      </section>
-    );
-  }
+  if (beatCount === 0) return null;
 
   return (
     <>
@@ -1527,13 +1916,15 @@ function ProducerAccountSummary({
         <button type="button" onClick={onEdit} className="min-h-11 rounded-2xl border border-white/10 bg-white/[0.03] px-3 text-sm font-semibold">Edit profile</button>
         <button type="button" onClick={onMembership} disabled={membershipBusy} className="flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-gold/25 bg-gold/8 px-3 text-sm font-semibold text-gold disabled:opacity-60">{membershipBusy && <Loader2 className="h-4 w-4 animate-spin" />}{isSubscribed ? "Manage plan" : "Producer Pro"}</button>
       </div>
-      {profile?.handle && <a href={`/producer/${encodeURIComponent(profile.handle.replace(/^@+/, ""))}`} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-2xl border border-white/10 px-4 text-sm font-semibold text-muted-foreground">Preview storefront</a>}
+      {profile?.handle && <a href={`/producer/${encodeURIComponent(profile.handle.replace(/^@+/, ""))}?from=producer-hq`} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-2xl border border-white/10 px-4 text-sm font-semibold text-muted-foreground">Preview storefront</a>}
     </section>
   );
 }
 
 function ProducerAnalytics({
   metrics,
+  sales,
+  earnings,
   beatCount,
   liveBeatCount,
   planLabel,
@@ -1542,6 +1933,8 @@ function ProducerAnalytics({
   onMembership,
 }: {
   metrics: ProducerMetricsRow;
+  sales: ProducerSaleRow[];
+  earnings: ProducerEarningRow[];
   beatCount: number;
   liveBeatCount: number;
   planLabel: string;
@@ -1598,11 +1991,31 @@ function ProducerAnalytics({
       )}
 
       {!isSubscribed && (
-        <section className="rounded-3xl border border-gold/20 bg-[linear-gradient(145deg,rgba(255,176,32,0.11),rgba(17,17,19,0.96)_60%)] p-5">
+        <section className="rounded-3xl border border-gold/20 bg-[linear-gradient(145deg,rgba(246,199,72,0.11),rgba(17,17,19,0.96)_60%)] p-5">
           <div className="label-hw text-gold/85">Producer intelligence</div>
           <h3 className="mt-2 text-xl font-semibold">See what turns listeners into writers.</h3>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Producer Pro adds deeper catalog limits and business analytics as your audience grows.</p>
           <button type="button" onClick={onMembership} disabled={membershipBusy} className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-gold/30 bg-gold/10 px-4 text-sm font-semibold text-gold disabled:opacity-60">{membershipBusy && <Loader2 className="h-4 w-4 animate-spin" />}Explore Producer Pro</button>
+        </section>
+      )}
+      {sales.length > 0 && (
+        <section className="rounded-3xl border border-white/10 bg-[#111113] p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div><div className="label-hw text-gold/85">Recent sales</div><h3 className="mt-1 text-lg font-semibold">Licenses and earnings</h3></div>
+            <span className="text-xs text-muted-foreground">{earnings.filter((entry) => entry.status === "available").length} available</span>
+          </div>
+          <div className="mt-4 space-y-2">
+            {sales.slice(0, 8).map((sale) => {
+              const item = sale.commerce_order_items[0];
+              return (
+                <article key={sale.id} className="flex min-h-16 items-center gap-3 rounded-2xl border border-white/10 bg-black/24 p-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold/20 bg-gold/8 text-gold"><Banknote className="h-4 w-4" /></span>
+                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{item?.title ?? sale.order_number}</span><span className="mt-1 block text-[10px] text-muted-foreground">{item?.license_name ?? "Studio service"} / {sale.order_number}</span></span>
+                  <span className="shrink-0 text-right"><span className="block text-sm font-semibold text-gold">{formatMoney(sale.seller_earnings_cents)}</span><span className="mt-1 block text-[9px] capitalize text-white/45">{sale.status.replace(/_/g, " ")}</span></span>
+                </article>
+              );
+            })}
+          </div>
         </section>
       )}
     </>
@@ -1619,14 +2032,14 @@ function ProducerHqNav({ activeView, onChange }: { activeView: ProducerView; onC
   ];
 
   return (
-    <nav aria-label="Producer HQ" className="fixed bottom-0 left-1/2 z-40 w-full max-w-[430px] -translate-x-1/2 border-t border-gold/20 bg-black/92 px-2 pb-[max(0.55rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
+    <nav data-testid="producer-hq-dock" aria-label="Producer HQ" className="fixed bottom-0 left-1/2 z-40 w-full max-w-[430px] -translate-x-1/2 border-t border-gold/20 bg-black/92 px-2 pb-[max(0.55rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
       <div className="grid grid-cols-5">
         {items.map(({ view, label, icon: Icon }) => {
           const active = activeView === view;
           const primary = view === "upload";
           return (
             <button key={view} type="button" onClick={() => onChange(view)} aria-current={active ? "page" : undefined} className={cn("flex min-h-[54px] min-w-0 flex-col items-center justify-center gap-1 text-[9px] font-semibold transition-colors", active ? "text-gold" : "text-muted-foreground")}>
-              <span className={cn("grid place-items-center", primary ? "h-10 w-10 -translate-y-2 rounded-full border border-gold/45 bg-gold text-black shadow-[0_0_24px_rgba(255,176,32,0.22)]" : "h-6 w-6", active && !primary && "text-gold")}><Icon className={primary ? "h-5 w-5" : "h-[18px] w-[18px]"} /></span>
+              <span className={cn("grid place-items-center", primary ? "h-10 w-10 -translate-y-2 rounded-full border border-gold/45 bg-gold text-black shadow-[0_0_24px_rgba(246,199,72,0.22)]" : "h-6 w-6", active && !primary && "text-gold")}><Icon className={primary ? "h-5 w-5" : "h-[18px] w-[18px]"} /></span>
               <span className={cn("truncate", primary && "-mt-2")}>{label}</span>
             </button>
           );
@@ -1661,13 +2074,13 @@ function ProducerCollaborationPanel({
 }) {
   const activeRequests = requests.filter((request) => ["submitted", "countered", "accepted"].includes(request.status));
   return (
-    <section className="rounded-3xl border border-gold/18 bg-[linear-gradient(145deg,rgba(255,176,32,0.08),rgba(17,17,19,0.96)_52%)] p-4">
+    <section id="producer-services" className="scroll-mt-24 rounded-3xl border border-gold/18 bg-[linear-gradient(145deg,rgba(246,199,72,0.08),rgba(17,17,19,0.96)_52%)] p-4">
       <div className="flex items-start justify-between gap-3">
         <div><div className="label-hw text-gold/85">Producer services</div><h2 className="mt-1 text-xl font-semibold">Work with artists</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Publish what you offer. Requests stay private until you accept.</p></div>
         <Handshake className="mt-1 h-5 w-5 shrink-0 text-gold" />
       </div>
 
-      <Link href="/collaborations" className="mt-4 flex min-h-12 items-center justify-between rounded-2xl border border-white/10 bg-black/30 px-4">
+      <Link href="/collaborations?from=producer-hq" className="mt-4 flex min-h-12 items-center justify-between rounded-2xl border border-white/10 bg-black/30 px-4">
         <span><span className="block text-sm font-semibold">Artist requests</span><span className="mt-0.5 block text-[11px] text-muted-foreground">{activeRequests.length ? `${activeRequests.length} active` : "No active requests"}</span></span>
         <span className="flex items-center gap-1 text-xs font-semibold text-gold">Open rooms<ChevronRight className="h-4 w-4" /></span>
       </Link>
@@ -1686,7 +2099,7 @@ function ProducerCollaborationPanel({
 
 function ProducerHero({ eyebrow, title, body }: { eyebrow: string; title: string; body: string }) {
   return (
-    <section className="rounded-3xl border border-gold/20 bg-[linear-gradient(145deg,rgba(255,176,32,0.14),rgba(17,17,19,0.92)_48%,rgba(0,0,0,0.72))] p-5">
+    <section className="rounded-3xl border border-gold/20 bg-[linear-gradient(145deg,rgba(246,199,72,0.14),rgba(17,17,19,0.92)_48%,rgba(0,0,0,0.72))] p-5">
       <div className="label-hw text-gold/85">{eyebrow}</div>
       <h1 className="mt-2 text-[30px] font-semibold leading-tight">{title}</h1>
       <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{body}</p>
@@ -1717,12 +2130,14 @@ function ReleasePipeline({
   profile,
   beats,
   latestReview,
+  onAddBeat,
   onEditProfile,
 }: {
   readiness: ProducerReleaseReadiness;
   profile: ProducerProfileRow | null;
   beats: ProducerBeatRow[];
   latestReview?: ProducerReleaseReview;
+  onAddBeat: () => void;
   onEditProfile: () => void;
 }) {
   const hasReleaseReadyBeat = beats.some((beat) => (readiness.beat_blockers[beat.id] ?? []).length === 0);
@@ -1750,7 +2165,7 @@ function ReleasePipeline({
   const livePhase = readiness.phase === "live";
 
   return (
-    <section className="rounded-3xl border border-gold/20 bg-[linear-gradient(145deg,rgba(255,176,32,0.11),rgba(17,17,19,0.96)_52%,rgba(0,0,0,0.78))] p-4">
+    <section className="rounded-3xl border border-gold/20 bg-[linear-gradient(145deg,rgba(246,199,72,0.11),rgba(17,17,19,0.96)_52%,rgba(0,0,0,0.78))] p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="label-hw text-gold/85">First Release</div>
@@ -1797,6 +2212,11 @@ function ReleasePipeline({
           <div className="mt-3 rounded-xl border border-rec/20 bg-rec/[0.07] px-3 py-2 text-xs leading-relaxed text-rec">
             Latest review: {latestReview.notes}
           </div>
+        )}
+        {["upload_beat", "finish_beat", "submit_beat"].includes(readiness.phase) && (
+          <button type="button" onClick={onAddBeat} className="gold-seal mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold">
+            <Plus className="h-4 w-4" />{beats.length ? "Open beat upload" : "Add your first beat"}
+          </button>
         )}
       </div>
     </section>
@@ -1964,6 +2384,7 @@ function BeatEditorSheet({
   beat,
   draft,
   audioFile,
+  previewFile,
   artworkFile,
   busy,
   canSubmit,
@@ -1971,6 +2392,7 @@ function BeatEditorSheet({
   deleteArmed,
   onDraft,
   onAudio,
+  onPreview,
   onArtwork,
   onClose,
   onSave,
@@ -1979,6 +2401,7 @@ function BeatEditorSheet({
   beat: ProducerBeatRow | null;
   draft: BeatEditorDraft;
   audioFile: File | null;
+  previewFile: File | null;
   artworkFile: File | null;
   busy: boolean;
   canSubmit: boolean;
@@ -1986,6 +2409,7 @@ function BeatEditorSheet({
   deleteArmed: boolean;
   onDraft: (draft: BeatEditorDraft) => void;
   onAudio: (file: File | null) => void;
+  onPreview: (file: File | null) => void;
   onArtwork: (file: File | null) => void;
   onClose: () => void;
   onSave: (action: "save" | "submit" | "archive" | "restore") => void;
@@ -2033,6 +2457,14 @@ function BeatEditorSheet({
             <ProducerFileInput label="Beat audio" value={audioFile?.name ?? "Keep current audio"} accept="audio/*" onChange={onAudio} />
             <ProducerFileInput label="Release artwork" value={artworkFile?.name ?? "Keep current artwork"} accept="image/*" onChange={onArtwork} />
           </div>
+          {!beat.preview_ready && !audioFile && (
+            <ProducerFileInput label="30-second Store preview" value={previewFile?.name ?? "Add missing preview"} accept="audio/*" onChange={onPreview} />
+          )}
+          {(beat.preview_ready || previewFile) && (
+            <div className="flex min-h-10 items-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-400/8 px-3 text-xs font-semibold text-emerald-300">
+              <ShieldCheck className="h-3.5 w-3.5" />Secure Store preview ready
+            </div>
+          )}
           {beat.audio_url && <audio controls preload="none" src={beat.audio_url} className="h-10 w-full" />}
         </div>
 

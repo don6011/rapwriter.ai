@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Toaster } from "@/components/ui/sonner";
 import "../src/styles.css";
 
 export const metadata: Metadata = {
@@ -36,7 +37,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Toaster
+          theme="dark"
+          position="top-center"
+          closeButton
+          toastOptions={{
+            duration: 3_500,
+            className: "!border-gold/20 !bg-[#111113]/95 !text-white !shadow-[0_18px_60px_rgba(0,0,0,0.55)] !backdrop-blur-xl",
+          }}
+        />
+      </body>
     </html>
   );
 }

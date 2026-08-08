@@ -30,6 +30,14 @@ export async function GET() {
     producerMetrics,
     producerFollows,
     producerActions,
+    collaborationRequests,
+    collaborationMessages,
+    collaborationDeliverables,
+    notifications,
+    purchaseOrders,
+    salesOrders,
+    beatLicenses,
+    producerEarnings,
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     supabase.from("artist_profiles").select("*").eq("owner_id", user.id).maybeSingle(),
@@ -55,6 +63,14 @@ export async function GET() {
     supabase.from("producer_metrics").select("*").eq("owner_id", user.id).maybeSingle(),
     supabase.from("producer_follows").select("*").eq("follower_id", user.id).order("created_at"),
     supabase.from("producer_actions").select("*").eq("owner_id", user.id).order("created_at"),
+    supabase.from("producer_collaboration_requests").select("*").or(`artist_id.eq.${user.id},producer_id.eq.${user.id}`).order("created_at"),
+    supabase.from("producer_collaboration_messages").select("*").order("created_at"),
+    supabase.from("producer_collaboration_deliverables").select("*").order("created_at"),
+    supabase.from("user_notifications").select("*").eq("owner_id", user.id).order("created_at"),
+    supabase.from("commerce_orders").select("*, commerce_order_items(*), commerce_order_events(*)").eq("buyer_id", user.id).order("created_at"),
+    supabase.from("commerce_orders").select("*, commerce_order_items(*), commerce_order_events(*)").eq("seller_owner_id", user.id).order("created_at"),
+    supabase.from("beat_license_grants").select("*").eq("owner_id", user.id).order("created_at"),
+    supabase.from("producer_earnings_ledger").select("*").eq("producer_owner_id", user.id).order("created_at"),
   ]);
 
   const results = {
@@ -82,6 +98,14 @@ export async function GET() {
     producer_metrics: producerMetrics,
     producer_follows: producerFollows,
     producer_actions: producerActions,
+    collaboration_requests: collaborationRequests,
+    collaboration_messages: collaborationMessages,
+    collaboration_deliverables: collaborationDeliverables,
+    notifications,
+    purchase_orders: purchaseOrders,
+    sales_orders: salesOrders,
+    beat_licenses: beatLicenses,
+    producer_earnings: producerEarnings,
   };
 
   const failed = Object.entries(results).find(([, result]) => result.error);

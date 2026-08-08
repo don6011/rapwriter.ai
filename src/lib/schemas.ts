@@ -8,6 +8,15 @@ export const accountRoleSchema = z.object({
   account_type: z.enum(["artist", "producer", "artist_producer"]),
 });
 
+export const profilePatchSchema = z.object({
+  account_type: z.enum(["artist", "producer", "artist_producer"]).optional(),
+  display_name: z.string().trim().min(2).max(80).optional(),
+  artist_name: z.string().trim().min(2).max(80).optional(),
+}).refine(
+  (value) => value.account_type !== undefined || value.display_name !== undefined || value.artist_name !== undefined,
+  { message: "Choose a profile field to update." },
+);
+
 export const firstSessionActivationSchema = z.object({
   artist_goal: z.enum(["finish_song", "write_hook", "write_verse", "freestyle"]),
   project_title: z.string().trim().min(1).max(120),
@@ -50,8 +59,8 @@ export const sessionUpsertSchema = z.object({
   song_id: z.string().uuid(),
   beat_id: z.string().nullable().optional(),
   beat_snapshot: jsonRecordSchema.optional(),
-  mode: z.string().default("midnight"),
-  ambiance: z.string().default("vinyl"),
+  mode: z.string().default("skyline-loft"),
+  ambiance: z.string().default("skyline-loft"),
   section_content: sectionsSchema,
   active_section: z.string().default("Hook"),
   song_state: z.number().int().min(0).max(3).default(0),
@@ -153,6 +162,7 @@ export const roughTakeUploadSchema = z.object({
 });
 
 export const producerActionCreateSchema = z.object({
+  request_id: z.string().uuid(),
   project_id: z.string().uuid(),
   song_id: z.string().uuid(),
   session_id: z.string().uuid().nullable().optional(),
@@ -193,6 +203,8 @@ export const producerProfileUpsertSchema = z.object({
   instagram_url: z.string().max(240).optional(),
   youtube_url: z.string().max(240).optional(),
   beatstars_url: z.string().max(240).optional(),
+  airbit_url: z.string().max(240).optional(),
+  traktrain_url: z.string().max(240).optional(),
   business_email: z.string().email().max(240).optional().or(z.literal("")),
   contact_preference: z.enum(["platform", "email", "website", "social", "hidden"]).default("platform"),
   license_settings: z
@@ -273,11 +285,36 @@ export const collaborationRequestSchema = z.object({
 });
 
 export const collaborationDecisionSchema = z.object({
-  action: z.enum(["accept", "counter", "decline", "accept_counter", "cancel", "complete"]),
+  action: z.enum(["accept", "counter", "decline", "accept_counter", "cancel"]),
   response_note: z.string().trim().max(1500).nullable().optional(),
   counter_price_cents: z.number().int().min(0).max(10_000_000).nullable().optional(),
 });
 
 export const collaborationMessageSchema = z.object({
   body: z.string().trim().min(1).max(3000),
+});
+
+export const collaborationDeliverableUploadSchema = z.object({
+  file_name: z.string().trim().min(1).max(180),
+  mime_type: z.string().trim().min(3).max(100),
+  byte_size: z.number().int().min(1).max(250 * 1024 * 1024),
+});
+
+export const collaborationDeliverableCreateSchema = collaborationDeliverableUploadSchema.extend({
+  title: z.string().trim().min(2).max(100),
+  note: z.string().trim().max(1500).default(""),
+  storage_path: z.string().trim().min(12).max(500),
+});
+
+export const collaborationDeliverableReviewSchema = z.object({
+  action: z.enum(["approve", "request_revision"]),
+  feedback: z.string().trim().max(1500).default(""),
+}).superRefine((value, context) => {
+  if (value.action === "request_revision" && value.feedback.length < 3) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["feedback"],
+      message: "Add a clear revision note before sending this back.",
+    });
+  }
 });

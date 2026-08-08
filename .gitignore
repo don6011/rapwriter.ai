@@ -16,6 +16,9 @@ dist-ssr
 .tanstack/**
 .nitro
 *.local
+.env
+.env.*
+!.env.example
 *.tsbuildinfo
 supabase/.temp/
 
@@ -23,6 +26,7 @@ supabase/.temp/
 /rapwriter-*.png
 /playwright-report/
 /test-results/
+/tmp/
 
 # Wrangler / Cloudflare
 .wrangler/

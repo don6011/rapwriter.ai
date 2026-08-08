@@ -22,7 +22,7 @@ export const prepStudioTiers: PrepStudioTier[] = [
     monthlyPriceCents: 0,
     annualPriceCents: 0,
     outcome: "Write, save, and experience the studio.",
-    previewBenefits: ["Write and save songs", "Booth Ready Lite"],
+    previewBenefits: ["Write and save songs", "Skyline + Midnight included"],
     decisionLabel: "Start here",
   },
   {
@@ -33,7 +33,7 @@ export const prepStudioTiers: PrepStudioTier[] = [
     monthlyPriceCents: 1499,
     annualPriceCents: 14990,
     outcome: "Finish songs faster and make every section stronger.",
-    previewBenefits: ["Stronger hooks", "Faster finishes"],
+    previewBenefits: ["Stronger hooks", "5-room core library"],
     decisionLabel: "Recommended",
     featured: true,
   },
@@ -45,7 +45,7 @@ export const prepStudioTiers: PrepStudioTier[] = [
     monthlyPriceCents: 2999,
     annualPriceCents: 29990,
     outcome: "Prepare records for consistent, serious releases.",
-    previewBenefits: ["Performance coaching", "Release intelligence"],
+    previewBenefits: ["Performance coaching", "9-room professional library"],
     decisionLabel: "Career mode",
   },
 ];

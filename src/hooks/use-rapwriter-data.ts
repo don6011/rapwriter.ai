@@ -43,6 +43,10 @@ export type SongRow = {
   booth_score: number;
   total_bars: number;
   last_saved_at: string | null;
+  playback_position_seconds?: number;
+  studio_dna?: Record<string, unknown>;
+  session_mode?: string;
+  session_ambiance?: string;
   projects?: {
     title?: string | null;
     project_type?: string | null;
@@ -170,6 +174,26 @@ export type ProductEntitlementRow = {
   updated_at: string;
 };
 
+export type CommerceOrderRow = {
+  id: string;
+  order_number: string;
+  status: "pending_payment" | "paid" | "fulfilled" | "canceled" | "refund_pending" | "refunded" | "disputed";
+  currency: string;
+  total_cents: number;
+  created_at: string;
+  paid_at: string | null;
+  fulfilled_at: string | null;
+  refunded_at: string | null;
+  commerce_order_items: Array<{
+    id: string;
+    item_type: "product_entitlement" | "beat_license" | "producer_service";
+    catalog_product_id: string | null;
+    title: string;
+    license_name: string | null;
+    fulfillment_status: "pending" | "fulfilled" | "revoked" | "refunded";
+  }>;
+};
+
 export type ProfileRow = {
   id: string;
   email: string | null;
@@ -282,7 +306,9 @@ export function useRapWriterData() {
   const [songLocker, setSongLocker] = useState<SongLockerRow[]>([]);
   const [hookLocker, setHookLocker] = useState<HookLockerRow[]>([]);
   const [roughTake, setRoughTake] = useState<RoughTakeRow | null>(null);
+  const [roughTakes, setRoughTakes] = useState<RoughTakeRow[]>([]);
   const [productEntitlements, setProductEntitlements] = useState<ProductEntitlementRow[]>([]);
+  const [commerceOrders, setCommerceOrders] = useState<CommerceOrderRow[]>([]);
   const [membership, setMembership] = useState<MembershipSnapshot | null>(null);
   const [lockerCounts, setLockerCounts] = useState<LockerCounts>({ beats: 0, songs: 0, hooks: 0 });
   const [loadingData, setLoadingData] = useState(false);
@@ -295,20 +321,40 @@ export function useRapWriterData() {
     sessionRef.current = session;
   }, [session]);
 
+  useEffect(() => {
+    if (!auth.sessionReady || !auth.user) return;
+    const refreshMembership = () => {
+      void api<{ membership: MembershipSnapshot }>("/api/membership")
+        .then((response) => setMembership(response.membership))
+        .catch(() => undefined);
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") refreshMembership();
+    };
+    window.addEventListener("focus", refreshMembership);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("focus", refreshMembership);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [auth.sessionReady, auth.user]);
+
   const refresh = useCallback(async () => {
     if (!auth.sessionReady || !auth.user) return;
     setLoadingData(true);
     setError(null);
     try {
-      const [projectRes, songRes, sessionRes, beatRes, songLockerRes, hookRes, entitlementRes, membershipRes] = await Promise.all([
+      const [projectRes, songRes, sessionRes, beatRes, songLockerRes, hookRes, roughTakeRes, entitlementRes, membershipRes, orderRes] = await Promise.all([
         api<{ projects: ProjectRow[] }>("/api/projects"),
         api<{ songs: SongRow[] }>("/api/songs"),
         api<{ session: SessionRow | null }>("/api/sessions"),
         api<{ beats: BeatLockerRow[] }>("/api/locker/beats"),
         api<{ songs: SongLockerRow[] }>("/api/locker/songs"),
         api<{ hooks: HookLockerRow[] }>("/api/locker/hooks"),
+        api<{ roughTakes: RoughTakeRow[] }>("/api/rough-takes?all=1"),
         api<{ entitlements: ProductEntitlementRow[] }>("/api/entitlements"),
         api<{ membership: MembershipSnapshot }>("/api/membership"),
+        api<{ orders: CommerceOrderRow[] }>("/api/orders?scope=purchases"),
       ]);
       const profileRes = await api<{ profile: ProfileRow }>("/api/profile");
       setProjects(projectRes.projects);
@@ -319,8 +365,10 @@ export function useRapWriterData() {
       setBeatLocker(beatRes.beats);
       setSongLocker(songLockerRes.songs);
       setHookLocker(hookRes.hooks);
+      setRoughTakes(roughTakeRes.roughTakes);
       setProductEntitlements(entitlementRes.entitlements);
       setMembership(membershipRes.membership);
+      setCommerceOrders(orderRes.orders);
       setLockerCounts({
         beats: beatRes.beats.length,
         songs: songLockerRes.songs.length,
@@ -342,6 +390,9 @@ export function useRapWriterData() {
       else if (scope?.songId) params.set("song_id", scope.songId);
       const res = await api<{ roughTake: RoughTakeRow | null }>(`/api/rough-takes${params.size ? `?${params}` : ""}`);
       setRoughTake(res.roughTake);
+      if (res.roughTake) {
+        setRoughTakes((current) => [res.roughTake!, ...current.filter((take) => take.id !== res.roughTake!.id)]);
+      }
       return res.roughTake;
     },
     [auth.user],
@@ -362,7 +413,9 @@ export function useRapWriterData() {
     setSongLocker([]);
     setHookLocker([]);
     setRoughTake(null);
+    setRoughTakes([]);
     setProductEntitlements([]);
+    setCommerceOrders([]);
     setMembership(null);
     setLockerCounts({ beats: 0, songs: 0, hooks: 0 });
     setLastSaved(null);
@@ -514,7 +567,7 @@ export function useRapWriterData() {
   );
 
   const addBeatLicense = useCallback(
-    async (beat: BeatSnapshot, license: License | "Favorite", price: number, checkoutSessionId?: string) => {
+    async (beat: BeatSnapshot, license: License | "Favorite", price: number) => {
       if (!auth.user) return;
       await api("/api/locker/beats", {
         method: "POST",
@@ -527,7 +580,6 @@ export function useRapWriterData() {
           mood: beat.mood,
           license,
           price,
-          stripe_checkout_session_id: checkoutSessionId,
           beat_snapshot: beat,
         }),
       });
@@ -683,6 +735,35 @@ export function useRapWriterData() {
     [auth.user],
   );
 
+  const updateProfileAvatar = useCallback(
+    async (file: File | null) => {
+      if (!auth.user) return null;
+      const res = file
+        ? await (() => {
+            const formData = new FormData();
+            formData.set("file", file, file.name);
+            return api<{ profile: ProfileRow }>("/api/profile/avatar", { method: "POST", body: formData });
+          })()
+        : await api<{ profile: ProfileRow }>("/api/profile/avatar", { method: "DELETE" });
+      setProfile(res.profile);
+      return res.profile;
+    },
+    [auth.user],
+  );
+
+  const updateProfileIdentity = useCallback(
+    async (identity: { artistName: string }) => {
+      if (!auth.user) return null;
+      const res = await api<{ profile: ProfileRow }>("/api/profile", {
+        method: "PATCH",
+        body: JSON.stringify({ artist_name: identity.artistName.trim() }),
+      });
+      setProfile(res.profile);
+      return res.profile;
+    },
+    [auth.user],
+  );
+
   const activateFirstSession = useCallback(
     async (payload: {
       artistGoal: "finish_song" | "write_hook" | "write_verse" | "freestyle";
@@ -759,6 +840,7 @@ export function useRapWriterData() {
       formData.set("beat_position_seconds", String(Math.max(0, payload.beatPositionSeconds ?? 0)));
       const res = await api<{ roughTake: RoughTakeRow }>("/api/rough-takes", { method: "POST", body: formData });
       setRoughTake(res.roughTake);
+      setRoughTakes((current) => [res.roughTake, ...current.filter((take) => take.id !== res.roughTake.id)]);
       return res.roughTake;
     },
     [auth.user],
@@ -777,7 +859,9 @@ export function useRapWriterData() {
     songLocker,
     hookLocker,
     roughTake,
+    roughTakes,
     productEntitlements,
+    commerceOrders,
     membership,
     lockerCounts,
     lastSaved,
@@ -797,6 +881,8 @@ export function useRapWriterData() {
     uploadRoughTake,
     unlockProductEntitlement,
     updateAccountRole,
+    updateProfileAvatar,
+    updateProfileIdentity,
     activateFirstSession,
   };
 }

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api/auth";
 import { parseJson } from "@/lib/api/json";
+import { hasValidRequestOrigin } from "@/lib/api/origin";
 import { collaborationRequestSchema } from "@/lib/schemas";
+import { collaborationRoomIsOpen, type CollaborationStatus } from "@/lib/collaboration";
 import { membershipErrorResponse, requireMembershipEntitlement, requireMembershipLimit } from "@/lib/server/membership-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const requestSelect = "id, artist_id, producer_id, producer_profile_id, producer_service_id, project_id, song_id, beat_id, title, brief, budget_cents, requested_deadline, status, response_note, counter_price_cents, responded_at, accepted_at, completed_at, created_at, updated_at, producer_profiles(display_name, handle, avatar_path), producer_services(title, service_type), producer_beats(title, artwork_path), projects(title), songs(title)";
+const requestSelect = "id, artist_id, producer_id, producer_profile_id, producer_service_id, project_id, song_id, beat_id, title, brief, budget_cents, requested_deadline, status, handoff_status, response_note, counter_price_cents, responded_at, accepted_at, completed_at, created_at, updated_at, producer_profiles(display_name, handle, avatar_path), producer_services(title, service_type), producer_beats(title, artwork_path), projects(title), songs(title)";
 
 export async function GET() {
   const { supabase, user, response } = await requireUser();
@@ -19,10 +21,31 @@ export async function GET() {
     if (isMissingCollaborationTable(error)) return NextResponse.json({ requests: [], viewer_id: user.id, foundation_ready: false });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ requests: data ?? [], viewer_id: user.id, foundation_ready: true });
+  const requests = data ?? [];
+  const artistIds = [...new Set(requests.map((request) => request.artist_id))];
+  const artistProfiles = artistIds.length
+    ? await createAdminClient().from("profiles").select("id, artist_name, display_name").in("id", artistIds)
+    : { data: [], error: null };
+  const artistById = new Map((artistProfiles.data ?? []).map((profile) => [profile.id, {
+    display_name: profile.artist_name || profile.display_name || "Artist",
+  }]));
+
+  return NextResponse.json({
+    requests: requests.map((request) => ({
+      ...request,
+      artist_profile: artistById.get(request.artist_id) ?? { display_name: "Artist" },
+      room_open: collaborationRoomIsOpen(request.status as CollaborationStatus),
+      room_url: collaborationRoomIsOpen(request.status as CollaborationStatus)
+        ? `/collaborations?request=${request.id}`
+        : null,
+    })),
+    viewer_id: user.id,
+    foundation_ready: true,
+  });
 }
 
 export async function POST(request: Request) {
+  if (!hasValidRequestOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   const { supabase, user, response } = await requireUser();
   if (response) return response;
   const parsed = await parseJson(request, collaborationRequestSchema);

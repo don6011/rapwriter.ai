@@ -21,8 +21,13 @@ describe("producer release readiness", () => {
       mood: "Focused",
       region: "Memphis",
       tags: ["Trap", "Focused"],
+      owner_id: "80aa57d3-e657-44d5-a005-a9f955212789",
       audio_path: "user/beats/audio.mp3",
       artwork_path: "user/artwork/cover.webp",
+      metadata: {
+        preview_path: "80aa57d3-e657-44d5-a005-a9f955212789/previews/store.wav",
+        preview_duration_seconds: 30,
+      },
       license_tiers: [
         { license: "Lease", price: 49 },
         { license: "Premium Lease", price: 149 },

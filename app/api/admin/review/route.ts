@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireRole } from "@/lib/api/auth";
+import { requireAnyRole } from "@/lib/api/auth";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
+import {
+  getProducerBeatPreviewDuration,
+  getProducerBeatPreviewPath,
+  isOwnedProducerPreviewPath,
+} from "@/lib/producer-beat-media";
 import { getProducerBeatBlockers, getProducerProfileBlockers } from "@/lib/producer-release";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -19,32 +24,47 @@ const reviewSchema = z.object({
 });
 
 async function signBeatAssets(supabase: ReturnType<typeof createAdminClient>, beat: Record<string, unknown>) {
+  const ownerId = typeof beat.owner_id === "string" ? beat.owner_id : "";
   const audioPath = typeof beat.audio_path === "string" ? beat.audio_path : null;
   const artworkPath = typeof beat.artwork_path === "string" ? beat.artwork_path : null;
-  const [audio, artwork] = await Promise.all([
+  const previewPath = getProducerBeatPreviewPath(beat.metadata);
+  const previewDurationSeconds = getProducerBeatPreviewDuration(beat.metadata);
+  const previewReady = Boolean(
+    ownerId
+    && previewDurationSeconds
+    && isOwnedProducerPreviewPath(previewPath, ownerId, audioPath),
+  );
+  const [audio, preview, artwork] = await Promise.all([
     audioPath ? supabase.storage.from(BUCKET).createSignedUrl(audioPath, 60 * 20) : Promise.resolve({ data: null }),
+    previewReady && previewPath ? supabase.storage.from(BUCKET).createSignedUrl(previewPath, 60 * 20) : Promise.resolve({ data: null }),
     artworkPath ? supabase.storage.from(BUCKET).createSignedUrl(artworkPath, 60 * 20) : Promise.resolve({ data: null }),
   ]);
 
   return {
     ...beat,
     audio_url: audio.data?.signedUrl ?? null,
+    preview_url: preview.data?.signedUrl ?? null,
+    preview_ready: previewReady && Boolean(preview.data?.signedUrl),
+    preview_duration_seconds: previewDurationSeconds,
     artwork_url: artwork.data?.signedUrl ?? null,
   };
 }
 
 async function signStarterBeat(supabase: ReturnType<typeof createAdminClient>, beat: Record<string, unknown>) {
   const audioPath = typeof beat.audio_path === "string" ? beat.audio_path : null;
+  const artworkPath = typeof beat.artwork_path === "string" ? beat.artwork_path : null;
   const audioBucket = typeof beat.audio_bucket === "string" ? beat.audio_bucket : STARTER_BUCKET;
-  const audio = audioPath
-    ? await supabase.storage.from(audioBucket).createSignedUrl(audioPath, 60 * 20)
-    : { data: null };
-  return { ...beat, audio_url: audio.data?.signedUrl ?? null };
+  const [audio, artwork] = await Promise.all([
+    audioPath ? supabase.storage.from(audioBucket).createSignedUrl(audioPath, 60 * 20) : Promise.resolve({ data: null }),
+    artworkPath ? supabase.storage.from(audioBucket).createSignedUrl(artworkPath, 60 * 20) : Promise.resolve({ data: null }),
+  ]);
+  return { ...beat, audio_url: audio.data?.signedUrl ?? null, artwork_url: artwork.data?.signedUrl ?? null };
 }
 
 export async function GET() {
-  const admin = await requireRole("admin");
-  if (admin.response) return admin.response;
+  const staff = await requireAnyRole(["moderator", "admin"]);
+  if (staff.response) return staff.response;
+  const canManageInventory = staff.roles.includes("admin");
 
   let supabase: ReturnType<typeof createAdminClient>;
   try {
@@ -69,6 +89,7 @@ export async function GET() {
     { data: starterBeats, error: starterBeatsError },
     { data: activity, error: activityError },
     { count: adminCount, error: adminCountError },
+    { count: moderatorCount, error: moderatorCountError },
     { data: accountPage, error: accountsError },
   ] = await Promise.all([
     supabase
@@ -81,22 +102,22 @@ export async function GET() {
       .select("*, producer_profiles(display_name, handle, city, status, verified)")
       .order("updated_at", { ascending: false })
       .limit(150),
-    supabase
-      .from("starter_beats")
-      .select("id, slug, title, producer_name, producer_profile_id, source_type, rights_holder, audio_bucket, audio_path, artwork_path, duration_seconds, bpm, musical_key, genre, mood, tags, attribution, is_active, sort_order, created_at, updated_at")
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: false })
-      .limit(100),
+    canManageInventory
+      ? supabase
+          .from("starter_beats")
+          .select("id, slug, title, producer_name, producer_profile_id, source_type, rights_holder, audio_bucket, audio_path, artwork_path, duration_seconds, bpm, musical_key, genre, mood, tags, collection_slug, energy, writing_fit, attribution, status, is_active, is_featured, preview_seconds, sort_order, published_at, archived_at, created_at, updated_at")
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: false })
+          .limit(100)
+      : Promise.resolve({ data: [], error: null }),
     supabase
       .from("producer_release_reviews")
       .select("id, target_type, target_id, from_status, to_status, notes, blockers, created_at")
       .order("created_at", { ascending: false })
       .limit(12),
-    supabase
-      .from("user_roles")
-      .select("user_id", { count: "exact", head: true })
-      .eq("role", "admin"),
-    supabase.auth.admin.listUsers({ page: 1, perPage: 200 }),
+    supabase.from("user_roles").select("user_id", { count: "exact", head: true }).eq("role", "admin"),
+    supabase.from("user_roles").select("user_id", { count: "exact", head: true }).eq("role", "moderator"),
+    canManageInventory ? supabase.auth.admin.listUsers({ page: 1, perPage: 200 }) : Promise.resolve({ data: { users: [] }, error: null }),
   ]);
 
   if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 500 });
@@ -104,6 +125,7 @@ export async function GET() {
   if (starterBeatsError) return NextResponse.json({ error: starterBeatsError.message }, { status: 500 });
   if (activityError) return NextResponse.json({ error: activityError.message }, { status: 500 });
   if (adminCountError) return NextResponse.json({ error: adminCountError.message }, { status: 500 });
+  if (moderatorCountError) return NextResponse.json({ error: moderatorCountError.message }, { status: 500 });
   if (accountsError) return NextResponse.json({ error: accountsError.message }, { status: 500 });
 
   const [signedBeats, signedStarterBeats] = await Promise.all([
@@ -125,21 +147,25 @@ export async function GET() {
       starter_beats: signedStarterBeats,
       accounts,
       activity: activity ?? [],
-      security: { admin_count: adminCount ?? 0 },
+      permissions: { can_manage_inventory: canManageInventory, can_manage_users: canManageInventory },
+      security: {
+        admin_count: adminCount ?? 0,
+        moderator_count: moderatorCount ?? 0,
+      },
     },
     { headers: { "Cache-Control": "private, no-store, max-age=0" } },
   );
 }
 
 export async function PATCH(request: Request) {
-  const admin = await requireRole("admin");
-  if (admin.response || !admin.user) return admin.response;
+  const staff = await requireAnyRole(["moderator", "admin"]);
+  if (staff.response || !staff.user) return staff.response;
 
   const rateLimit = await enforceRateLimit(request, {
     scope: "admin-review",
     limit: 120,
     windowSeconds: 60 * 60,
-    identity: admin.user.id,
+    identity: staff.user.id,
   });
   if (rateLimit) return rateLimit;
 
@@ -176,7 +202,7 @@ export async function PATCH(request: Request) {
     const { data, error } = await supabase.rpc("apply_producer_release_review", {
       p_target_type: "profile",
       p_target_id: parsed.data.id,
-      p_reviewer_id: admin.user!.id,
+      p_reviewer_id: staff.user!.id,
       p_status: parsed.data.status,
       p_notes: parsed.data.admin_notes ?? null,
       p_blockers: blockers,
@@ -212,7 +238,7 @@ export async function PATCH(request: Request) {
   const { data, error } = await supabase.rpc("apply_producer_release_review", {
     p_target_type: "beat",
     p_target_id: parsed.data.id,
-    p_reviewer_id: admin.user!.id,
+    p_reviewer_id: staff.user!.id,
     p_status: parsed.data.status,
     p_notes: parsed.data.admin_notes ?? null,
     p_blockers: blockers,

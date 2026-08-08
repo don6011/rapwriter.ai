@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api/auth";
 import { parseJson } from "@/lib/api/json";
-import { collaborationTransition, type CollaborationAction, type CollaborationStatus } from "@/lib/collaboration";
+import { hasValidRequestOrigin } from "@/lib/api/origin";
+import { collaborationRoomIsOpen, collaborationTransition, type CollaborationAction, type CollaborationStatus } from "@/lib/collaboration";
 import { collaborationDecisionSchema } from "@/lib/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -9,6 +10,7 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, { params }: RouteContext) {
+  if (!hasValidRequestOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   const { supabase, user, response } = await requireUser();
   if (response) return response;
   const id = (await params).id;
@@ -35,12 +37,19 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   };
   if (parsed.data.action === "counter") update.counter_price_cents = parsed.data.counter_price_cents;
   if (nextStatus === "accepted") update.accepted_at = now;
-  if (nextStatus === "completed") update.completed_at = now;
   Object.keys(update).forEach((key) => update[key] === undefined && delete update[key]);
 
   const admin = createAdminClient();
   const { data, error: updateError } = await admin.from("producer_collaboration_requests").update(update).eq("id", id).eq("status", current.status).select("*").maybeSingle();
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "This request changed. Refresh and try again." }, { status: 409 });
-  return NextResponse.json({ request: data });
+  return NextResponse.json({
+    request: {
+      ...data,
+      room_open: collaborationRoomIsOpen(data.status as CollaborationStatus),
+      room_url: collaborationRoomIsOpen(data.status as CollaborationStatus)
+        ? `/collaborations?request=${data.id}`
+        : null,
+    },
+  });
 }

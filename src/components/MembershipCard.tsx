@@ -1,64 +1,126 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check, ChevronDown, Crown, LoaderCircle, Sparkles } from "lucide-react";
-import type { MembershipSnapshot, PlanDefinition, WorkspaceMembership } from "@/lib/membership";
-import { prepStudioTier, withPrepStudioPresentation } from "@/lib/prep-studio-plans";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { ArrowRight, BriefcaseBusiness, Check, ChevronDown, Crown, LoaderCircle, Mic2, Sparkles, X } from "lucide-react";
+import type {
+  MembershipBundleDefinition,
+  MembershipSnapshot,
+  PlanDefinition,
+  WorkspaceMembership,
+} from "@/lib/membership";
+import { withPrepStudioPresentation } from "@/lib/prep-studio-plans";
 import { cn } from "@/lib/utils";
 
 type MembershipResponse = {
   membership?: MembershipSnapshot;
   plans?: PlanDefinition[];
+  bundles?: MembershipBundleDefinition[];
 };
 
-export function MembershipCard() {
-  const [membership, setMembership] = useState<MembershipSnapshot | null>(null);
+type LaunchCampaign = {
+  slug: string;
+  name: string;
+  description: string;
+  audience: "artist" | "producer";
+  max_claims: number;
+  claim_count: number;
+  duration_days: number;
+};
+
+type MembershipView = "artist" | "producer" | "bundle";
+
+type MembershipCardProps = {
+  initialMembership?: MembershipSnapshot | null;
+  onOpenStudio?: () => void;
+  onOpenMarket?: () => void;
+};
+
+export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenMarket }: MembershipCardProps) {
+  const [membership, setMembership] = useState<MembershipSnapshot | null>(initialMembership);
   const [plans, setPlans] = useState<PlanDefinition[]>([]);
+  const [bundles, setBundles] = useState<MembershipBundleDefinition[]>([]);
   const [expanded, setExpanded] = useState(true);
+  const [view, setView] = useState<MembershipView>("artist");
+  const [accessGuideOpen, setAccessGuideOpen] = useState(false);
   const [interval, setInterval] = useState<"monthly" | "annual">("monthly");
   const [billingBusy, setBillingBusy] = useState<string | null>(null);
   const [billingNotice, setBillingNotice] = useState<string | null>(null);
+  const [campaigns, setCampaigns] = useState<LaunchCampaign[]>([]);
+  const [claimBusy, setClaimBusy] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    void fetch("/api/membership", { cache: "no-store", credentials: "same-origin" })
+  const refreshMembership = useCallback(() => {
+    return fetch("/api/membership", { cache: "no-store", credentials: "same-origin" })
       .then(async (response) => {
-        const payload = await response.json().catch(() => null) as MembershipResponse | { error?: string } | null;
-        return response.ok ? payload as MembershipResponse : null;
+        const payload = await response.json().catch(() => null) as MembershipResponse | null;
+        return response.ok ? payload : null;
       })
       .then((payload) => {
-        if (active && payload?.membership) {
-          setMembership(payload.membership);
-          setPlans(payload.plans ?? []);
-        }
+        if (!payload?.membership) return;
+        setMembership(payload.membership);
+        setPlans(payload.plans ?? []);
+        setBundles(payload.bundles ?? []);
       })
       .catch(() => undefined);
-    return () => {
-      active = false;
-    };
   }, []);
+
+  useEffect(() => {
+    const load = () => {
+      void refreshMembership();
+    };
+    load();
+    const handleFocus = () => load();
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [refreshMembership]);
+
+  useEffect(() => {
+    fetch("/api/launch-campaigns", { cache: "no-store", credentials: "same-origin" })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((payload) => setCampaigns(payload?.campaigns ?? []))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (initialMembership) setMembership(initialMembership);
+  }, [initialMembership]);
 
   const artist = membership?.artist;
   if (!artist) return <div aria-hidden="true" className="h-20 animate-pulse rounded-2xl border border-white/10 bg-white/[0.025]" />;
-  const artistPlan = withPrepStudioPresentation(artist.plan);
 
-  const allowance = numberLimit(artist, "ghostwriter_actions_monthly");
-  const used = artist.usage.ghostwriter_actions ?? 0;
-  const usagePct = allowance > 0 ? Math.min(100, Math.round((used / allowance) * 100)) : 0;
-  const hasGhostwriter = artist.entitlements.ghostwriter === true;
+  const artistPlan = withPrepStudioPresentation(artist.plan);
+  const producer = membership?.producer ?? null;
   const artistUpgrades = plans
     .filter((plan) => plan.audience === "artist" && plan.tier > artist.plan.tier)
     .map(withPrepStudioPresentation);
+  const producerUpgrades = plans.filter((plan) => plan.audience === "producer" && plan.tier > (producer?.plan.tier ?? 0));
+  const bundle = bundles.find((item) => item.id === "creator_all_access") ?? bundles[0] ?? null;
+  const bothWorkspacesPaid = artist.plan.tier >= 2 && (producer?.plan.tier ?? 0) >= 1;
+  const hasStripeWorkspace = artist.provider === "stripe" || producer?.provider === "stripe";
+  const accessSummary = membershipAccessSummary(artist, producer);
+  const showBillingInterval = view === "artist"
+    ? artist.source === "free" && artistUpgrades.length > 0
+    : view === "producer"
+      ? (!producer || producer.source === "free") && producerUpgrades.length > 0
+      : Boolean(bundle && producer && !bothWorkspacesPaid && !hasStripeWorkspace);
 
-  const startCheckout = async (planId: string) => {
-    setBillingBusy(planId);
+  const startCheckout = async (input: { planId?: string; bundleId?: string }) => {
+    const busyKey = input.bundleId ?? input.planId ?? "checkout";
+    setBillingBusy(busyKey);
     setBillingNotice(null);
     try {
       const response = await fetch("/api/stripe/subscriptions/checkout", {
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ plan_id: planId, interval }),
+        body: JSON.stringify({ plan_id: input.planId, bundle_id: input.bundleId, interval }),
       });
       const payload = await response.json().catch(() => ({})) as { checkout_url?: string; error?: string };
       if (!response.ok || !payload.checkout_url) throw new Error(payload.error ?? "Checkout could not be opened.");
@@ -83,6 +145,24 @@ export function MembershipCard() {
     }
   };
 
+  const claimCampaign = async (campaign: LaunchCampaign) => {
+    setClaimBusy(campaign.slug);
+    setBillingNotice(null);
+    try {
+      const response = await fetch("/api/launch-campaigns", {
+        method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: campaign.slug }),
+      });
+      const payload = await response.json().catch(() => ({})) as { success?: boolean; error?: string };
+      if (!response.ok || !payload.success) throw new Error(campaignClaimMessage(payload.error));
+      setCampaigns((items) => items.filter((item) => item.slug !== campaign.slug));
+      await refreshMembership();
+      setBillingNotice(`${campaign.name} access is active.`);
+    } catch (error) {
+      setBillingNotice(error instanceof Error ? error.message : "Promotional access could not be claimed.");
+    } finally { setClaimBusy(null); }
+  };
+
   return (
     <section className="overflow-hidden rounded-2xl border border-gold/20 bg-[#111113] shadow-[0_14px_44px_rgba(0,0,0,0.25)]">
       <button
@@ -95,105 +175,318 @@ export function MembershipCard() {
           <Crown className="h-5 w-5" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="label-hw block text-gold/80">Prep Studio&trade; Membership</span>
-          <span className="mt-1 block truncate text-sm font-semibold text-white">{artistPlan.name}</span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">{artistPlan.tagline}</span>
+          <span className="label-hw block text-gold/80">Your Memberships</span>
+          <span className="mt-1 block truncate text-sm font-semibold text-white">
+            {artistPlan.name}<span className="px-1.5 text-white/25">/</span>{producer ? producer.plan.name : "Producer HQ not active"}
+          </span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">One account. Two independent workspaces.</span>
         </span>
         <ChevronDown className={cn("h-4 w-4 shrink-0 text-white/45 transition-transform", expanded && "rotate-180")} />
       </button>
 
       {expanded && (
         <div className="border-t border-white/10 px-4 pb-4 pt-3">
-          {hasGhostwriter ? (
-            <>
-              <div className="flex items-center justify-between gap-3 text-xs">
-                <span className="text-muted-foreground">Studio assists this month</span>
-                <span className="font-semibold text-white">{used} / {allowance}</span>
-              </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
-                <div className="h-full rounded-full bg-gold" style={{ width: `${usagePct}%` }} />
-              </div>
-            </>
-          ) : (
-            <div className="rounded-xl border border-gold/15 bg-gold/[0.05] px-3 py-2.5 text-xs text-white/65">
-              Pro helps you finish songs faster, sharpen lyrics, and leave the session Booth Ready&trade;.
-            </div>
-          )}
-
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <MembershipCapability label="Sharper lyrics" active={artist.entitlements.full_pen_view === true} />
-            <MembershipCapability label="Finish faster" active={hasGhostwriter} />
-            <MembershipCapability label="Booth Ready" active={artist.entitlements.advanced_booth_ready === true} />
+          <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-black/25 p-1">
+            <MembershipTab active={view === "artist"} icon={Mic2} label="Artist" onClick={() => setView("artist")} />
+            <MembershipTab active={view === "producer"} icon={BriefcaseBusiness} label="Producer" onClick={() => setView("producer")} />
+            <MembershipTab active={view === "bundle"} icon={Crown} label="All Access" onClick={() => setView("bundle")} />
           </div>
 
-          {membership?.producer && (
-            <div className="mt-3 flex items-center justify-between rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
-              <span className="text-xs text-muted-foreground">Producer HQ</span>
-              <span className="text-xs font-semibold text-gold">{membership.producer.plan.name}</span>
-            </div>
-          )}
+          {campaigns.filter((campaign) => campaign.audience === view).map((campaign) => {
+            const remaining = Math.max(0, campaign.max_claims - campaign.claim_count);
+            return <div key={campaign.slug} className="mt-3 rounded-xl border border-gold/25 bg-gold/[0.07] p-3">
+              <div className="flex items-start gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-gold/25 bg-black/25 text-gold"><Crown className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-white">{campaign.name}</span><span className="mt-1 block text-[10px] leading-4 text-white/55">{remaining.toLocaleString()} spots remaining · {campaign.duration_days} days included</span></span></div>
+              <button type="button" disabled={claimBusy !== null || remaining === 0} onClick={() => claimCampaign(campaign)} className="gold-seal mt-3 min-h-10 w-full rounded-xl px-3 text-xs font-semibold disabled:opacity-40">{claimBusy === campaign.slug ? "Activating..." : "Claim founding access"}</button>
+            </div>;
+          })}
 
-          {artist.source === "subscription" ? (
-            <button
-              type="button"
-              onClick={() => void openBilling()}
-              disabled={billingBusy !== null}
-              className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-gold/30 bg-gold/10 px-4 text-sm font-semibold text-gold disabled:opacity-60"
-            >
-              {billingBusy === "portal" && <LoaderCircle className="h-4 w-4 animate-spin" />}
-              Manage membership
-            </button>
-          ) : artistUpgrades.length > 0 ? (
-            <div className="mt-4 border-t border-white/10 pt-4">
-              <div className="flex rounded-xl border border-white/10 bg-black/25 p-1">
-                {(["monthly", "annual"] as const).map((option) => (
+          <button
+            type="button"
+            onClick={() => setAccessGuideOpen(true)}
+            className="mt-3 flex min-h-12 w-full items-center gap-3 rounded-xl border border-gold/25 bg-gold/[0.07] px-3 text-left"
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-gold/25 bg-black/25 text-gold">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs font-semibold text-white">See everything you unlocked</span>
+              <span className="mt-0.5 block truncate text-[10px] text-white/50">{accessSummary}</span>
+            </span>
+            <ArrowRight className="h-4 w-4 shrink-0 text-gold" />
+          </button>
+
+          <div className="mt-3 min-h-[220px]">
+            {view === "artist" && (
+              <WorkspacePanel
+                eyebrow="Prep Studio Membership"
+                name={artistPlan.name}
+                tagline={artistPlan.tagline}
+                capabilities={[
+                  ["Sharper lyrics", artist.entitlements.full_pen_view === true],
+                  ["Finish faster", artist.entitlements.ghostwriter === true],
+                  ["Booth Ready", artist.entitlements.advanced_booth_ready === true],
+                ]}
+              >
+                <ArtistUsage workspace={artist} />
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <ActionButton label="Start Writer Flow" onClick={onOpenStudio} />
+                  <ActionButton label="Browse producers" onClick={onOpenMarket} subtle />
+                </div>
+                {artist.provider === "stripe" ? (
+                  <ManageButton busy={billingBusy === "portal"} disabled={billingBusy !== null} onClick={openBilling} />
+                ) : artist.source === "subscription" ? (
+                  <GrantedAccess onExplore={() => setAccessGuideOpen(true)} />
+                ) : (
+                  <UpgradeList plans={artistUpgrades} interval={interval} busy={billingBusy} onCheckout={(planId) => startCheckout({ planId })} />
+                )}
+              </WorkspacePanel>
+            )}
+
+            {view === "producer" && (
+              producer ? (
+                <WorkspacePanel
+                  eyebrow="Producer HQ Membership"
+                  name={producer.plan.name}
+                  tagline={producer.plan.tagline}
+                  capabilities={[
+                    ["Sell your sound", producer.entitlements.producer_storefront === true],
+                    ["Know your audience", producer.entitlements.producer_intelligence === true],
+                    ["Grow your business", producer.entitlements.promotions === true],
+                  ]}
+                >
+                  <Link href="/producer" className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-gold/30 bg-gold/10 px-4 text-sm font-semibold text-gold">
+                    Open Producer HQ
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                  {producer.provider === "stripe" ? (
+                    <ManageButton busy={billingBusy === "portal"} disabled={billingBusy !== null} onClick={openBilling} />
+                  ) : producer.source === "subscription" ? (
+                    <GrantedAccess onExplore={() => setAccessGuideOpen(true)} />
+                  ) : (
+                    <UpgradeList plans={producerUpgrades} interval={interval} busy={billingBusy} onCheckout={(planId) => startCheckout({ planId })} />
+                  )}
+                </WorkspacePanel>
+              ) : (
+                <WorkspacePanel
+                  eyebrow="Producer HQ"
+                  name="Build your producer business"
+                  tagline="Create a storefront, upload beats, and connect with artists."
+                  capabilities={[["Separate catalog", true], ["Producer analytics", true], ["Artist connections", true]]}
+                >
+                  <Link href="/producer" className="mt-4 flex min-h-11 w-full items-center justify-center rounded-xl bg-gold px-4 text-sm font-semibold text-black">
+                    Set up Producer HQ
+                  </Link>
+                </WorkspacePanel>
+              )
+            )}
+
+            {view === "bundle" && (
+              <WorkspacePanel
+                eyebrow="RapWriter All Access"
+                name={bundle?.name ?? "Artist + Producer"}
+                tagline={bundle?.tagline ?? "Prep Studio Elite and Producer HQ Pro under one bill."}
+                capabilities={[["Prep Studio Elite", true], ["Producer HQ Pro", true], ["Separate permissions", true]]}
+              >
+                {bundle && (
+                  <div className="mt-4 flex items-end justify-between gap-3 rounded-xl border border-gold/20 bg-gold/[0.06] px-3 py-3">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Both workspaces</div>
+                      <div className="mt-1 text-sm font-semibold text-white">One membership, no mixed permissions</div>
+                    </div>
+                    <div className="shrink-0 text-sm font-semibold text-gold">
+                      {formatPlanPrice(interval === "annual" ? bundle.annual_price_cents : bundle.monthly_price_cents, interval)}
+                    </div>
+                  </div>
+                )}
+
+                {!producer ? (
+                  <Link href="/producer" className="mt-3 flex min-h-11 w-full items-center justify-center rounded-xl bg-gold px-4 text-sm font-semibold text-black">
+                    Set up Producer HQ first
+                  </Link>
+                ) : bothWorkspacesPaid || hasStripeWorkspace ? (
+                  <>
+                    <p className="mt-3 text-xs leading-relaxed text-white/55">
+                      {bothWorkspacesPaid ? "Both workspaces are active." : "Manage your current plan before switching to All Access."}
+                    </p>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <ActionButton label="Start Writer Flow" onClick={onOpenStudio} />
+                      <Link href="/producer" className="flex min-h-11 items-center justify-center rounded-xl border border-white/10 bg-black/20 px-3 text-xs font-semibold text-white/75">
+                        Producer HQ
+                      </Link>
+                    </div>
+                    {hasStripeWorkspace ? <ManageButton busy={billingBusy === "portal"} disabled={billingBusy !== null} onClick={openBilling} /> : <GrantedAccess onExplore={() => setAccessGuideOpen(true)} />}
+                  </>
+                ) : bundle ? (
                   <button
-                    key={option}
                     type="button"
-                    onClick={() => setInterval(option)}
-                    className={cn("min-h-9 flex-1 rounded-lg text-xs font-semibold capitalize", interval === option ? "bg-gold text-black" : "text-white/55")}
+                    onClick={() => void startCheckout({ bundleId: bundle.id })}
+                    disabled={billingBusy !== null}
+                    className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-gold px-4 text-sm font-semibold text-black disabled:opacity-60"
                   >
-                    {option}
+                    {billingBusy === bundle.id && <LoaderCircle className="h-4 w-4 animate-spin" />}
+                    Choose All Access
                   </button>
-                ))}
-              </div>
-              <div className="mt-2 space-y-2">
-                {artistUpgrades.map((plan) => {
-                  const price = interval === "annual" ? plan.annual_price_cents : plan.monthly_price_cents;
-                  const presentation = prepStudioTier(plan.id);
-                  return (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      onClick={() => void startCheckout(plan.id)}
-                      disabled={billingBusy !== null}
-                      className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-white/10 bg-black/25 px-3 text-left disabled:opacity-60"
-                    >
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-gold/25 bg-gold/10 text-gold">
-                        {billingBusy === plan.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2 text-sm font-semibold text-white">
-                          {plan.name}
-                          {presentation?.featured && <span className="rounded-full border border-gold/30 bg-gold/10 px-1.5 py-0.5 text-[8px] uppercase text-gold">Recommended</span>}
-                        </span>
-                        <span className="block truncate text-[11px] text-muted-foreground">{presentation?.outcome ?? plan.tagline}</span>
-                      </span>
-                      <span className="shrink-0 text-xs font-semibold text-gold">
-                        {formatPlanPrice(price, interval)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="mt-2 text-center text-[10px] text-white/42">Projects remain saved when you change or cancel a plan.</p>
-            </div>
-          ) : null}
+                ) : null}
+              </WorkspacePanel>
+            )}
+          </div>
 
-          {billingNotice && <p className="mt-3 text-xs leading-relaxed text-gold">{billingNotice}</p>}
+          {showBillingInterval && <BillingInterval value={interval} onChange={setInterval} />}
+          {billingNotice && <p className="mt-3 rounded-xl border border-gold/20 bg-gold/[0.06] px-3 py-2.5 text-xs leading-relaxed text-gold">{billingNotice}</p>}
+          <p className="mt-3 text-center text-[10px] text-white/42">Artist and Producer access can be changed independently. Your work stays saved.</p>
         </div>
       )}
+      <MembershipAccessGuide
+        open={accessGuideOpen}
+        artist={artist}
+        producer={producer}
+        onClose={() => setAccessGuideOpen(false)}
+        onOpenStudio={onOpenStudio}
+        onOpenMarket={onOpenMarket}
+      />
     </section>
+  );
+}
+
+function campaignClaimMessage(code?: string) {
+  if (code === "already_claimed") return "This founding offer has already been claimed.";
+  if (code === "campaign_full") return "All founding spots have been claimed.";
+  if (code === "campaign_expired" || code === "campaign_inactive") return "This founding offer is no longer active.";
+  return "Promotional access could not be claimed.";
+}
+
+function MembershipTab({ active, icon: Icon, label, onClick }: { active: boolean; icon: typeof Mic2; label: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className={cn("flex min-h-10 items-center justify-center gap-1.5 rounded-lg text-[11px] font-semibold", active ? "bg-gold text-black" : "text-white/50")}>
+      <Icon className="h-3.5 w-3.5" />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function WorkspacePanel({ eyebrow, name, tagline, capabilities, children }: {
+  eyebrow: string;
+  name: string;
+  tagline: string;
+  capabilities: Array<[string, boolean]>;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="label-hw text-gold/75">{eyebrow}</div>
+      <div className="mt-1 text-lg font-semibold text-white">{name}</div>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{tagline}</p>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {capabilities.map(([label, active]) => <MembershipCapability key={label} label={label} active={active} />)}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ArtistUsage({ workspace }: { workspace: WorkspaceMembership }) {
+  const allowance = numberLimit(workspace, "ghostwriter_actions_monthly");
+  const used = workspace.usage.ghostwriter_actions ?? 0;
+  const unlimited = allowance === -1;
+  const usagePct = allowance > 0 ? Math.min(100, Math.round((used / allowance) * 100)) : 0;
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="text-muted-foreground">Studio assists this month</span>
+        <span className="font-semibold text-white">{unlimited ? `${used} / Unlimited` : `${used} / ${allowance}`}</span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full rounded-full bg-gold" style={{ width: unlimited ? "100%" : `${usagePct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function UpgradeList({ plans, interval, busy, onCheckout }: {
+  plans: PlanDefinition[];
+  interval: "monthly" | "annual";
+  busy: string | null;
+  onCheckout: (planId: string) => void;
+}) {
+  if (!plans.length) return null;
+  return (
+    <div className="mt-4 space-y-2">
+      {plans.map((plan) => {
+        const price = interval === "annual" ? plan.annual_price_cents : plan.monthly_price_cents;
+        return (
+          <button
+            key={plan.id}
+            type="button"
+            onClick={() => onCheckout(plan.id)}
+            disabled={busy !== null}
+            className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-white/10 bg-black/25 px-3 text-left disabled:opacity-60"
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-gold/25 bg-gold/10 text-gold">
+              {busy === plan.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-white">{plan.name}</span>
+              <span className="block truncate text-[11px] text-muted-foreground">{plan.tagline}</span>
+            </span>
+            <span className="shrink-0 text-xs font-semibold text-gold">{formatPlanPrice(price, interval)}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function BillingInterval({ value, onChange }: { value: "monthly" | "annual"; onChange: (value: "monthly" | "annual") => void }) {
+  return (
+    <div className="mt-3 flex rounded-xl border border-white/10 bg-black/25 p-1">
+      {(["monthly", "annual"] as const).map((option) => (
+        <button key={option} type="button" onClick={() => onChange(option)} className={cn("min-h-9 flex-1 rounded-lg text-xs font-semibold capitalize", value === option ? "bg-white/10 text-white" : "text-white/45")}>
+          {option}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ManageButton({ busy, disabled, onClick }: { busy: boolean; disabled: boolean; onClick: () => void }) {
+  return (
+    <button type="button" onClick={() => void onClick()} disabled={disabled} className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-gold/30 bg-gold/10 px-4 text-sm font-semibold text-gold disabled:opacity-60">
+      {busy && <LoaderCircle className="h-4 w-4 animate-spin" />}
+      Manage billing
+    </button>
+  );
+}
+
+function ActionButton({ label, onClick, subtle = false }: { label: string; onClick?: () => void; subtle?: boolean }) {
+  if (!onClick) return null;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex min-h-11 items-center justify-center rounded-xl px-3 text-xs font-semibold",
+        subtle ? "border border-white/10 bg-black/20 text-white/75" : "bg-gold text-black",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function GrantedAccess({ onExplore }: { onExplore: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onExplore}
+      className="mt-4 flex min-h-12 w-full items-center gap-3 rounded-xl border border-emerald-400/25 bg-emerald-400/[0.07] px-3 text-left"
+    >
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-emerald-400/10 text-emerald-300"><Check className="h-4 w-4" /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-semibold text-emerald-300">Access granted by RapWriter</span>
+        <span className="mt-0.5 block text-[10px] text-white/45">View unlocked access</span>
+      </span>
+      <ArrowRight className="h-4 w-4 text-emerald-300" />
+    </button>
   );
 }
 
@@ -201,18 +494,217 @@ function MembershipCapability({ label, active }: { label: string; active: boolea
   return (
     <div className={cn("min-w-0 rounded-xl border px-2 py-2.5 text-center", active ? "border-gold/25 bg-gold/[0.08]" : "border-white/10 bg-black/20")}>
       <Sparkles className={cn("mx-auto h-3.5 w-3.5", active ? "text-gold" : "text-white/25")} />
-      <div className={cn("mt-1.5 truncate text-[10px] font-semibold", active ? "text-white" : "text-white/45")}>{label}</div>
+      <div className={cn("mt-1.5 text-[10px] font-semibold leading-tight", active ? "text-white" : "text-white/45")}>{label}</div>
     </div>
   );
 }
 
+type AccessItem = {
+  key: string;
+  label: string;
+  detail: string;
+};
+
+type AccessGroup = {
+  title: string;
+  items: AccessItem[];
+};
+
+function MembershipAccessGuide({
+  open,
+  artist,
+  producer,
+  onClose,
+  onOpenStudio,
+  onOpenMarket,
+}: {
+  open: boolean;
+  artist: WorkspaceMembership;
+  producer: WorkspaceMembership | null;
+  onClose: () => void;
+  onOpenStudio?: () => void;
+  onOpenMarket?: () => void;
+}) {
+  const [workspace, setWorkspace] = useState<"artist" | "producer">("artist");
+
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  if (!open) return null;
+
+  const current = workspace === "artist" ? artist : producer;
+  const groups = workspace === "artist" ? artistAccessGroups(artist) : producer ? producerAccessGroups(producer) : [];
+  const roomCount = numberLimit(artist, "studio_rooms");
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 px-2 pt-12 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Unlocked membership access">
+      <button type="button" aria-label="Close unlocked access" onClick={onClose} className="absolute inset-0" />
+      <div className="relative max-h-[88dvh] w-full max-w-[430px] overflow-y-auto rounded-t-3xl border border-white/10 bg-[#111113] pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-24px_80px_rgba(0,0,0,0.72)]">
+        <div className="sticky top-0 z-10 flex items-start gap-3 border-b border-white/10 bg-[#111113]/95 px-4 pb-4 pt-5 backdrop-blur-xl">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold/30 bg-gold/10 text-gold"><Crown className="h-5 w-5" /></span>
+          <div className="min-w-0 flex-1">
+            <div className="label-hw text-gold/80">Your unlocked access</div>
+            <h2 className="mt-1 text-lg font-semibold text-white">Everything available now</h2>
+            <p className="mt-1 text-xs leading-relaxed text-white/50">Open a workspace below and start using your membership.</p>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/10 text-white/55" aria-label="Close">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-4">
+          <div className={cn("grid gap-1 rounded-xl border border-white/10 bg-black/25 p-1", producer ? "grid-cols-2" : "grid-cols-1")}>
+            <MembershipTab active={workspace === "artist"} icon={Mic2} label={artist.plan.name} onClick={() => setWorkspace("artist")} />
+            {producer && <MembershipTab active={workspace === "producer"} icon={BriefcaseBusiness} label={producer.plan.name} onClick={() => setWorkspace("producer")} />}
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-gold/20 bg-gold/[0.06] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="label-hw text-gold/75">{workspace === "artist" ? "Prep Studio" : "Producer HQ"}</div>
+                <div className="mt-1 text-lg font-semibold text-white">{current?.plan.name}</div>
+              </div>
+              <span className="rounded-full border border-emerald-400/25 bg-emerald-400/[0.08] px-2.5 py-1 text-[10px] font-semibold text-emerald-300">Active</span>
+            </div>
+            {workspace === "artist" && (
+              <div className="mt-3 flex gap-2 text-[10px] text-white/55">
+                <span className="rounded-full border border-white/10 px-2.5 py-1">{roomCount === -1 ? "All rooms" : `${roomCount || 1} rooms`}</span>
+                <span className="rounded-full border border-white/10 px-2.5 py-1">{numberLimit(artist, "active_projects") === -1 ? "Unlimited projects" : "Project access"}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {groups.map((group) => (
+              <div key={group.title} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                <div className="label-hw text-gold/75">{group.title}</div>
+                <div className="mt-2 divide-y divide-white/[0.07]">
+                  {group.items.map((item) => (
+                    <div key={item.key} className="flex gap-3 py-2.5 first:pt-1 last:pb-1">
+                      <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-400/10 text-emerald-300"><Check className="h-3 w-3" /></span>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-white">{item.label}</div>
+                        <div className="mt-0.5 text-[10px] leading-relaxed text-white/45">{item.detail}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {workspace === "artist" ? (
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <ActionButton label="Start Writer Flow" onClick={() => { onClose(); onOpenStudio?.(); }} />
+              <ActionButton label="Browse producers" onClick={() => { onClose(); onOpenMarket?.(); }} subtle />
+            </div>
+          ) : (
+            <Link href="/producer" className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gold px-4 text-sm font-semibold text-black">
+              Open Producer HQ
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function enabled(workspace: WorkspaceMembership, key: string) {
+  return workspace.entitlements[key] === true;
+}
+
+function activeItems(workspace: WorkspaceMembership, items: AccessItem[]) {
+  return items.filter((item) => enabled(workspace, item.key));
+}
+
+function artistAccessGroups(workspace: WorkspaceMembership): AccessGroup[] {
+  return [
+    {
+      title: "Write better",
+      items: activeItems(workspace, [
+        { key: "ghostwriter", label: "Ghostwriter", detail: "Develop ideas and finish sections without leaving Writer Flow." },
+        { key: "full_pen_view", label: "Pen View", detail: "Inspect rhyme, structure, and line-level writing signals." },
+        { key: "hook_doctor", label: "Hook Doctor", detail: "Strengthen the replay value and clarity of your hook." },
+        { key: "rewrite", label: "Rewrite", detail: "Explore stronger versions while keeping your original draft." },
+        { key: "producer_pass", label: "Producer Pass", detail: "Get record-focused feedback from the other side of the glass." },
+        { key: "commercial_pass", label: "Commercial Pass", detail: "Review replay value and commercial song structure." },
+      ]),
+    },
+    {
+      title: "Finish the record",
+      items: activeItems(workspace, [
+        { key: "advanced_booth_ready", label: "Advanced Booth Ready", detail: "See what is holding the song back and what to fix next." },
+        { key: "performance_coach", label: "Performance Coach", detail: "Prepare delivery, emphasis, and recording decisions." },
+        { key: "version_history", label: "Version history", detail: "Return to earlier drafts as the record develops." },
+        { key: "premium_exports", label: "Premium exports", detail: "Take clean, organized lyrics into the booth." },
+        { key: "commercial_intelligence", label: "Commercial intelligence", detail: "Understand structure and replay signals before recording." },
+      ]),
+    },
+    {
+      title: "Studio & connections",
+      items: activeItems(workspace, [
+        { key: "elite_rooms", label: "Elite rooms", detail: "Use the expanded collection of immersive writing environments." },
+        { key: "multi_device_cloud_sync", label: "Cloud sync", detail: "Keep projects and sessions current across devices." },
+        { key: "producer_connections", label: "Producer connections", detail: "Discover producers whose sound fits the record." },
+        { key: "producer_messaging", label: "Producer messaging", detail: "Start a working conversation around beats and records." },
+        { key: "unlimited_priority_ai", label: "Priority studio intelligence", detail: "Use the highest membership priority for studio assists." },
+      ]),
+    },
+  ].filter((group) => group.items.length > 0);
+}
+
+function producerAccessGroups(workspace: WorkspaceMembership): AccessGroup[] {
+  return [
+    {
+      title: "Catalog",
+      items: activeItems(workspace, [
+        { key: "producer_storefront", label: "Producer storefront", detail: "Publish a focused home for your sound and releases." },
+        { key: "catalog_import", label: "Catalog import", detail: "Bring catalog details from the platforms you already use." },
+        { key: "custom_storefront", label: "Store customization", detail: "Shape how artists experience your producer identity." },
+        { key: "collections", label: "Collections", detail: "Organize beats into branded, intentional releases." },
+        { key: "bundles", label: "Bundles", detail: "Package related releases and creative offers together." },
+      ]),
+    },
+    {
+      title: "Grow the business",
+      items: activeItems(workspace, [
+        { key: "producer_intelligence", label: "Producer intelligence", detail: "See how artists discover and use your catalog." },
+        { key: "advanced_customer_insights", label: "Audience insights", detail: "Understand the artists responding to your sound." },
+        { key: "promotions", label: "Promotions", detail: "Create campaigns that bring more writers to your beats." },
+        { key: "service_listings", label: "Producer services", detail: "Offer custom beats, feedback, and collaboration services." },
+      ]),
+    },
+    {
+      title: "Artist relationships",
+      items: activeItems(workspace, [
+        { key: "artist_messaging", label: "Artist messaging", detail: "Continue conversations around active records." },
+        { key: "automatic_delivery", label: "Automatic delivery", detail: "Keep approved purchases and files moving cleanly." },
+        { key: "custom_license_templates", label: "License templates", detail: "Prepare consistent licensing options for your catalog." },
+      ]),
+    },
+  ].filter((group) => group.items.length > 0);
+}
+
+function membershipAccessSummary(artist: WorkspaceMembership, producer: WorkspaceMembership | null) {
+  const roomCount = numberLimit(artist, "studio_rooms");
+  const artistSummary = roomCount === -1 ? "all studio rooms" : `${roomCount || 1} studio rooms`;
+  return producer ? `${artistSummary}, artist intelligence, and ${producer.plan.name}` : `${artistSummary} and your artist tools`;
+}
+
 function numberLimit(workspace: WorkspaceMembership, key: string) {
   const value = workspace.limits[key];
-  return typeof value === "number" && value >= 0 ? value : 0;
+  return typeof value === "number" ? value : 0;
 }
 
 function formatPlanPrice(value: number | null, interval: "monthly" | "annual") {
   if (value === null) return "Unavailable";
   const dollars = value / 100;
-  return interval === "annual" ? `$${dollars.toFixed(0)}/yr` : `$${dollars.toFixed(2)}/mo`;
+  return interval === "annual" ? `$${dollars.toFixed(2)}/yr` : `$${dollars.toFixed(2)}/mo`;
 }

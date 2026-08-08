@@ -20,6 +20,17 @@ async function expectHealthyPage(page: Page) {
   expect(brokenLocalImages).toEqual([]);
 }
 
+async function expectStudioShellReady(page: Page) {
+  await expect(page.getByText("Restoring Studio", { exact: true })).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("app-dock")).toHaveCount(1, { timeout: 30_000 });
+}
+
+async function openWriterFlow(page: Page) {
+  const action = page.getByTestId("open-writer-flow");
+  await expect(action).toBeVisible({ timeout: 20_000 });
+  await action.click();
+}
+
 test.describe("public app shell", () => {
   for (const route of publicRoutes) {
     test(`${route} renders without viewport overflow`, async ({ page }) => {
@@ -27,6 +38,7 @@ test.describe("public app shell", () => {
       page.on("pageerror", (error) => pageErrors.push(error.message));
       await page.goto(route, { waitUntil: "domcontentloaded" });
       await expect(page.locator("body")).toBeVisible();
+      if (route === "/" || route.startsWith("/?view=")) await expectStudioShellReady(page);
       await expectHealthyPage(page);
       expect(pageErrors).toEqual([]);
     });
@@ -48,8 +60,9 @@ test("writer draft and active section survive refresh", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: "domcontentloaded" });
+  await expectStudioShellReady(page);
 
-  await page.getByRole("button", { name: "Open Writer Flow" }).click();
+  await openWriterFlow(page);
   const startSession = page.getByRole("button", { name: "Start Session" });
   if (await startSession.isVisible().catch(() => false)) await startSession.click();
 
@@ -64,7 +77,8 @@ test("writer draft and active section survive refresh", async ({ page }) => {
   await page.waitForTimeout(250);
   const resumedPage = await page.context().newPage();
   await resumedPage.goto("/", { waitUntil: "domcontentloaded" });
-  await resumedPage.getByRole("button", { name: "Open Writer Flow" }).click();
+  await expectStudioShellReady(resumedPage);
+  await openWriterFlow(resumedPage);
   const resumedStartSession = resumedPage.getByRole("button", { name: "Start Session" });
   if (await resumedStartSession.isVisible().catch(() => false)) await resumedStartSession.click();
 
@@ -105,8 +119,9 @@ test("writer glass pad stays focused and mobile safe", async ({ page }, testInfo
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: "domcontentloaded" });
+  await expectStudioShellReady(page);
 
-  await page.getByRole("button", { name: "Open Writer Flow" }).click();
+  await openWriterFlow(page);
   const startSession = page.getByRole("button", { name: "Start Session" });
   if (await startSession.isVisible().catch(() => false)) await startSession.click();
 
@@ -130,7 +145,7 @@ test("writer glass pad stays focused and mobile safe", async ({ page }, testInfo
   expect(editorStyle.surfaceBackground).not.toBe("rgba(0, 0, 0, 0)");
   expect(editorStyle.surfaceBackdrop).not.toBe("none");
   expect(hookTabRadius).toBeGreaterThanOrEqual(20);
-  await expect(page.locator("nav")).toHaveCount(0);
+  await expect(page.getByTestId("app-dock")).toHaveCount(0);
   await expectHealthyPage(page);
   await page.screenshot({ path: testInfo.outputPath("writer-glass.png"), fullPage: false });
 
@@ -143,6 +158,42 @@ test("writer glass pad stays focused and mobile safe", async ({ page }, testInfo
   await expect(editor).toHaveValue("Glass roof, still I see the sky though\nEvery ceiling that they built, I broke the light through");
 
   await expect(page.getByRole("button", { name: "Pen Pro" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Studio Air" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Open room ambience" }).click();
+  await expect(page.getByRole("dialog", { name: "Room ambience" })).toBeVisible();
+  await expect(page.getByText("Set the room.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Close room ambience" }).click();
+
+  await editor.evaluate((element) => {
+    element.focus();
+    element.setSelectionRange(12, 12);
+  });
+  await page.getByRole("tab", { name: /^Verse 1/ }).click();
+  await page.getByRole("textbox", { name: "Verse 1 lyrics" }).fill("Verse pocket starts here");
+  await page.getByRole("tab", { name: /^Hook/ }).click();
+  await expect(editor).toBeFocused();
+  expect(await editor.evaluate((element) => element.selectionStart)).toBe(12);
+
+  await page.getByTestId("writer-scroll").evaluate((element) => {
+    element.scrollTop = 900;
+  });
+  const stickyTabs = page.getByRole("tablist", { name: "Song sections" });
+  await expect(stickyTabs).toBeVisible();
+  const stickyPosition = await stickyTabs.evaluate((element) => {
+    const rect = element.parentElement?.getBoundingClientRect();
+    return rect ? { top: rect.top, bottom: rect.bottom } : null;
+  });
+  expect(stickyPosition).not.toBeNull();
+  expect(stickyPosition!.top).toBeGreaterThanOrEqual(-1);
+  expect(stickyPosition!.bottom).toBeGreaterThan(0);
+
+  const readinessDrawer = page.getByRole("button", { name: "Record Readiness" });
+  await readinessDrawer.click();
+  await expect(page.getByText("Record journey", { exact: true })).toBeVisible();
+  await expect(page.getByText("Best next action", { exact: true })).toBeVisible();
+  await expect(page.getByText("Producer Pass", { exact: true })).toBeVisible();
+  await expect(page.getByText("Feedback unlocks", { exact: true })).toHaveCount(0);
+
   await expectHealthyPage(page);
   await page.screenshot({ path: testInfo.outputPath("writer-membership-boundary.png"), fullPage: false });
 });
@@ -155,7 +206,8 @@ test("device preview embeds the live app and switches shells", async ({ page }) 
   const phoneShell = page.getByTestId("phone-shell");
   const deviceFrame = page.frameLocator('iframe[title="RapWriter device preview"]');
   await expect(phoneShell).toHaveAttribute("data-device", "iphone");
-  await expect(deviceFrame.locator("body")).toContainText(/Restoring Studio|Studio is ready\./, { timeout: 20_000 });
+  await expect(deviceFrame.getByText("Restoring Studio", { exact: true })).toHaveCount(0, { timeout: 20_000 });
+  await expect(deviceFrame.getByTestId("app-dock")).toHaveCount(1, { timeout: 20_000 });
   await deviceFrame.locator("body").evaluate((body) => body.dataset.previewSession = "preserved");
   await page.getByRole("tab", { name: "Samsung" }).click();
   await expect(phoneShell).toHaveAttribute("data-device", "samsung");

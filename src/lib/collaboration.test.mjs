@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { collaborationTransition } from "./collaboration.ts";
+import { collaborationRoomIsOpen, collaborationTransition } from "./collaboration.ts";
 
 describe("producer collaboration transitions", () => {
   test("lets a producer accept or counter a submitted request", () => {
@@ -17,8 +17,15 @@ describe("producer collaboration transitions", () => {
     expect(collaborationTransition("declined", "accept", "producer")).toBeNull();
   });
 
-  test("only producers complete accepted work", () => {
-    expect(collaborationTransition("accepted", "complete", "producer")).toBe("completed");
+  test("reserves completion for artist approval of a delivered file", () => {
+    expect(collaborationTransition("accepted", "complete", "producer")).toBeNull();
     expect(collaborationTransition("accepted", "complete", "artist")).toBeNull();
+  });
+
+  test("opens the private room only after agreement", () => {
+    expect(collaborationRoomIsOpen("submitted")).toBe(false);
+    expect(collaborationRoomIsOpen("countered")).toBe(false);
+    expect(collaborationRoomIsOpen("accepted")).toBe(true);
+    expect(collaborationRoomIsOpen("completed")).toBe(true);
   });
 });
