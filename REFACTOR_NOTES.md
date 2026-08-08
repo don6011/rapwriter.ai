@@ -138,3 +138,57 @@ server, which throws `Missing NEXT_PUBLIC_SUPABASE_URL and a Supabase publishabl
 the bundled Chromium plus placeholder Supabase values, compared against a git worktree at
 the pre-refactor commit so pre-existing failures are distinguishable from new ones. Neither
 the throwaway config nor the placeholder env file is committed.
+
+---
+
+## Phase 4 notes
+
+All ten sheets moved to `src/components/studio/sheets/` unchanged, each keeping its exact
+`open` / `onOpenChange` (or `open` / `onClose`) contract. No sheet manager was introduced —
+that is a design change and belongs in its own commit after this spec is finished. The
+largest, `BeatSwitcherSheet`, is 301 lines, so it did not need the sub-folder the spec
+allowed for.
+
+### Two sheets CAN be open at once — 5e must keep the booleans
+
+Checked ahead of Phase 5e, and the answer is no: a single `activeSheet: SheetId | null`
+would change behavior. Concrete reachable cases:
+
+1. **Studio Pack sheet + auth drawer.** `StudioPackSheet`'s unlock button calls
+   `onUnlock` → `unlockStudioPack` → `unlockProduct`, which for a signed-out user calls
+   `requestAuth(...)` → `setAuthOpen(true)` without ever calling
+   `setStudioPackSheetOpen(false)`. A signed-out user tapping "unlock" gets the auth drawer
+   layered over the still-open pack sheet.
+2. **Any sheet + Studio Access hub.** The membership effect keyed on
+   `[membership?.artist, membership?.producer, user]` calls `setStudioAccessOpen(true)` as
+   soon as membership resolves and the announcement key differs. `useRapWriterData` loads
+   asynchronously, so if the user opens any sheet before that lands, the hub opens on top.
+
+The codebase already knows this is a hazard and papers over it case by case: the
+`MEMBERSHIP_ACCESS_EVENT` handler calls `setBeatSwitcherOpen(false)` before
+`setStudioAccessOpen(true)`, and `BeatSwitcherSheet.onAuthRequired` closes itself before
+calling `requestAuth`. Those are two hand-written exclusions, not an invariant — the sheets
+are all mounted as siblings, each gated on its own independent boolean.
+
+**Conclusion for 5e: keep the booleans.** Collapsing them to one `activeSheet` would
+silently close the pack sheet in case 1 and suppress the access hub in case 2. Making
+sheets genuinely mutually exclusive is a real improvement, but it is a behavior change and
+needs to be its own decision, not a side effect of a state refactor.
+
+### Dead imports removed from the shell
+
+Moving components out left ~40 imports in `MobileStudioShell.tsx` with no remaining
+references (`ActivityInbox`, `Link`, `Home`, `UserCircle`, `downloadBoothFile`,
+`versionSourceLabel`, and so on). ESLint does not flag unused imports in this repo — the
+config has no `no-unused-vars` rule for TypeScript — so they were pruned by hand here
+rather than left to rot. This is bookkeeping for Phases 3 and 4 combined; no runtime
+behavior depends on it.
+
+### One extraction hazard worth recording
+
+`VersionHistorySheet` renders lucide's `<History />` icon. Because `History` is also a DOM
+global, TypeScript resolved it silently to `lib.dom`'s `History` interface after the move
+instead of reporting an unresolved name, so the missing import surfaced as
+`'History' cannot be used as a JSX component` rather than `Cannot find name`. Any future
+extraction should watch for icon names that collide with DOM globals; `History` is the only
+one in this file's import list.
