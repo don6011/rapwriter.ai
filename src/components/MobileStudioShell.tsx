@@ -184,6 +184,7 @@ import { BeatSwitcherSheet } from "@/components/studio/sheets/BeatSwitcherSheet"
 import { BoothExportSheet } from "@/components/studio/sheets/BoothExportSheet";
 import { GhostwriterSheet } from "@/components/studio/sheets/GhostwriterSheet";
 import { MobileAuthDrawer } from "@/components/studio/sheets/MobileAuthDrawer";
+import { useAuthDrawer } from "@/components/studio/state/use-auth-drawer";
 import { NewSongSheet } from "@/components/studio/sheets/NewSongSheet";
 import { PrivateBeatImportSheet } from "@/components/studio/sheets/PrivateBeatImportSheet";
 import { StudioAirSheet } from "@/components/studio/sheets/StudioAirSheet";
@@ -220,12 +221,6 @@ export function MobileStudioShell() {
     saveNow,
     saveSongToLocker,
     session,
-    signIn,
-    signInWithPassword,
-    signUpWithPassword,
-    sendPasswordReset,
-    updatePassword,
-    resendVerification,
     signOut,
     roles,
     emailVerified,
@@ -239,6 +234,7 @@ export function MobileStudioShell() {
     uploadRoughTake,
     user,
   } = workspace;
+  const { requestAuth, drawerProps: authDrawerProps } = useAuthDrawer(workspace);
   const [screen, setScreen] = useState<"home" | "writer">("home");
   const [activeNav, setActiveNav] = useState<MobileNavView>("studio");
   const [studioAccessOpen, setStudioAccessOpen] = useState(false);
@@ -275,13 +271,6 @@ export function MobileStudioShell() {
   const [newSongTitle, setNewSongTitle] = useState("");
   const [newSongStartSection, setNewSongStartSection] = useState("Hook");
   const [newSongUseBeat, setNewSongUseBeat] = useState(true);
-  const [authOpen, setAuthOpen] = useState(false);
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authBusy, setAuthBusy] = useState(false);
-  const [authNotice, setAuthNotice] = useState<string | null>(null);
-  const [authRedirectUrl, setAuthRedirectUrl] = useState("/api/auth/callback");
-  const [authRecoveryMode, setAuthRecoveryMode] = useState(false);
   const [hydratedSessionId, setHydratedSessionId] = useState<string | null>(null);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [syncRetryNonce, setSyncRetryNonce] = useState(0);
@@ -517,16 +506,6 @@ export function MobileStudioShell() {
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [activeNav, screen]);
-
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("auth_mode") !== "recovery") return;
-    setAuthRecoveryMode(true);
-    setAuthOpen(true);
-    setAuthNotice("Choose a new password for your RapWriter account.");
-    url.searchParams.delete("auth_mode");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -886,7 +865,8 @@ export function MobileStudioShell() {
   }, [activeSong?.title, titleEditing]);
 
   useEffect(() => {
-    setAuthRedirectUrl(`${window.location.origin}/api/auth/callback`);
+    // `params` is read once, before either branch calls replaceState, so both
+    // branches still see the original query string.
     const params = new URLSearchParams(window.location.search);
     const view = params.get("view");
     if (view === "market" || view === "locker" || view === "profile" || view === "studio") {
@@ -895,11 +875,10 @@ export function MobileStudioShell() {
     }
     const authError = params.get("auth_error");
     if (authError) {
-      setAuthNotice(authError);
-      setAuthOpen(true);
+      requestAuth(authError);
       window.history.replaceState({}, "", window.location.pathname);
     }
-  }, []);
+  }, [requestAuth]);
 
   useEffect(() => {
     return () => {
@@ -1285,11 +1264,6 @@ export function MobileStudioShell() {
     }, 15000);
     return () => window.clearInterval(timer);
   }, [playing, queueUrgentSessionSync]);
-
-  const requestAuth = (message = "Sign in to sync your studio.") => {
-    setAuthNotice(message);
-    setAuthOpen(true);
-  };
 
   const generateProducerRevision = async (actionType: ProducerActionType, attempt = 0) => {
     if (!user) {
@@ -1691,89 +1665,6 @@ export function MobileStudioShell() {
         message: err instanceof Error ? err.message : "Could not create song.",
       });
     }
-  };
-
-  const submitAuth = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setAuthBusy(true);
-    const result = await signInWithPassword(authEmail, authPassword);
-    if (result.error) {
-      setAuthNotice(result.error.message);
-      setAuthBusy(false);
-      return;
-    }
-    setAuthNotice("Signed in. Syncing your studio...");
-    setAuthBusy(false);
-    setAuthOpen(false);
-  };
-
-  const createAccountWithPassword = async () => {
-    setAuthBusy(true);
-    const result = await signUpWithPassword(authEmail, authPassword);
-    if (result.error) {
-      setAuthNotice(result.error.message);
-      setAuthBusy(false);
-      return;
-    }
-    setAuthBusy(false);
-    if (result.data.session) {
-      setAuthNotice("Account created. Syncing your studio...");
-      setAuthOpen(false);
-      return;
-    }
-    setAuthNotice("Account created. Check your email to confirm, then sign in.");
-  };
-
-  const sendMagicLink = async () => {
-    setAuthBusy(true);
-    const next = `${window.location.pathname}${window.location.search}`;
-    const result = await signIn(authEmail, next);
-    setAuthBusy(false);
-    if (result.error) {
-      setAuthNotice(result.error.message);
-      return;
-    }
-    setAuthNotice("Magic link sent. Open it in this same preview browser.");
-  };
-
-  const requestPasswordReset = async () => {
-    if (!authEmail.includes("@")) {
-      setAuthNotice("Enter the email for your RapWriter account first.");
-      return;
-    }
-    setAuthBusy(true);
-    const result = await sendPasswordReset(authEmail);
-    setAuthBusy(false);
-    setAuthNotice(result.error ? result.error.message : "Password reset sent. Open the email in this browser.");
-  };
-
-  const updateRecoveredPassword = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (authPassword.length < 8) {
-      setAuthNotice("Use at least 8 characters for the new password.");
-      return;
-    }
-    setAuthBusy(true);
-    const result = await updatePassword(authPassword);
-    setAuthBusy(false);
-    if (result.error) {
-      setAuthNotice(result.error.message);
-      return;
-    }
-    setAuthRecoveryMode(false);
-    setAuthNotice("Password updated. Your studio is ready.");
-    setAuthOpen(false);
-  };
-
-  const resendConfirmation = async () => {
-    if (!authEmail.includes("@")) {
-      setAuthNotice("Enter the account email first.");
-      return;
-    }
-    setAuthBusy(true);
-    const result = await resendVerification(authEmail);
-    setAuthBusy(false);
-    setAuthNotice(result.error ? result.error.message : "Confirmation email sent.");
   };
 
   const saveSongTitle = async () => {
@@ -2641,26 +2532,7 @@ export function MobileStudioShell() {
             }}
           />
         )}
-        <MobileAuthDrawer
-          open={authOpen}
-          email={authEmail}
-          password={authPassword}
-          busy={authBusy}
-          notice={authNotice}
-          redirectUrl={authRedirectUrl}
-          recoveryMode={authRecoveryMode}
-          onEmail={setAuthEmail}
-          onPassword={setAuthPassword}
-          onSubmit={authRecoveryMode ? updateRecoveredPassword : submitAuth}
-          onCreateAccount={createAccountWithPassword}
-          onMagicLink={sendMagicLink}
-          onForgotPassword={requestPasswordReset}
-          onResendVerification={resendConfirmation}
-          onClose={() => {
-            setAuthOpen(false);
-            setAuthRecoveryMode(false);
-          }}
-        />
+        <MobileAuthDrawer {...authDrawerProps} />
         <StudioDnaSheet
           open={studioDnaOpen}
           dna={studioDna}
