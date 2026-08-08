@@ -84,7 +84,7 @@ import {
   notifyMembershipAccess,
   type MembershipAccessNotice,
 } from "@/lib/client/membership-access";
-import { consumePendingBeat, type Beat, type Producer } from "@/lib/marketplace";
+import { consumePendingBeat, type Beat } from "@/lib/marketplace";
 import { clampBeatSeekTime, resolveBeatPreviewUrl } from "@/lib/beat-playback";
 import { studioRoomProducts } from "@/lib/product-catalog";
 import type { StarterBeat } from "@/lib/starter-beats";
@@ -93,27 +93,36 @@ import {
   defaultStudioRoomId,
   resolveStudioRoomAccess,
   type StudioRoomAccess,
-  type StudioRoomId,
 } from "@/lib/studio-room-access";
 import { cn } from "@/lib/utils";
-
-const mobileSections = [
-  { name: "Hook", target: 8 },
-  { name: "Verse 1", target: 16 },
-  { name: "Verse 2", target: 16 },
-  { name: "Bridge", target: 8 },
-  { name: "Outro", target: 4 },
-] as const;
-
-const blankStarterLyrics: Record<string, string> = {
-  Hook: "",
-  "Verse 1": "",
-  "Verse 2": "",
-  Bridge: "",
-  Outro: "",
-};
-
-type MobileNavView = "studio" | "locker" | "market" | "profile";
+import { getStudioPack, studioPacks } from "@/lib/studio/packs";
+import { blankStarterLyrics, mobileSections } from "@/lib/studio/sections";
+import { artistGoals, defaultStudioDna, producerModes, sessionMoods, writingStyles } from "@/lib/studio/dna";
+import type {
+  ArtistGoal,
+  BeatIntelligence,
+  BoothReadyResult,
+  EnvironmentIntelligence,
+  MarketplaceBeat,
+  MarketplaceFeed,
+  MobileDraftRecord,
+  MobileNavView,
+  PadActionStatus,
+  PadActions,
+  ProducerActionControls,
+  ProducerActionStatus,
+  ProducerPassId,
+  ProductUnlock,
+  RecordReadiness,
+  RecordReadinessStage,
+  SectionVersion,
+  SelectedBeat,
+  StudioAirPreference,
+  StudioDna,
+  StudioPack,
+  StudioPackId,
+  VersionHistoryStatus,
+} from "@/lib/studio/types";
 
 const navItems: { id: MobileNavView; label: string; icon: typeof Home }[] = [
   { id: "studio", label: "Studio", icon: Home },
@@ -137,487 +146,6 @@ const EMPTY_BEAT = {
   mood: "",
   duration: "0:00",
 };
-
-type StudioPackId = StudioRoomId;
-
-type StudioPack = {
-  id: StudioPackId;
-  label: string;
-  eyebrow: string;
-  headline: string;
-  line: string;
-  image: string;
-  position: string;
-  overlay: string;
-  chip: string;
-  bestFor: string[];
-  ambience: Array<{
-    title: string;
-    detail: string;
-  }>;
-  writingCue: string;
-};
-
-const studioPacks: StudioPack[] = [
-  {
-    id: "midnight",
-    label: "Midnight Session",
-    eyebrow: "Hooks / melodic rap / night writing",
-    headline: "Studio is ready.",
-    line: "Luxury room, low light, record-ready focus.",
-    image: "/studio/modern-hero-v2.webp",
-    position: "center",
-    overlay: "linear-gradient(180deg, rgba(0,0,0,0.08), rgba(7,7,8,0.78) 72%, #070708)",
-    chip: "Included",
-    bestFor: ["Hooks", "Melodic rap", "Night writing"],
-    ambience: [
-      { title: "Warm booth air", detail: "Low room tone with clean vocal focus." },
-      { title: "Late-night city", detail: "Soft skyline bed under the beat." },
-      { title: "Lamp glow", detail: "Keep the room warm and relaxed." },
-    ],
-    writingCue: "Keep the lines expensive and uncluttered. Let the hook feel like a late-night confession.",
-  },
-  {
-    id: "trap-house",
-    label: "Trap House Studio",
-    eyebrow: "Pressure / street / raw energy",
-    headline: "Turn the pressure into bars.",
-    line: "Raw walls, pressure, darker bounce.",
-    image: "/studio/trap-house-studio.webp",
-    position: "center 44%",
-    overlay: "linear-gradient(180deg, rgba(20,6,4,0.18), rgba(7,7,8,0.84) 70%, #070708)",
-    chip: "Raw",
-    bestFor: ["Trap", "Drill", "Street anthems"],
-    ambience: [
-      { title: "Street ambience", detail: "Distant movement behind the beat." },
-      { title: "LED purple", detail: "A harder glow for sharper delivery." },
-      { title: "Subtle hustle", detail: "Energy without crowding the writing pad." },
-    ],
-    writingCue: "Write with pressure. Shorter lines, harder landings, and a first four bars that hit immediately.",
-  },
-  {
-    id: "bedroom",
-    label: "Bedroom Dreams",
-    eyebrow: "Ideas / demos / late night",
-    headline: "Start where the idea hits.",
-    line: "Humble setup, first-take honesty.",
-    image: "/studio/bedroom-dreams.webp",
-    position: "center",
-    overlay: "linear-gradient(180deg, rgba(0,0,0,0.14), rgba(7,7,8,0.82) 72%, #070708)",
-    chip: "Starter",
-    bestFor: ["Lo-fi", "Storytelling", "Personal records"],
-    ambience: [
-      { title: "Rain ambience", detail: "Soft window rain for emotional focus." },
-      { title: "Lo-fi vinyl", detail: "Light texture under quiet writing." },
-      { title: "Late-night focus", detail: "Headphones-on bedroom energy." },
-    ],
-    writingCue: "Make it honest. Use small details, real objects, and one line that feels too true to delete.",
-  },
-  {
-    id: "penthouse",
-    label: "Penthouse Sessions",
-    eyebrow: "Commercial / polished / focused",
-    headline: "Make tonight sound expensive.",
-    line: "Executive energy, night city ambition.",
-    image: "/studio/penthouse-sessions.webp",
-    position: "right center",
-    overlay: "linear-gradient(180deg, rgba(6,8,18,0.1), rgba(7,7,8,0.76) 68%, #070708)",
-    chip: "Luxury",
-    bestFor: ["Hit records", "Melodic rap", "Elevated vibes"],
-    ambience: [
-      { title: "City skyline", detail: "Wide night air for bigger choruses." },
-      { title: "Luxury vinyl", detail: "Polished crackle for premium demos." },
-      { title: "High focus", detail: "Cleaner space for commercial structure." },
-    ],
-    writingCue: "Think bigger. Smooth transitions, clean title payoff, and a hook that sounds like the room costs money.",
-  },
-  {
-    id: "cypher",
-    label: "Cypher Room",
-    eyebrow: "Punchlines / internal rhyme / freestyle",
-    headline: "Circle's formed. Your turn.",
-    line: "No extras. Just bars, breath, and a mic.",
-    image: "/studio/cypher-sessions.webp",
-    position: "center",
-    overlay: "linear-gradient(180deg, rgba(0,0,0,0.2), rgba(7,7,8,0.9) 68%, #070708)",
-    chip: "Lyricism",
-    bestFor: ["Freestyle", "Cyphers", "Raw bars"],
-    ambience: [
-      { title: "Raw cypher tone", detail: "Dry room presence around the mic." },
-      { title: "Room reverb", detail: "Tiny reflections for live-bar energy." },
-      { title: "Focus mode", detail: "No gloss. Just breath and cadence." },
-    ],
-    writingCue: "Respect the pocket. Internal rhymes, clean breath points, and no filler between punchlines.",
-  },
-  {
-    id: "afterglow",
-    label: "Afterglow",
-    eyebrow: "Ambition / focus / late-night polish",
-    headline: "Stay after the idea.",
-    line: "Violet skyline energy with a polished control-room edge.",
-    image: "/studio/afterglow.webp",
-    position: "center",
-    overlay: "linear-gradient(180deg, rgba(20,8,34,0.08), rgba(7,7,8,0.78) 72%, #070708)",
-    chip: "After Hours",
-    bestFor: ["Late-night records", "Melodic rap", "Ambition"],
-    ambience: [
-      { title: "Violet city hush", detail: "A distant skyline bed behind the beat." },
-      { title: "Console glow", detail: "Soft control-room light for polished writing." },
-      { title: "After-hours focus", detail: "Quiet pressure that keeps the session moving." },
-    ],
-    writingCue: "Write past the obvious line. Keep the ambition visible, but let the strongest detail carry it.",
-  },
-  {
-    id: "bedroom-diaries",
-    label: "Bedroom Diaries",
-    eyebrow: "Personal / melodic / honest",
-    headline: "Write what you never said.",
-    line: "Soft light, private memories, and first-take honesty.",
-    image: "/studio/bedroom-diaries.webp",
-    position: "center",
-    overlay: "linear-gradient(180deg, rgba(28,8,20,0.08), rgba(7,7,8,0.8) 72%, #070708)",
-    chip: "Personal",
-    bestFor: ["Personal records", "Melodic rap", "Storytelling"],
-    ambience: [
-      { title: "Bedroom hush", detail: "A private room tone for honest writing." },
-      { title: "Window rain", detail: "Soft night texture under emotional records." },
-      { title: "Warm lamp air", detail: "Gentle focus without losing the feeling." },
-    ],
-    writingCue: "Write one memory exactly as it happened. Keep the names private, but make the details real.",
-  },
-  {
-    id: "red-light",
-    label: "Red Light Booth",
-    eyebrow: "Performance / pressure / conviction",
-    headline: "Step into the take.",
-    line: "A close vocal booth built for commitment and delivery.",
-    image: "/studio/red-light.webp",
-    position: "center",
-    overlay: "linear-gradient(180deg, rgba(40,3,3,0.08), rgba(7,7,8,0.84) 72%, #070708)",
-    chip: "Performance",
-    bestFor: ["Performance", "Street records", "Raw vocals"],
-    ambience: [
-      { title: "Booth room tone", detail: "Dry vocal space for hearing every word." },
-      { title: "Red cue light", detail: "Focused pressure for committed takes." },
-      { title: "Headphone seal", detail: "Close, controlled energy around the vocal." },
-    ],
-    writingCue: "Write for the take, not the page. Mark the breaths and make every ending sound intentional.",
-  },
-  {
-    id: "main-room",
-    label: "Main Room",
-    eyebrow: "Club energy / replay / crowd response",
-    headline: "Make the room move.",
-    line: "Before-doors-open club focus for records built to carry energy.",
-    image: "/studio/main-room.webp",
-    position: "center",
-    overlay: "linear-gradient(180deg, rgba(18,5,3,0.06), rgba(7,7,8,0.8) 74%, #070708)",
-    chip: "Club",
-    bestFor: ["Club records", "Anthems", "Replay"],
-    ambience: [
-      { title: "Main-room hush", detail: "The empty-club tension before the first crowd arrives." },
-      { title: "Low-end room tone", detail: "A restrained bass-space bed beneath the beat." },
-      { title: "Stage reflections", detail: "Subtle performance depth without crowd noise." },
-    ],
-    writingCue: "Test the hook like the crowd only hears it once. Keep the title immediate, the rhythm physical, and the response easy to repeat.",
-  },
-  {
-    id: "skyline-loft",
-    label: "Skyline Loft",
-    eyebrow: "Bright ambition / commercial / open air",
-    headline: "Write above the noise.",
-    line: "Daylight skyline focus for bigger, cleaner ideas.",
-    image: "/studio/skyline-loft.webp",
-    position: "center",
-    overlay: "linear-gradient(180deg, rgba(5,10,14,0.06), rgba(7,7,8,0.78) 74%, #070708)",
-    chip: "Default",
-    bestFor: ["Commercial hooks", "Victory records", "Big ideas"],
-    ambience: [
-      { title: "Open skyline", detail: "Wide city air for bigger hook ideas." },
-      { title: "Daylight focus", detail: "A clean room tone with less visual pressure." },
-      { title: "Loft presence", detail: "Bright reflections that keep the record moving." },
-    ],
-    writingCue: "Open the chorus up. Use a clean title, fewer words, and one line that feels larger than the room.",
-  },
-  {
-    id: "soft-life",
-    label: "Soft Life Sessions",
-    eyebrow: "Peace / melody / warm focus",
-    headline: "Let the record breathe.",
-    line: "Ocean light and quiet luxury for effortless writing.",
-    image: "/studio/soft-life.webp",
-    position: "center",
-    overlay: "linear-gradient(180deg, rgba(20,15,8,0.05), rgba(7,7,8,0.76) 74%, #070708)",
-    chip: "Ease",
-    bestFor: ["Melodic rap", "R&B", "Feel-good records"],
-    ambience: [
-      { title: "Ocean air", detail: "Soft coastal movement beneath the session." },
-      { title: "Warm daylight", detail: "Easy room energy for melodic ideas." },
-      { title: "Quiet luxury", detail: "A polished bed without added pressure." },
-    ],
-    writingCue: "Leave room between the thoughts. Favor open vowels, clear images, and a hook that feels effortless.",
-  },
-  {
-    id: "desert-sessions",
-    label: "Desert Sessions",
-    eyebrow: "Reflection / space / storytelling",
-    headline: "Leave room for the truth.",
-    line: "Sunset stillness for patient verses and vivid scenes.",
-    image: "/studio/desert-sessions.webp",
-    position: "center",
-    overlay: "linear-gradient(180deg, rgba(30,15,4,0.06), rgba(7,7,8,0.8) 74%, #070708)",
-    chip: "Reflective",
-    bestFor: ["Storytelling", "Reflective records", "Soul"],
-    ambience: [
-      { title: "Desert wind", detail: "A low open-air bed with gentle movement." },
-      { title: "Sunset room tone", detail: "Warm stillness for patient writing." },
-      { title: "Distant horizon", detail: "Space around the beat for longer scenes." },
-    ],
-    writingCue: "Slow the scene down. Give the listener one place, one object, and one consequence they can picture.",
-  },
-  {
-    id: "rooftop-sessions",
-    label: "Rooftop Sessions",
-    eyebrow: "Night city / ambition / anthems",
-    headline: "Make the city listen.",
-    line: "Open-air night energy for bold hooks and focused verses.",
-    image: "/studio/rooftop-sessions.webp",
-    position: "center",
-    overlay: "linear-gradient(180deg, rgba(4,8,18,0.08), rgba(7,7,8,0.82) 72%, #070708)",
-    chip: "Anthem",
-    bestFor: ["Anthems", "Night records", "Ambition"],
-    ambience: [
-      { title: "Night skyline", detail: "Distant city energy under the chorus." },
-      { title: "Rooftop rain", detail: "Light reflections and open-air texture." },
-      { title: "After-dark focus", detail: "A wide room feel for bigger records." },
-    ],
-    writingCue: "Write the line people shout back. Keep the verse focused and let the chorus own the skyline.",
-  },
-  {
-    id: "radio-room",
-    label: "Radio Room",
-    eyebrow: "Broadcast / clarity / replay",
-    headline: "Write for the first listen.",
-    line: "Broadcast-room precision for hooks people remember.",
-    image: "/studio/radio-room.webp",
-    position: "center",
-    overlay: "linear-gradient(180deg, rgba(20,5,4,0.08), rgba(7,7,8,0.84) 72%, #070708)",
-    chip: "Broadcast",
-    bestFor: ["Radio hooks", "Commercial records", "Replay"],
-    ambience: [
-      { title: "Broadcast room", detail: "Clean studio presence around every word." },
-      { title: "On-air hush", detail: "A quiet bed that keeps the title forward." },
-      { title: "Console pulse", detail: "Subtle movement for first-listen energy." },
-    ],
-    writingCue: "Make the title clear before the second listen. Cut any phrase that slows down recognition.",
-  },
-  {
-    id: "bando-sessions",
-    label: "Bando Sessions",
-    eyebrow: "Survival / raw truth / pressure",
-    headline: "Turn the room into proof.",
-    line: "Stripped-back pressure for unfiltered bars and survival stories.",
-    image: "/studio/bando-sessions.webp",
-    position: "center",
-    overlay: "linear-gradient(180deg, rgba(14,11,7,0.1), rgba(7,7,8,0.86) 72%, #070708)",
-    chip: "Survival",
-    bestFor: ["Street records", "Pain records", "Raw bars"],
-    ambience: [
-      { title: "Empty-room tone", detail: "Dry reflections around the mic." },
-      { title: "Outside air", detail: "A little daylight beneath the pressure." },
-      { title: "Bare-floor focus", detail: "Nothing polished enough to hide the truth." },
-    ],
-    writingCue: "Say what happened without dressing it up. Use one hard detail, one consequence, and no filler.",
-  },
-];
-
-function getStudioPack(id?: string | null) {
-  return studioPacks.find((pack) => pack.id === id)
-    ?? studioPacks.find((pack) => pack.id === defaultStudioRoomId)
-    ?? studioPacks[0];
-}
-
-type SelectedBeat = {
-  id: string;
-  title: string;
-  producer?: string;
-  bpm?: number;
-  key?: string;
-  mood?: string;
-  duration?: string | number;
-  previewUrl?: string;
-  audioUrl?: string;
-  [key: string]: unknown;
-};
-
-type PadActionStatus = {
-  state: "idle" | "saving" | "saved" | "error";
-  message: string;
-};
-
-type PadActions = {
-  status: PadActionStatus;
-  onSaveHook: () => void;
-  onSaveSong: () => void;
-  onFavoriteBeat: () => void;
-  onAddBeatToProject: () => void;
-};
-
-type ProducerActionStatus = "idle" | "generating" | "preview" | "applying" | "accepted" | "reverted" | "error";
-
-type ProducerActionControls = {
-  proposal: ProducerActionProposal | null;
-  status: ProducerActionStatus;
-  error: string | null;
-  onGenerate: (actionType: ProducerActionType, attempt?: number) => void;
-  onAccept: () => void;
-  onReject: () => void;
-  onRetry: () => void;
-  onUndo: () => void;
-};
-
-type SectionVersion = {
-  id: string;
-  version_number: number;
-  content: string;
-  bar_count: number;
-  word_count: number;
-  source: "autosave" | "manual" | "recovery" | "import" | "producer_action";
-  created_at: string;
-};
-
-type VersionHistoryStatus = "idle" | "loading" | "ready" | "restoring" | "error";
-
-type BoothReadyResult = {
-  score: number;
-  lyricScore: number;
-  performanceScore: number;
-  locked: boolean;
-  nextAction: string;
-  primaryAction: "write" | "record" | "save_take" | "review";
-  primaryActionLabel: string;
-  lockedReason: string;
-  checklist: Array<{
-    label: string;
-    detail: string;
-    complete: boolean;
-  }>;
-  improvements: string[];
-  metrics: {
-    structure: number;
-    completion: number;
-    cadence: number;
-    hook: number;
-    originality: number;
-    replay: number;
-  };
-  performance: {
-    takeExists: boolean;
-    takeSaved: boolean;
-    duration: number;
-    sectionMatched: boolean;
-    analyzing: boolean;
-    analysis: RoughTakeAnalysis | null;
-  };
-  lyricAnalysis: LyricAnalysis;
-  blockers: string[];
-};
-
-type RecordReadinessStage = {
-  id: "draft" | "session_ready" | "producer_pass" | "booth_ready";
-  label: string;
-};
-
-type RecordReadiness = {
-  currentIndex: number;
-  label: string;
-  detail: string;
-  stages: RecordReadinessStage[];
-  certified: boolean;
-};
-
-type BeatIntelligence = {
-  beatBrief: string;
-  beatTags: string[];
-  nextMoveTitle: string;
-  nextMoveBody: string;
-  sectionCue: string;
-  titleSeed: string;
-};
-
-type EnvironmentIntelligence = {
-  passTitle: string;
-  missionCue: string;
-  producerNotes: string[];
-  boothFocusTitle: string;
-  boothFocusBody: string;
-  focusMetrics: string[];
-};
-
-type ProductUnlock = {
-  id: string;
-  title: string;
-  category: "Studio Room" | "Producer Style" | "Vocal Chain" | "Writing Pack" | "Ambient Pack" | "Theme" | "Bundle" | "Producer Profile" | "Beat License";
-  detail: string;
-  price: string;
-  unlockedAt: string;
-};
-
-type MarketplaceFeed = {
-  beats: MarketplaceBeat[];
-  producers: Producer[];
-};
-
-type MarketplaceBeat = Beat & { previewUrl?: string; artworkUrl?: string; source?: "producer" };
-
-type StudioDna = {
-  environment: StudioPackId;
-  goal: string;
-  style: string;
-  mood: string;
-  producer: string;
-  studioAir: StudioAirPreference;
-};
-
-type StudioAirPreference = {
-  activeIndex: number;
-  volume: number;
-};
-
-type MobileDraftRecord = {
-  version: 3;
-  ownerId: string | null;
-  updatedAt: string;
-  syncedAt: string | null;
-  unsynced: boolean;
-  projectId: string | null;
-  songId: string | null;
-  sessionId: string | null;
-  baseRevision: number | null;
-  sections: Record<string, string>;
-  activeSection: string;
-  beat: SelectedBeat;
-  studioPackId: StudioPackId;
-  studioDna: StudioDna;
-  playbackPositionSeconds: number;
-};
-
-const defaultStudioDna: StudioDna = {
-  environment: defaultStudioRoomId,
-  goal: "Hit Record",
-  style: "Storytelling",
-  mood: "Late Night",
-  producer: "Commercial Producer",
-  studioAir: {
-    activeIndex: 0,
-    volume: 16,
-  },
-};
-
-const artistGoals = ["Hit Record", "Freestyle", "Mixtape", "Album", "Battle"];
-const writingStyles = ["Street", "Mainstream", "Southern", "Underground", "Storytelling", "Melodic", "Conscious"];
-const sessionMoods = ["Pain", "Hustle", "Victory", "Love", "Club", "Late Night", "Reflection"];
-const producerModes = ["Ghostwriter", "Hook Doctor", "Battle Coach", "Story Coach", "Commercial Producer", "Southern Producer"];
 
 export function MobileStudioShell() {
   const workspace = useRapWriterData();
@@ -3532,8 +3060,6 @@ function buildEnvironmentIntelligence(pack: StudioPack, dna: StudioDna, sectionN
     boothFocusBody: `${base.boothFocusBody} ${goalCue}`,
   };
 }
-
-type ProducerPassId = "hook" | "rewrite" | "commercial" | "pocket";
 
 function ProducerPassPanel({
   sectionName,
@@ -7500,8 +7026,6 @@ function MobileRoleOnboarding({
     </div>
   );
 }
-
-type ArtistGoal = NonNullable<ProfileRow["artist_goal"]>;
 
 function MobileFirstSessionActivation({
   artistName,
