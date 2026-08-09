@@ -175,7 +175,10 @@ export function WriterScreen({
         style={{ backgroundImage: `url('${studioPack.image}')`, backgroundPosition: studioPack.position }}
       />
       <div className="pointer-events-none absolute inset-0 opacity-70" style={{ background: studioPack.overlay }} />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(246,199,72,0.12),transparent_42%)]" />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: `radial-gradient(circle at 50% 0%, ${studioPack.tone}, transparent 42%)` }}
+      />
       <div className="relative z-10 flex items-center justify-between border-b border-white/10 bg-black/52 px-5 py-3 backdrop-blur-xl">
         <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Exit writer">
           <X className="h-5 w-5" />

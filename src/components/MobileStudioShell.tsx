@@ -147,7 +147,7 @@ export function MobileStudioShell() {
   // as its notice channel, and a React setter keeps that callback stable.
   const [syncMessage, setSyncMessage] = useState("Saved on device");
   const { requestAuth, drawerProps: authDrawerProps } = useAuthDrawer(workspace);
-  const [screen, setScreen] = useState<"home" | "writer">("writer");
+  const [screen, setScreen] = useState<"home" | "writer">("home");
   const [activeNav, setActiveNav] = useState<MobileNavView>("studio");
   const [readinessLaunchToken, setReadinessLaunchToken] = useState(0);
   const [marketFocusCategory, setMarketFocusCategory] = useState<MarketCategory | null>(null);
@@ -245,6 +245,7 @@ export function MobileStudioShell() {
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [syncRetryNonce, setSyncRetryNonce] = useState(0);
   const pendingBeatHandledRef = useRef(false);
+  const initialScreenOwnerRef = useRef<string | null>(null);
   const localDraftRef = useRef<MobileDraftRecord | null>(null);
   const skipNextDraftWriteRef = useRef(false);
   const retryUrgentRef = useRef(false);
@@ -472,6 +473,16 @@ export function MobileStudioShell() {
 
     setDraftLoaded(true);
   }, [loading, seekTo, selectBeatKeepingPreview, setActiveSection, setActiveStudioPackId, setSectionContent, setStudioDna, user?.id]);
+
+  useEffect(() => {
+    if (loading || !draftLoaded) return;
+    const ownerKey = user?.id ?? "device";
+    if (initialScreenOwnerRef.current === ownerKey) return;
+    if (countTotalBars(sectionContent) === 0) return;
+
+    initialScreenOwnerRef.current = ownerKey;
+    setScreen("writer");
+  }, [draftLoaded, loading, sectionContent, user?.id]);
 
   useEffect(() => {
     if (!draftLoaded) return;

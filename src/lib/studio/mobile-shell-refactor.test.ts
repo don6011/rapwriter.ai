@@ -110,4 +110,12 @@ describe("mobile studio shell refactor contracts", () => {
     expect(shell).toContain("projectId: song.project_id");
     expect(shell).toContain("songId: song.id");
   });
+
+  test("opens restored writing directly while empty studios remain on home", () => {
+    const shell = readFileSync(new URL("../../components/MobileStudioShell.tsx", import.meta.url), "utf8");
+
+    expect(shell).toContain('useState<"home" | "writer">("home")');
+    expect(shell).toContain("if (countTotalBars(sectionContent) === 0) return");
+    expect(shell).toContain('setScreen("writer")');
+  });
 });
