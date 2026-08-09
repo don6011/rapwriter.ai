@@ -115,7 +115,16 @@ describe("mobile studio shell refactor contracts", () => {
     const shell = readFileSync(new URL("../../components/MobileStudioShell.tsx", import.meta.url), "utf8");
 
     expect(shell).toContain('useState<"home" | "writer">("home")');
+    expect(shell).toContain('if (activeNav !== "studio") return');
     expect(shell).toContain("if (countTotalBars(sectionContent) === 0) return");
     expect(shell).toContain('setScreen("writer")');
+  });
+
+  test("uses logical bar numbers instead of a visual-row rule grid", () => {
+    const writer = readFileSync(new URL("../../components/studio/screens/WriterScreen.tsx", import.meta.url), "utf8");
+
+    expect(writer).toContain('const editorBars = sectionText.split("\\n")');
+    expect(writer).toContain("editorBars.map((bar, index)");
+    expect(writer).not.toContain("repeating-linear-gradient");
   });
 });

@@ -113,6 +113,7 @@ export function WriterScreen({
   const [studioAirOpen, setStudioAirOpen] = useState(false);
   const [readinessOpen, setReadinessOpen] = useState(false);
   const [transportCompact, setTransportCompact] = useState(false);
+  const [editorScrollTop, setEditorScrollTop] = useState(0);
   const writerScrollRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const editorPositionsRef = useRef<Record<string, { selectionStart: number; selectionEnd: number; scrollTop: number }>>({});
@@ -124,6 +125,7 @@ export function WriterScreen({
   const hasPenView = artistMembership?.entitlements.full_pen_view === true;
   const hasHistory = artistMembership?.entitlements.version_history === true;
   const hasGhostwriter = artistMembership?.entitlements.ghostwriter === true;
+  const editorBars = sectionText.split("\n");
 
   useEffect(() => {
     if (readinessLaunchToken > 0) setReadinessOpen(true);
@@ -157,6 +159,10 @@ export function WriterScreen({
           Math.min(savedPosition.selectionEnd, textLength),
         );
         editor.scrollTop = savedPosition.scrollTop;
+        setEditorScrollTop(savedPosition.scrollTop);
+      } else {
+        editor.scrollTop = 0;
+        setEditorScrollTop(0);
       }
       editor.focus({ preventScroll: true });
     });
@@ -278,27 +284,44 @@ export function WriterScreen({
           {penView ? (
             <PenView sectionName={section.name} text={sectionText} />
           ) : (
-            <textarea
-              ref={editorRef}
-              autoFocus
-              value={sectionText}
-              onChange={(event) => {
-                onChange(event.target.value);
-                rememberEditorPosition(section.name, event.currentTarget);
-              }}
-              onSelect={(event) => rememberEditorPosition(section.name, event.currentTarget)}
-              onScroll={(event) => rememberEditorPosition(section.name, event.currentTarget)}
-              onBlur={(event) => rememberEditorPosition(section.name, event.currentTarget)}
-              placeholder={`Start ${section.name}...`}
-              aria-label={`${section.name} lyrics`}
-              spellCheck={false}
-              style={{
-                backgroundImage: "repeating-linear-gradient(to bottom, transparent 0, transparent 35px, rgba(255,255,255,0.05) 36px)",
-                backgroundPosition: "0 20px",
-                backgroundSize: "100% 36px",
-              }}
-              className="min-h-[54svh] w-full flex-none resize-none bg-transparent p-5 font-sans text-[18px] leading-9 text-white/92 caret-gold outline-none placeholder:text-white/28"
-            />
+            <div className="relative min-h-[54svh] overflow-hidden">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 overflow-hidden"
+              >
+                <div className="p-5" style={{ transform: `translateY(-${editorScrollTop}px)` }}>
+                  {editorBars.map((bar, index) => (
+                    <div key={index} className="grid grid-cols-[36px_minmax(0,1fr)]">
+                      <span className="pr-3 text-right font-mono text-[10px] leading-9 tabular-nums text-white/28">
+                        {index + 1}
+                      </span>
+                      <span className="invisible min-h-9 whitespace-pre-wrap break-words font-sans text-[18px] leading-9">
+                        {bar || "\u00a0"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <textarea
+                ref={editorRef}
+                autoFocus
+                value={sectionText}
+                onChange={(event) => {
+                  onChange(event.target.value);
+                  rememberEditorPosition(section.name, event.currentTarget);
+                }}
+                onSelect={(event) => rememberEditorPosition(section.name, event.currentTarget)}
+                onScroll={(event) => {
+                  setEditorScrollTop(event.currentTarget.scrollTop);
+                  rememberEditorPosition(section.name, event.currentTarget);
+                }}
+                onBlur={(event) => rememberEditorPosition(section.name, event.currentTarget)}
+                placeholder={`Start ${section.name}...`}
+                aria-label={`${section.name} lyrics`}
+                spellCheck={false}
+                className="relative min-h-[54svh] w-full flex-none resize-none bg-transparent py-5 pl-14 pr-5 font-sans text-[18px] leading-9 text-white/92 caret-gold outline-none placeholder:text-white/28"
+              />
+            </div>
           )}
           <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-1 border-t border-white/10 bg-black/24 p-1.5 backdrop-blur-xl">
             <div className="min-w-0 px-2">

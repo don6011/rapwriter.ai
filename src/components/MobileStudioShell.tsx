@@ -476,13 +476,14 @@ export function MobileStudioShell() {
 
   useEffect(() => {
     if (loading || !draftLoaded) return;
+    if (activeNav !== "studio") return;
     const ownerKey = user?.id ?? "device";
     if (initialScreenOwnerRef.current === ownerKey) return;
     if (countTotalBars(sectionContent) === 0) return;
 
     initialScreenOwnerRef.current = ownerKey;
     setScreen("writer");
-  }, [draftLoaded, loading, sectionContent, user?.id]);
+  }, [activeNav, draftLoaded, loading, sectionContent, user?.id]);
 
   useEffect(() => {
     if (!draftLoaded) return;
