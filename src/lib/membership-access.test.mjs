@@ -13,7 +13,7 @@ describe("membership access responses", () => {
     }, 402);
 
     expect(notice?.feature).toBe("hook_doctor");
-    expect(membershipAccessCopy(notice)).toBe("Hook Doctor is included with Prep Studio Pro.");
+    expect(membershipAccessCopy(notice)).toBe("Hook Doctor is included with RapWriter Pro.");
   });
 
   test("keeps producer limits contextual and reassures users about their work", () => {
@@ -22,7 +22,7 @@ describe("membership access responses", () => {
       audience: "producer",
       feature: "beat_uploads",
       current_plan: "producer_free",
-      recommended_plan: "producer_pro",
+      recommended_plan: "producer_free",
       usage: 5,
       limit: 5,
     }, 429);

@@ -342,7 +342,6 @@ function producerErrorStatus(error: unknown, fallback: string) {
 export function ProducerPortal() {
   const auth = useAuth();
   const [payload, setPayload] = useState<ProducerPayload>({ profile: null, beats: [], credited_beats: [], playlists: [], business: null, billing: emptyBilling, membership: null, plans: [], metrics: emptyMetrics, reviews: [], services: [], collaborations: [], sales: [], earnings: [], release_readiness: emptyReleaseReadiness, foundation_ready: true });
-  const [membershipBusy, setMembershipBusy] = useState(false);
   const [payoutBusy, setPayoutBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<{ tone: "idle" | "gold" | "green" | "red"; message: string }>({ tone: "idle", message: "" });
@@ -417,9 +416,7 @@ export function ProducerPortal() {
   const profile = payload.profile;
   const submittedCount = payload.beats.filter((beat) => beat.status === "submitted" || beat.status === "approved").length;
   const draftCount = payload.beats.filter((beat) => beat.status === "draft").length;
-  const producerMembership = payload.membership?.producer ?? null;
-  const planLabel = producerMembership?.plan.name ?? "Producer Free";
-  const producerUpgrade = payload.plans.find((plan) => plan.audience === "producer" && plan.tier > (producerMembership?.plan.tier ?? 0));
+  const planLabel = "Producer HQ Free";
   const storefrontChecks = [
     Boolean(profileDraft.display_name.trim() && profileDraft.handle.trim()),
     Boolean(profileDraft.city.trim() && profileDraft.country.trim()),
@@ -789,31 +786,6 @@ export function ProducerPortal() {
       toast.error(nextStatus.message);
     } finally {
       setServiceBusy(false);
-    }
-  }
-
-  async function openProducerMembership() {
-    setMembershipBusy(true);
-    setStatus({ tone: "gold", message: producerMembership?.source === "subscription" ? "Opening billing..." : "Opening Producer Pro..." });
-    try {
-      const endpoint = producerMembership?.source === "subscription"
-        ? "/api/stripe/billing-portal"
-        : "/api/stripe/subscriptions/checkout";
-      const res = await fetch(endpoint, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body: producerMembership?.source === "subscription"
-          ? undefined
-          : JSON.stringify({ plan_id: producerUpgrade?.id ?? "producer_pro", interval: "annual" }),
-      });
-      const data = await res.json().catch(() => ({})) as { checkout_url?: string; portal_url?: string; error?: string };
-      const destination = data.checkout_url ?? data.portal_url;
-      if (!res.ok || !destination) throw producerResponseError(data, res.status, "Billing could not be opened.");
-      window.location.assign(destination);
-    } catch (error) {
-      setStatus({ tone: "red", message: error instanceof Error ? error.message : "Billing could not be opened." });
-      setMembershipBusy(false);
     }
   }
 
@@ -1271,7 +1243,6 @@ export function ProducerPortal() {
               busy={serviceBusy}
               onCreate={createService}
               onToggle={toggleService}
-              onMembership={() => void openProducerMembership()}
             />
           )}
 
@@ -1310,9 +1281,6 @@ export function ProducerPortal() {
             planLabel={planLabel}
             storefrontReadiness={storefrontReadiness}
             storefrontStatus={storefrontStatus}
-            membershipBusy={membershipBusy}
-            isSubscribed={producerMembership?.source === "subscription"}
-            onMembership={() => void openProducerMembership()}
             onEdit={() => setProfileEditMode(true)}
           />
         {!profileReviewLocked && <section id="producer-onboarding" className="scroll-mt-24 rounded-3xl border border-white/10 bg-[#111113] p-4">
@@ -1611,9 +1579,6 @@ export function ProducerPortal() {
             beatCount={payload.beats.length}
             liveBeatCount={payload.release_readiness.live_beat_count}
             planLabel={planLabel}
-            membershipBusy={membershipBusy}
-            isSubscribed={producerMembership?.source === "subscription"}
-            onMembership={() => void openProducerMembership()}
           />
         )}
       </div>
@@ -1727,7 +1692,7 @@ function ProducerInvitePanel({ referral, onCopy }: { referral: ProducerReferralS
         <div className="min-w-0 flex-1">
           <div className="label-hw text-gold/85">Producer Invite</div>
           <h2 className="mt-1 text-lg font-semibold">Bring another sound into the room.</h2>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">When their profile and first beat go live, you both receive 30 days of Producer Pro, launch credits, and featured eligibility.</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">When their profile and first beat go live, you both receive launch credits and featured eligibility.</p>
         </div>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-2 border-y border-white/8 py-3">
@@ -1887,18 +1852,12 @@ function ProducerAccountSummary({
   planLabel,
   storefrontReadiness,
   storefrontStatus,
-  membershipBusy,
-  isSubscribed,
-  onMembership,
   onEdit,
 }: {
   profile: ProducerProfileRow | null;
   planLabel: string;
   storefrontReadiness: number;
   storefrontStatus: { detail: string; value: string };
-  membershipBusy: boolean;
-  isSubscribed: boolean;
-  onMembership: () => void;
   onEdit: () => void;
 }) {
   return (
@@ -1912,10 +1871,8 @@ function ProducerAccountSummary({
         <div className="text-sm font-semibold text-gold">{storefrontStatus.value}</div>
       </div>
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gold" style={{ width: `${storefrontReadiness}%` }} /></div>
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <button type="button" onClick={onEdit} className="min-h-11 rounded-2xl border border-white/10 bg-white/[0.03] px-3 text-sm font-semibold">Edit profile</button>
-        <button type="button" onClick={onMembership} disabled={membershipBusy} className="flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-gold/25 bg-gold/8 px-3 text-sm font-semibold text-gold disabled:opacity-60">{membershipBusy && <Loader2 className="h-4 w-4 animate-spin" />}{isSubscribed ? "Manage plan" : "Producer Pro"}</button>
-      </div>
+      <button type="button" onClick={onEdit} className="mt-4 min-h-11 w-full rounded-2xl border border-white/10 bg-white/[0.03] px-3 text-sm font-semibold">Edit profile</button>
+      <div className="mt-2 flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.06] px-3 text-xs font-semibold text-emerald-300"><Check className="h-4 w-4" />All Producer HQ tools included</div>
       {profile?.handle && <a href={`/producer/${encodeURIComponent(profile.handle.replace(/^@+/, ""))}?from=producer-hq`} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-2xl border border-white/10 px-4 text-sm font-semibold text-muted-foreground">Preview storefront</a>}
     </section>
   );
@@ -1928,9 +1885,6 @@ function ProducerAnalytics({
   beatCount,
   liveBeatCount,
   planLabel,
-  membershipBusy,
-  isSubscribed,
-  onMembership,
 }: {
   metrics: ProducerMetricsRow;
   sales: ProducerSaleRow[];
@@ -1938,9 +1892,6 @@ function ProducerAnalytics({
   beatCount: number;
   liveBeatCount: number;
   planLabel: string;
-  membershipBusy: boolean;
-  isSubscribed: boolean;
-  onMembership: () => void;
 }) {
   const hasAnalytics = beatCount > 0 || Object.values(metrics).some((value) => typeof value === "number" && value > 0);
 
@@ -1990,14 +1941,6 @@ function ProducerAnalytics({
         </>
       )}
 
-      {!isSubscribed && (
-        <section className="rounded-3xl border border-gold/20 bg-[linear-gradient(145deg,rgba(246,199,72,0.11),rgba(17,17,19,0.96)_60%)] p-5">
-          <div className="label-hw text-gold/85">Producer intelligence</div>
-          <h3 className="mt-2 text-xl font-semibold">See what turns listeners into writers.</h3>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Producer Pro adds deeper catalog limits and business analytics as your audience grows.</p>
-          <button type="button" onClick={onMembership} disabled={membershipBusy} className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-gold/30 bg-gold/10 px-4 text-sm font-semibold text-gold disabled:opacity-60">{membershipBusy && <Loader2 className="h-4 w-4 animate-spin" />}Explore Producer Pro</button>
-        </section>
-      )}
       {sales.length > 0 && (
         <section className="rounded-3xl border border-white/10 bg-[#111113] p-4">
           <div className="flex items-center justify-between gap-3">
@@ -2059,7 +2002,6 @@ function ProducerCollaborationPanel({
   busy,
   onCreate,
   onToggle,
-  onMembership,
 }: {
   services: ProducerServiceRow[];
   requests: ProducerCollaborationRow[];
@@ -2070,7 +2012,6 @@ function ProducerCollaborationPanel({
   busy: boolean;
   onCreate: (event: FormEvent) => void;
   onToggle: (service: ProducerServiceRow) => void;
-  onMembership: () => void;
 }) {
   const activeRequests = requests.filter((request) => ["submitted", "countered", "accepted"].includes(request.status));
   return (
@@ -2092,7 +2033,7 @@ function ProducerCollaborationPanel({
         <textarea rows={3} maxLength={600} value={draft.description} onChange={(event) => setDraft((value) => ({ ...value, description: event.target.value }))} placeholder="What does the artist receive?" className="w-full resize-none rounded-xl border border-white/10 bg-black/40 p-3 text-xs leading-relaxed outline-none focus:border-gold/45" />
         <div className="grid grid-cols-2 gap-2"><input type="number" min="0" value={draft.starting_price} onChange={(event) => setDraft((value) => ({ ...value, starting_price: event.target.value }))} placeholder="Starting price" className="min-h-11 min-w-0 rounded-xl border border-white/10 bg-black/40 px-3 text-xs" /><input type="number" min="1" max="180" value={draft.turnaround_days} onChange={(event) => setDraft((value) => ({ ...value, turnaround_days: event.target.value }))} placeholder="Turnaround days" className="min-h-11 min-w-0 rounded-xl border border-white/10 bg-black/40 px-3 text-xs" /></div>
         <div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setComposerOpen(false)} className="min-h-11 rounded-xl border border-white/10 text-xs font-semibold text-white/60">Cancel</button><button type="submit" disabled={busy} className="gold-seal min-h-11 rounded-xl text-xs font-semibold text-black disabled:opacity-50">{busy ? "Publishing..." : "Publish service"}</button></div>
-      </form> : <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => setComposerOpen(true)} className="min-h-11 rounded-xl border border-gold/25 bg-gold/8 text-xs font-semibold text-gold"><Plus className="mr-1 inline h-4 w-4" />Add service</button><button type="button" onClick={onMembership} className="min-h-11 rounded-xl border border-white/10 text-xs font-semibold text-white/55">Producer Pro</button></div>}
+      </form> : <button type="button" onClick={() => setComposerOpen(true)} className="mt-3 min-h-11 w-full rounded-xl border border-gold/25 bg-gold/8 text-xs font-semibold text-gold"><Plus className="mr-1 inline h-4 w-4" />Add service</button>}
     </section>
   );
 }

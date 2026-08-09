@@ -83,7 +83,7 @@ export async function executeAiFeature<T>(input: {
       audience: workspace.audience,
       feature: featureConfig.required_entitlement || definition.entitlement,
       current_plan: workspace.plan.id,
-      recommended_plan: workspace.audience === "artist" ? "artist_pro" : "producer_pro",
+      recommended_plan: workspace.audience === "artist" ? "artist_pro" : "producer_free",
       usage: monthlyUsage,
       limit: monthlyLimit,
     });

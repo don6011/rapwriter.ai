@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, BriefcaseBusiness, Check, ChevronDown, Crown, LoaderCircle, Mic2, Sparkles, X } from "lucide-react";
 import type {
-  MembershipBundleDefinition,
   MembershipSnapshot,
   PlanDefinition,
   WorkspaceMembership,
@@ -15,7 +14,6 @@ import { cn } from "@/lib/utils";
 type MembershipResponse = {
   membership?: MembershipSnapshot;
   plans?: PlanDefinition[];
-  bundles?: MembershipBundleDefinition[];
 };
 
 type LaunchCampaign = {
@@ -28,7 +26,7 @@ type LaunchCampaign = {
   duration_days: number;
 };
 
-type MembershipView = "artist" | "producer" | "bundle";
+type MembershipView = "artist" | "producer";
 
 type MembershipCardProps = {
   initialMembership?: MembershipSnapshot | null;
@@ -39,7 +37,6 @@ type MembershipCardProps = {
 export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenMarket }: MembershipCardProps) {
   const [membership, setMembership] = useState<MembershipSnapshot | null>(initialMembership);
   const [plans, setPlans] = useState<PlanDefinition[]>([]);
-  const [bundles, setBundles] = useState<MembershipBundleDefinition[]>([]);
   const [expanded, setExpanded] = useState(true);
   const [view, setView] = useState<MembershipView>("artist");
   const [accessGuideOpen, setAccessGuideOpen] = useState(false);
@@ -59,7 +56,6 @@ export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenM
         if (!payload?.membership) return;
         setMembership(payload.membership);
         setPlans(payload.plans ?? []);
-        setBundles(payload.bundles ?? []);
       })
       .catch(() => undefined);
   }, []);
@@ -100,19 +96,11 @@ export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenM
   const artistUpgrades = plans
     .filter((plan) => plan.audience === "artist" && plan.metadata.retired !== true && plan.tier > artist.plan.tier)
     .map(withPrepStudioPresentation);
-  const producerUpgrades = plans.filter((plan) => plan.audience === "producer" && plan.tier > (producer?.plan.tier ?? 0));
-  const bundle = bundles.find((item) => item.id === "creator_all_access") ?? bundles[0] ?? null;
-  const bothWorkspacesPaid = artist.plan.tier >= 1 && (producer?.plan.tier ?? 0) >= 1;
-  const hasStripeWorkspace = artist.provider === "stripe" || producer?.provider === "stripe";
   const accessSummary = membershipAccessSummary(artist, producer);
-  const showBillingInterval = view === "artist"
-    ? artist.source === "free" && artistUpgrades.length > 0
-    : view === "producer"
-      ? (!producer || producer.source === "free") && producerUpgrades.length > 0
-      : Boolean(bundle && producer && !bothWorkspacesPaid && !hasStripeWorkspace);
+  const showBillingInterval = view === "artist" && artist.source === "free" && artistUpgrades.length > 0;
 
-  const startCheckout = async (input: { planId?: string; bundleId?: string }) => {
-    const busyKey = input.bundleId ?? input.planId ?? "checkout";
+  const startCheckout = async (input: { planId: string }) => {
+    const busyKey = input.planId;
     setBillingBusy(busyKey);
     setBillingNotice(null);
     try {
@@ -120,7 +108,7 @@ export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenM
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ plan_id: input.planId, bundle_id: input.bundleId, interval }),
+        body: JSON.stringify({ plan_id: input.planId, interval }),
       });
       const payload = await response.json().catch(() => ({})) as { checkout_url?: string; error?: string };
       if (!response.ok || !payload.checkout_url) throw new Error(payload.error ?? "Checkout could not be opened.");
@@ -177,7 +165,7 @@ export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenM
         <span className="min-w-0 flex-1">
           <span className="label-hw block text-gold/80">Your Memberships</span>
           <span className="mt-1 block truncate text-sm font-semibold text-white">
-            {artistPlan.name}<span className="px-1.5 text-white/25">/</span>{producer ? producer.plan.name : "Producer HQ not active"}
+            {artistPlan.name}<span className="px-1.5 text-white/25">/</span>{producer ? "Producer HQ Free" : "Producer HQ not active"}
           </span>
           <span className="mt-0.5 block text-xs text-muted-foreground">One account. Two independent workspaces.</span>
         </span>
@@ -186,13 +174,12 @@ export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenM
 
       {expanded && (
         <div className="border-t border-white/10 px-4 pb-4 pt-3">
-          <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-black/25 p-1">
+          <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-black/25 p-1">
             <MembershipTab active={view === "artist"} icon={Mic2} label="Artist" onClick={() => setView("artist")} />
             <MembershipTab active={view === "producer"} icon={BriefcaseBusiness} label="Producer" onClick={() => setView("producer")} />
-            <MembershipTab active={view === "bundle"} icon={Crown} label="All Access" onClick={() => setView("bundle")} />
           </div>
 
-          {campaigns.filter((campaign) => campaign.audience === view).map((campaign) => {
+          {campaigns.filter((campaign) => view === "artist" && campaign.audience === "artist").map((campaign) => {
             const remaining = Math.max(0, campaign.max_claims - campaign.claim_count);
             return <div key={campaign.slug} className="mt-3 rounded-xl border border-gold/25 bg-gold/[0.07] p-3">
               <div className="flex items-start gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-gold/25 bg-black/25 text-gold"><Crown className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-white">{campaign.name}</span><span className="mt-1 block text-[10px] leading-4 text-white/55">{remaining.toLocaleString()} spots remaining · {campaign.duration_days} days included</span></span></div>
@@ -246,8 +233,8 @@ export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenM
               producer ? (
                 <WorkspacePanel
                   eyebrow="Producer HQ Membership"
-                  name={producer.plan.name}
-                  tagline={producer.plan.tagline}
+                  name="Producer HQ Free"
+                  tagline="Upload, sell, and understand your catalog. No monthly fee."
                   capabilities={[
                     ["Sell your sound", producer.entitlements.producer_storefront === true],
                     ["Know your audience", producer.entitlements.producer_intelligence === true],
@@ -258,20 +245,16 @@ export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenM
                     Open Producer HQ
                     <ArrowRight className="h-4 w-4" />
                   </Link>
-                  {producer.provider === "stripe" ? (
+                  {producer.provider === "stripe" && (
                     <ManageButton busy={billingBusy === "portal"} disabled={billingBusy !== null} onClick={openBilling} />
-                  ) : producer.source === "subscription" ? (
-                    <GrantedAccess onExplore={() => setAccessGuideOpen(true)} />
-                  ) : (
-                    <UpgradeList plans={producerUpgrades} interval={interval} busy={billingBusy} onCheckout={(planId) => startCheckout({ planId })} />
                   )}
                 </WorkspacePanel>
               ) : (
                 <WorkspacePanel
                   eyebrow="Producer HQ"
                   name="Build your producer business"
-                  tagline="Create a storefront, upload beats, and connect with artists."
-                  capabilities={[["Separate catalog", true], ["Producer analytics", true], ["Artist connections", true]]}
+                  tagline="Create a storefront, upload beats, and run your catalog with no monthly fee."
+                  capabilities={[["Unlimited catalog", true], ["Full analytics", true], ["Keep 100%", true]]}
                 >
                   <Link href="/producer" className="mt-4 flex min-h-11 w-full items-center justify-center rounded-xl bg-gold px-4 text-sm font-semibold text-black">
                     Set up Producer HQ
@@ -280,60 +263,11 @@ export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenM
               )
             )}
 
-            {view === "bundle" && (
-              <WorkspacePanel
-                eyebrow="RapWriter All Access"
-                name={bundle?.name ?? "Artist + Producer"}
-                tagline={bundle?.tagline ?? "RapWriter Pro and Producer HQ under one bill."}
-                capabilities={[["RapWriter Pro", true], ["Producer HQ", true], ["Separate permissions", true]]}
-              >
-                {bundle && (
-                  <div className="mt-4 flex items-end justify-between gap-3 rounded-xl border border-gold/20 bg-gold/[0.06] px-3 py-3">
-                    <div>
-                      <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Both workspaces</div>
-                      <div className="mt-1 text-sm font-semibold text-white">One membership, no mixed permissions</div>
-                    </div>
-                    <div className="shrink-0 text-sm font-semibold text-gold">
-                      {formatPlanPrice(interval === "annual" ? bundle.annual_price_cents : bundle.monthly_price_cents, interval)}
-                    </div>
-                  </div>
-                )}
-
-                {!producer ? (
-                  <Link href="/producer" className="mt-3 flex min-h-11 w-full items-center justify-center rounded-xl bg-gold px-4 text-sm font-semibold text-black">
-                    Set up Producer HQ first
-                  </Link>
-                ) : bothWorkspacesPaid || hasStripeWorkspace ? (
-                  <>
-                    <p className="mt-3 text-xs leading-relaxed text-white/55">
-                      {bothWorkspacesPaid ? "Both workspaces are active." : "Manage your current plan before switching to All Access."}
-                    </p>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <ActionButton label="Start Writer Flow" onClick={onOpenStudio} />
-                      <Link href="/producer" className="flex min-h-11 items-center justify-center rounded-xl border border-white/10 bg-black/20 px-3 text-xs font-semibold text-white/75">
-                        Producer HQ
-                      </Link>
-                    </div>
-                    {hasStripeWorkspace ? <ManageButton busy={billingBusy === "portal"} disabled={billingBusy !== null} onClick={openBilling} /> : <GrantedAccess onExplore={() => setAccessGuideOpen(true)} />}
-                  </>
-                ) : bundle ? (
-                  <button
-                    type="button"
-                    onClick={() => void startCheckout({ bundleId: bundle.id })}
-                    disabled={billingBusy !== null}
-                    className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-gold px-4 text-sm font-semibold text-black disabled:opacity-60"
-                  >
-                    {billingBusy === bundle.id && <LoaderCircle className="h-4 w-4 animate-spin" />}
-                    Choose All Access
-                  </button>
-                ) : null}
-              </WorkspacePanel>
-            )}
           </div>
 
           {showBillingInterval && <BillingInterval value={interval} onChange={setInterval} />}
           {billingNotice && <p className="mt-3 rounded-xl border border-gold/20 bg-gold/[0.06] px-3 py-2.5 text-xs leading-relaxed text-gold">{billingNotice}</p>}
-          <p className="mt-3 text-center text-[10px] text-white/42">Artist and Producer access can be changed independently. Your work stays saved.</p>
+          <p className="mt-3 text-center text-[10px] text-white/42">RapWriter Pro upgrades your writing tools. Producer HQ stays free.</p>
         </div>
       )}
       <MembershipAccessGuide
@@ -561,14 +495,14 @@ function MembershipAccessGuide({
         <div className="p-4">
           <div className={cn("grid gap-1 rounded-xl border border-white/10 bg-black/25 p-1", producer ? "grid-cols-2" : "grid-cols-1")}>
             <MembershipTab active={workspace === "artist"} icon={Mic2} label={artist.plan.name} onClick={() => setWorkspace("artist")} />
-            {producer && <MembershipTab active={workspace === "producer"} icon={BriefcaseBusiness} label={producer.plan.name} onClick={() => setWorkspace("producer")} />}
+            {producer && <MembershipTab active={workspace === "producer"} icon={BriefcaseBusiness} label="Producer HQ Free" onClick={() => setWorkspace("producer")} />}
           </div>
 
           <div className="mt-4 rounded-2xl border border-gold/20 bg-gold/[0.06] p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="label-hw text-gold/75">{workspace === "artist" ? "Prep Studio" : "Producer HQ"}</div>
-                <div className="mt-1 text-lg font-semibold text-white">{current?.plan.name}</div>
+                <div className="mt-1 text-lg font-semibold text-white">{workspace === "producer" ? "Producer HQ Free" : current?.plan.name}</div>
               </div>
               <span className="rounded-full border border-emerald-400/25 bg-emerald-400/[0.08] px-2.5 py-1 text-[10px] font-semibold text-emerald-300">Active</span>
             </div>
@@ -695,7 +629,7 @@ function producerAccessGroups(workspace: WorkspaceMembership): AccessGroup[] {
 function membershipAccessSummary(artist: WorkspaceMembership, producer: WorkspaceMembership | null) {
   const roomCount = numberLimit(artist, "studio_rooms");
   const artistSummary = roomCount === -1 ? "all studio rooms" : `${roomCount || 1} studio rooms`;
-  return producer ? `${artistSummary}, artist intelligence, and ${producer.plan.name}` : `${artistSummary} and your artist tools`;
+  return producer ? `${artistSummary}, artist intelligence, and Producer HQ Free` : `${artistSummary} and your artist tools`;
 }
 
 function numberLimit(workspace: WorkspaceMembership, key: string) {

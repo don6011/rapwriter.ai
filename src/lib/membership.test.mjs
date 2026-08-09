@@ -67,14 +67,14 @@ const plans = [
     id: "producer_free",
     audience: "producer",
     tier: 0,
-    name: "Producer Free",
-    tagline: "Build your storefront.",
+    name: "Producer HQ Free",
+    tagline: "Sell your sound. Keep 100% of sales.",
     monthly_price_cents: 0,
     annual_price_cents: 0,
     currency: "usd",
-    entitlements: { producer_storefront: true, producer_intelligence: false },
-    limits: { beat_uploads: 5 },
-    metadata: {},
+    entitlements: { producer_storefront: true, producer_intelligence: true, collections: true },
+    limits: { beat_uploads: -1, collections: -1 },
+    metadata: { retired: true },
   },
   {
     id: "producer_pro",
@@ -113,6 +113,8 @@ describe("membership resolution", () => {
     expect(result.artist?.plan.id).toBe("artist_free");
     expect(result.producer?.plan.id).toBe("producer_free");
     expect(result.artist?.source).toBe("free");
+    expect(hasEntitlement(result, "producer", "producer_intelligence")).toBe(true);
+    expect(entitlementLimit(result, "producer", "beat_uploads")).toBe(-1);
   });
 
   test("uses active server subscription state for capabilities", () => {
@@ -168,7 +170,7 @@ describe("membership resolution", () => {
     expect(hasEntitlement(elite, "artist", "performance_coach")).toBe(true);
   });
 
-  test("keeps Producer Pro separate from artist membership", () => {
+  test("honors a grandfathered Producer Pro record without affecting artist membership", () => {
     const result = resolveMembership({
       roles: ["artist", "producer"],
       plans,

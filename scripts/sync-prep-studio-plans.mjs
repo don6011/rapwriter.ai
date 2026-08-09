@@ -173,6 +173,42 @@ const plans = [
       retired: true,
     },
   },
+  {
+    id: "producer_free",
+    name: "Producer HQ Free",
+    tagline: "Sell your sound. Keep 100% of sales.",
+    monthly_price_cents: 0,
+    annual_price_cents: 0,
+    entitlements: {
+      producer_storefront: true,
+      basic_licensing: true,
+      producer_analytics: true,
+      producer_intelligence: true,
+      catalog_import: true,
+      custom_storefront: true,
+      collections: true,
+      bundles: true,
+      custom_license_templates: true,
+      automatic_delivery: true,
+      artist_messaging: true,
+      service_listings: true,
+      promotions: true,
+      advanced_customer_insights: true,
+      priority_support: true,
+    },
+    limits: {
+      beat_uploads: -1,
+      collections: -1,
+      promotion_campaigns: -1,
+      service_listings: -1,
+    },
+    metadata: {
+      brand: "Producer HQ",
+      outcome: "Run your producer business",
+      separate_from_artist_membership: true,
+      supports_future_all_access: false,
+    },
+  },
 ];
 
 const { data: existing, error: readError } = await supabase
@@ -201,7 +237,11 @@ for (const plan of producerPlans ?? []) {
         ...(plan.metadata ?? {}),
         brand: "Producer HQ",
         separate_from_artist_membership: true,
-        supports_future_all_access: true,
+        supports_future_all_access: false,
+        ...(plan.id === "producer_pro" ? {
+          retired: true,
+          retired_reason: "Producer HQ capabilities are included free",
+        } : {}),
       },
     })
     .eq("id", plan.id);
