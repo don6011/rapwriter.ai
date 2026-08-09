@@ -44,7 +44,6 @@ export function StudioAccessHub({
   const roomLimit = allAccess ? -1 : typeof artist.limits.studio_rooms === "number" ? artist.limits.studio_rooms : 1;
   const hasWriterIntelligence = artist.entitlements.ghostwriter === true || artist.entitlements.full_pen_view === true;
   const hasAdvancedReadiness = artist.entitlements.advanced_booth_ready === true;
-  const hasProducerConnections = artist.entitlements.producer_connections === true;
 
   return (
     <div className="fixed inset-0 z-[115] flex items-end justify-center bg-black/76 px-2 pt-14 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Studio access">
@@ -92,10 +91,10 @@ export function StudioAccessHub({
           />
           <AccessLaunchRow
             icon={Headphones}
-            eyebrow="Connect"
-            title="Producer discovery"
-            detail={hasProducerConnections ? "Matched producers, storefronts, beats, and messaging are unlocked." : "Find a producer and a beat that fit the session."}
-            action="Browse producers"
+            eyebrow="Sound"
+            title="Producer beats"
+            detail="Browse producer storefronts and find a beat that fits the session."
+            action="Browse beats"
             onClick={onBrowseProducers}
           />
 

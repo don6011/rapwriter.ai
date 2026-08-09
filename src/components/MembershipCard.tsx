@@ -217,7 +217,7 @@ export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenM
                 <ArtistUsage workspace={artist} />
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <ActionButton label="Start Writer Flow" onClick={onOpenStudio} />
-                  <ActionButton label="Browse producers" onClick={onOpenMarket} subtle />
+                  <ActionButton label="Browse beats" onClick={onOpenMarket} subtle />
                 </div>
                 {artist.provider === "stripe" ? (
                   <ManageButton busy={billingBusy === "portal"} disabled={billingBusy !== null} onClick={openBilling} />
@@ -536,7 +536,7 @@ function MembershipAccessGuide({
           {workspace === "artist" ? (
             <div className="mt-4 grid grid-cols-2 gap-2">
               <ActionButton label="Start Writer Flow" onClick={() => { onClose(); onOpenStudio?.(); }} />
-              <ActionButton label="Browse producers" onClick={() => { onClose(); onOpenMarket?.(); }} subtle />
+              <ActionButton label="Browse beats" onClick={() => { onClose(); onOpenMarket?.(); }} subtle />
             </div>
           ) : (
             <Link href="/producer" className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gold px-4 text-sm font-semibold text-black">
@@ -586,8 +586,6 @@ function artistAccessGroups(workspace: WorkspaceMembership): AccessGroup[] {
       items: activeItems(workspace, [
         { key: "elite_rooms", label: "Elite rooms", detail: "Use the expanded collection of immersive writing environments." },
         { key: "multi_device_cloud_sync", label: "Cloud sync", detail: "Keep projects and sessions current across devices." },
-        { key: "producer_connections", label: "Producer connections", detail: "Discover producers whose sound fits the record." },
-        { key: "producer_messaging", label: "Producer messaging", detail: "Start a working conversation around beats and records." },
         { key: "unlimited_priority_ai", label: "Priority studio intelligence", detail: "Use the highest membership priority for studio assists." },
       ]),
     },
@@ -612,13 +610,11 @@ function producerAccessGroups(workspace: WorkspaceMembership): AccessGroup[] {
         { key: "producer_intelligence", label: "Producer intelligence", detail: "See how artists discover and use your catalog." },
         { key: "advanced_customer_insights", label: "Audience insights", detail: "Understand the artists responding to your sound." },
         { key: "promotions", label: "Promotions", detail: "Create campaigns that bring more writers to your beats." },
-        { key: "service_listings", label: "Producer services", detail: "Offer custom beats, feedback, and collaboration services." },
       ]),
     },
     {
       title: "Artist relationships",
       items: activeItems(workspace, [
-        { key: "artist_messaging", label: "Artist messaging", detail: "Continue conversations around active records." },
         { key: "automatic_delivery", label: "Automatic delivery", detail: "Keep approved purchases and files moving cleanly." },
         { key: "custom_license_templates", label: "License templates", detail: "Prepare consistent licensing options for your catalog." },
       ]),

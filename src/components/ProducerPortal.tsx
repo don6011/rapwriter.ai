@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
   Archive,
@@ -21,7 +21,6 @@ import {
   FolderPlus,
   Globe2,
   Gift,
-  Handshake,
   Loader2,
   LockKeyhole,
   Music,
@@ -51,7 +50,6 @@ import {
 } from "@/lib/client/membership-access";
 import { createProducerBeatPreview } from "@/lib/audio-preview-client";
 import { getProducerUploadDraftBlockers } from "@/lib/producer-release";
-import type { MembershipSnapshot, PlanDefinition } from "@/lib/membership";
 import { cn } from "@/lib/utils";
 
 type ProducerProfileRow = {
@@ -153,12 +151,8 @@ type ProducerPayload = {
   playlists: ProducerPlaylistRow[];
   business: ProducerBusinessRow | null;
   billing: ProducerBillingRow;
-  membership: MembershipSnapshot | null;
-  plans: PlanDefinition[];
   metrics: ProducerMetricsRow;
   reviews: ProducerReleaseReview[];
-  services: ProducerServiceRow[];
-  collaborations: ProducerCollaborationRow[];
   sales: ProducerSaleRow[];
   earnings: ProducerEarningRow[];
   release_readiness: ProducerReleaseReadiness;
@@ -201,27 +195,6 @@ type ProducerReferralSummary = {
     featured_until: string | null;
     referral_rewards: number;
   };
-};
-
-type ProducerServiceRow = {
-  id: string;
-  service_type: "custom_beat" | "co_production" | "song_feedback" | "writing_session";
-  title: string;
-  description: string;
-  starting_price_cents: number | null;
-  turnaround_days: number | null;
-  is_active: boolean;
-};
-
-type ProducerCollaborationRow = {
-  id: string;
-  title: string;
-  brief: string;
-  budget_cents: number | null;
-  status: "submitted" | "countered" | "accepted" | "declined" | "canceled" | "completed";
-  updated_at: string;
-  producer_services: { title: string } | null;
-  producer_beats: { title: string } | null;
 };
 
 type ProducerReleaseReview = {
@@ -341,7 +314,7 @@ function producerErrorStatus(error: unknown, fallback: string) {
 
 export function ProducerPortal() {
   const auth = useAuth();
-  const [payload, setPayload] = useState<ProducerPayload>({ profile: null, beats: [], credited_beats: [], playlists: [], business: null, billing: emptyBilling, membership: null, plans: [], metrics: emptyMetrics, reviews: [], services: [], collaborations: [], sales: [], earnings: [], release_readiness: emptyReleaseReadiness, foundation_ready: true });
+  const [payload, setPayload] = useState<ProducerPayload>({ profile: null, beats: [], credited_beats: [], playlists: [], business: null, billing: emptyBilling, metrics: emptyMetrics, reviews: [], sales: [], earnings: [], release_readiness: emptyReleaseReadiness, foundation_ready: true });
   const [payoutBusy, setPayoutBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<{ tone: "idle" | "gold" | "green" | "red"; message: string }>({ tone: "idle", message: "" });
@@ -408,9 +381,6 @@ export function ProducerPortal() {
   const [playlistDescription, setPlaylistDescription] = useState("");
   const [playlistBeatIds, setPlaylistBeatIds] = useState<string[]>([]);
   const [activeView, setActiveView] = useState<ProducerView>("overview");
-  const [serviceComposerOpen, setServiceComposerOpen] = useState(false);
-  const [serviceBusy, setServiceBusy] = useState(false);
-  const [serviceDraft, setServiceDraft] = useState({ service_type: "custom_beat" as ProducerServiceRow["service_type"], title: "", description: "", starting_price: "", turnaround_days: "" });
   const [referral, setReferral] = useState<ProducerReferralSummary>(emptyReferralSummary);
 
   const profile = payload.profile;
@@ -493,29 +463,21 @@ export function ProducerPortal() {
       .slice(0, 4);
   }, [payload.beats, payload.reviews]);
 
-  function updateProducerLocation(view: ProducerView, panel: "service" | null, mode: "push" | "replace") {
+  function updateProducerLocation(view: ProducerView, mode: "push" | "replace") {
     const url = new URL(window.location.href);
     if (view === "overview") url.searchParams.delete("view");
     else url.searchParams.set("view", view);
-    if (panel) url.searchParams.set("panel", panel);
-    else url.searchParams.delete("panel");
+    url.searchParams.delete("panel");
     const destination = `${url.pathname}${url.search}${url.hash}`;
-    const state = { ...window.history.state, rapwriterProducerView: view, rapwriterProducerPanel: panel };
+    const state = { ...window.history.state, rapwriterProducerView: view };
     if (mode === "replace") window.history.replaceState(state, "", destination);
     else window.history.pushState(state, "", destination);
   }
 
   function changeView(view: ProducerView, mode: "push" | "replace" = "push") {
     setActiveView(view);
-    setServiceComposerOpen(false);
-    updateProducerLocation(view, null, mode);
+    updateProducerLocation(view, mode);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function changeServiceComposer(open: boolean, mode: "push" | "replace" = "push") {
-    setServiceComposerOpen(open);
-    updateProducerLocation(activeView, open ? "service" : null, mode);
-    if (open) window.setTimeout(() => document.getElementById("producer-services")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
 
   function handleProducerBack() {
@@ -525,11 +487,6 @@ export function ProducerPortal() {
     }
     if (playlistComposerOpen) {
       setPlaylistComposerOpen(false);
-      return;
-    }
-    if (serviceComposerOpen) {
-      if (window.history.state?.rapwriterProducerPanel === "service") window.history.back();
-      else changeServiceComposer(false, "replace");
       return;
     }
     if (activeView !== "overview") {
@@ -543,9 +500,7 @@ export function ProducerPortal() {
   useEffect(() => {
     const syncProducerLocation = () => {
       const view = producerViewFromSearch(window.location.search);
-      const panel = new URLSearchParams(window.location.search).get("panel");
       setActiveView(view);
-      setServiceComposerOpen(view === "overview" && panel === "service");
       window.scrollTo({ top: 0 });
     };
     syncProducerLocation();
@@ -664,11 +619,10 @@ export function ProducerPortal() {
       const notice = (event as CustomEvent<MembershipAccessNotice>).detail;
       if (!notice || notice.audience !== "producer") return;
       setActiveView("overview");
-      setServiceComposerOpen(false);
       const url = new URL(window.location.href);
       url.searchParams.delete("view");
       url.searchParams.delete("panel");
-      window.history.replaceState({ ...window.history.state, rapwriterProducerView: "overview", rapwriterProducerPanel: null }, "", `${url.pathname}${url.search}${url.hash}`);
+      window.history.replaceState({ ...window.history.state, rapwriterProducerView: "overview" }, "", `${url.pathname}${url.search}${url.hash}`);
       setStatus({ tone: "gold", message: membershipAccessCopy(notice) });
     };
     window.addEventListener(MEMBERSHIP_ACCESS_EVENT, handleMembershipAccess);
@@ -684,7 +638,7 @@ export function ProducerPortal() {
       ]);
       const data = await res.json();
       if (res.status === 401) {
-        setPayload({ profile: null, beats: [], credited_beats: [], playlists: [], business: null, billing: emptyBilling, membership: null, plans: [], metrics: emptyMetrics, reviews: [], services: [], collaborations: [], sales: [], earnings: [], release_readiness: emptyReleaseReadiness, foundation_ready: true });
+        setPayload({ profile: null, beats: [], credited_beats: [], playlists: [], business: null, billing: emptyBilling, metrics: emptyMetrics, reviews: [], sales: [], earnings: [], release_readiness: emptyReleaseReadiness, foundation_ready: true });
         setStatus({ tone: "red", message: "Your producer session expired. Sign in again to continue." });
         return;
       }
@@ -696,12 +650,8 @@ export function ProducerPortal() {
         playlists: data.playlists ?? [],
         business: data.business ?? null,
         billing: data.billing ?? emptyBilling,
-        membership: data.membership ?? null,
-        plans: data.plans ?? [],
         metrics: data.metrics ?? emptyMetrics,
         reviews: data.reviews ?? [],
-        services: data.services ?? [],
-        collaborations: data.collaborations ?? [],
         sales: data.sales ?? [],
         earnings: data.earnings ?? [],
         release_readiness: data.release_readiness ?? emptyReleaseReadiness,
@@ -728,64 +678,6 @@ export function ProducerPortal() {
     } catch {
       setStatus({ tone: "red", message: "Could not copy the invite link." });
       toast.error("Could not copy the invite link.");
-    }
-  }
-
-  async function createService(event: FormEvent) {
-    event.preventDefault();
-    if (serviceBusy) return;
-    setServiceBusy(true);
-    try {
-      const res = await fetch("/api/producer/services", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          service_type: serviceDraft.service_type,
-          title: serviceDraft.title,
-          description: serviceDraft.description,
-          starting_price_cents: serviceDraft.starting_price ? Math.round(Number(serviceDraft.starting_price) * 100) : null,
-          turnaround_days: serviceDraft.turnaround_days ? Number(serviceDraft.turnaround_days) : null,
-          is_active: true,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw producerResponseError(data, res.status, "Could not publish this service.");
-      setServiceDraft({ service_type: "custom_beat", title: "", description: "", starting_price: "", turnaround_days: "" });
-      changeServiceComposer(false, "replace");
-      setStatus({ tone: "green", message: "Service published to your storefront." });
-      toast.success("Service published to your storefront.");
-      await loadProducer();
-    } catch (error) {
-      const nextStatus = producerErrorStatus(error, "Could not publish this service.");
-      setStatus(nextStatus);
-      toast.error(nextStatus.message);
-    } finally {
-      setServiceBusy(false);
-    }
-  }
-
-  async function toggleService(service: ProducerServiceRow) {
-    setServiceBusy(true);
-    try {
-      const res = await fetch(`/api/producer/services/${service.id}`, {
-        method: "PATCH",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ is_active: !service.is_active }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw producerResponseError(data, res.status, "Could not update this service.");
-      const message = service.is_active ? "Service paused." : "Service published to your storefront.";
-      setStatus({ tone: "green", message });
-      toast.success(message);
-      await loadProducer();
-    } catch (error) {
-      const nextStatus = producerErrorStatus(error, "Could not update this service.");
-      setStatus(nextStatus);
-      toast.error(nextStatus.message);
-    } finally {
-      setServiceBusy(false);
     }
   }
 
@@ -1200,7 +1092,7 @@ export function ProducerPortal() {
     <ProducerShell
       signedIn
       onBack={handleProducerBack}
-      backLabel={editingBeat || playlistComposerOpen || serviceComposerOpen || activeView !== "overview" ? "Back in Producer HQ" : "Back to Studio"}
+      backLabel={editingBeat || playlistComposerOpen || activeView !== "overview" ? "Back in Producer HQ" : "Back to Studio"}
     >
       <div className="space-y-5 px-4 pb-32 pt-4 sm:px-5">
         <ProducerControlRoomHero
@@ -1230,20 +1122,6 @@ export function ProducerPortal() {
 
           {payload.release_readiness.phase !== "live" && (
             <ReleasePipeline readiness={payload.release_readiness} profile={profile} beats={payload.beats} latestReview={payload.reviews[0]} onAddBeat={() => changeView("upload")} onEditProfile={() => { setProfileEditMode(true); changeView("setup"); }} />
-          )}
-
-          {profile && (
-            <ProducerCollaborationPanel
-              services={payload.services}
-              requests={payload.collaborations}
-              composerOpen={serviceComposerOpen}
-              setComposerOpen={(open) => changeServiceComposer(open, open ? "push" : "replace")}
-              draft={serviceDraft}
-              setDraft={setServiceDraft}
-              busy={serviceBusy}
-              onCreate={createService}
-              onToggle={toggleService}
-            />
           )}
 
           {profile && hasCatalogActivity && (
@@ -1989,52 +1867,6 @@ function ProducerHqNav({ activeView, onChange }: { activeView: ProducerView; onC
         })}
       </div>
     </nav>
-  );
-}
-
-function ProducerCollaborationPanel({
-  services,
-  requests,
-  composerOpen,
-  setComposerOpen,
-  draft,
-  setDraft,
-  busy,
-  onCreate,
-  onToggle,
-}: {
-  services: ProducerServiceRow[];
-  requests: ProducerCollaborationRow[];
-  composerOpen: boolean;
-  setComposerOpen: (value: boolean) => void;
-  draft: { service_type: ProducerServiceRow["service_type"]; title: string; description: string; starting_price: string; turnaround_days: string };
-  setDraft: Dispatch<SetStateAction<{ service_type: ProducerServiceRow["service_type"]; title: string; description: string; starting_price: string; turnaround_days: string }>>;
-  busy: boolean;
-  onCreate: (event: FormEvent) => void;
-  onToggle: (service: ProducerServiceRow) => void;
-}) {
-  const activeRequests = requests.filter((request) => ["submitted", "countered", "accepted"].includes(request.status));
-  return (
-    <section id="producer-services" className="scroll-mt-24 rounded-3xl border border-gold/18 bg-[linear-gradient(145deg,rgba(246,199,72,0.08),rgba(17,17,19,0.96)_52%)] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div><div className="label-hw text-gold/85">Producer services</div><h2 className="mt-1 text-xl font-semibold">Work with artists</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Publish what you offer. Requests stay private until you accept.</p></div>
-        <Handshake className="mt-1 h-5 w-5 shrink-0 text-gold" />
-      </div>
-
-      <Link href="/collaborations?from=producer-hq" className="mt-4 flex min-h-12 items-center justify-between rounded-2xl border border-white/10 bg-black/30 px-4">
-        <span><span className="block text-sm font-semibold">Artist requests</span><span className="mt-0.5 block text-[11px] text-muted-foreground">{activeRequests.length ? `${activeRequests.length} active` : "No active requests"}</span></span>
-        <span className="flex items-center gap-1 text-xs font-semibold text-gold">Open rooms<ChevronRight className="h-4 w-4" /></span>
-      </Link>
-
-      {services.length > 0 && <div className="mt-3 space-y-2">{services.map((service) => <div key={service.id} className="flex items-center gap-3 rounded-2xl border border-white/9 bg-black/24 p-3"><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{service.title}</div><div className="mt-1 text-[11px] text-muted-foreground">{service.starting_price_cents != null ? `From ${formatMoney(service.starting_price_cents)}` : "Quote after brief"}{service.turnaround_days ? ` - ${service.turnaround_days} day turnaround` : ""}</div></div><button type="button" onClick={() => void onToggle(service)} disabled={busy} className={cn("rounded-full border px-3 py-1.5 text-[10px] font-semibold", service.is_active ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-300" : "border-white/10 text-white/45")}>{service.is_active ? "Live" : "Paused"}</button></div>)}</div>}
-
-      {composerOpen ? <form onSubmit={onCreate} className="mt-4 space-y-3 border-t border-white/10 pt-4">
-        <div className="grid grid-cols-2 gap-2"><select value={draft.service_type} onChange={(event) => setDraft((value) => ({ ...value, service_type: event.target.value as ProducerServiceRow["service_type"] }))} className="min-h-11 rounded-xl border border-white/10 bg-black/40 px-3 text-xs"><option value="custom_beat">Custom beat</option><option value="co_production">Co-production</option><option value="song_feedback">Song feedback</option><option value="writing_session">Writing session</option></select><input required minLength={2} maxLength={80} value={draft.title} onChange={(event) => setDraft((value) => ({ ...value, title: event.target.value }))} placeholder="Service title" className="min-h-11 min-w-0 rounded-xl border border-white/10 bg-black/40 px-3 text-xs outline-none focus:border-gold/45" /></div>
-        <textarea rows={3} maxLength={600} value={draft.description} onChange={(event) => setDraft((value) => ({ ...value, description: event.target.value }))} placeholder="What does the artist receive?" className="w-full resize-none rounded-xl border border-white/10 bg-black/40 p-3 text-xs leading-relaxed outline-none focus:border-gold/45" />
-        <div className="grid grid-cols-2 gap-2"><input type="number" min="0" value={draft.starting_price} onChange={(event) => setDraft((value) => ({ ...value, starting_price: event.target.value }))} placeholder="Starting price" className="min-h-11 min-w-0 rounded-xl border border-white/10 bg-black/40 px-3 text-xs" /><input type="number" min="1" max="180" value={draft.turnaround_days} onChange={(event) => setDraft((value) => ({ ...value, turnaround_days: event.target.value }))} placeholder="Turnaround days" className="min-h-11 min-w-0 rounded-xl border border-white/10 bg-black/40 px-3 text-xs" /></div>
-        <div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setComposerOpen(false)} className="min-h-11 rounded-xl border border-white/10 text-xs font-semibold text-white/60">Cancel</button><button type="submit" disabled={busy} className="gold-seal min-h-11 rounded-xl text-xs font-semibold text-black disabled:opacity-50">{busy ? "Publishing..." : "Publish service"}</button></div>
-      </form> : <button type="button" onClick={() => setComposerOpen(true)} className="mt-3 min-h-11 w-full rounded-xl border border-gold/25 bg-gold/8 text-xs font-semibold text-gold"><Plus className="mr-1 inline h-4 w-4" />Add service</button>}
-    </section>
   );
 }
 
