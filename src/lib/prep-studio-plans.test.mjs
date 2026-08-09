@@ -11,7 +11,7 @@ describe("Prep Studio plan presentation", () => {
     expect(prepStudioTier("artist_studio")?.monthlyPriceCents).toBe(2999);
   });
 
-  test("normalizes legacy database presentation without changing plan identity", () => {
+  test("normalizes copy while keeping database prices authoritative", () => {
     const plan = withPrepStudioPresentation({
       id: "artist_studio",
       audience: "artist",
@@ -27,6 +27,7 @@ describe("Prep Studio plan presentation", () => {
     });
     expect(plan.id).toBe("artist_studio");
     expect(plan.name).toBe("Prep Studio Elite");
-    expect(plan.monthly_price_cents).toBe(2999);
+    expect(plan.monthly_price_cents).toBe(2799);
+    expect(plan.annual_price_cents).toBe(27990);
   });
 });

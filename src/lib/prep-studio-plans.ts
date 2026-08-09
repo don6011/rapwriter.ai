@@ -61,7 +61,5 @@ export function withPrepStudioPresentation(plan: PlanDefinition): PlanDefinition
     ...plan,
     name: tier.name,
     tagline: tier.tagline,
-    monthly_price_cents: tier.monthlyPriceCents,
-    annual_price_cents: tier.annualPriceCents,
   };
 }
