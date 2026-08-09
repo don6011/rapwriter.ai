@@ -147,7 +147,7 @@ export function MobileStudioShell() {
   // as its notice channel, and a React setter keeps that callback stable.
   const [syncMessage, setSyncMessage] = useState("Saved on device");
   const { requestAuth, drawerProps: authDrawerProps } = useAuthDrawer(workspace);
-  const [screen, setScreen] = useState<"home" | "writer">("home");
+  const [screen, setScreen] = useState<"home" | "writer">("writer");
   const [activeNav, setActiveNav] = useState<MobileNavView>("studio");
   const [readinessLaunchToken, setReadinessLaunchToken] = useState(0);
   const [marketFocusCategory, setMarketFocusCategory] = useState<MarketCategory | null>(null);

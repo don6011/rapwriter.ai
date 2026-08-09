@@ -171,10 +171,10 @@ export function WriterScreen({
       className="relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#050506]"
     >
       <div
-        className="pointer-events-none absolute inset-0 bg-cover opacity-[0.17] blur-[1px] saturate-[0.78]"
+        className="pointer-events-none absolute inset-0 bg-cover opacity-[0.24] blur-[1px] saturate-[0.82]"
         style={{ backgroundImage: `url('${studioPack.image}')`, backgroundPosition: studioPack.position }}
       />
-      <div className="pointer-events-none absolute inset-0 opacity-80" style={{ background: studioPack.overlay }} />
+      <div className="pointer-events-none absolute inset-0 opacity-70" style={{ background: studioPack.overlay }} />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(246,199,72,0.12),transparent_42%)]" />
       <div className="relative z-10 flex items-center justify-between border-b border-white/10 bg-black/52 px-5 py-3 backdrop-blur-xl">
         <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Exit writer">

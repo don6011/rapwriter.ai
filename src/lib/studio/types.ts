@@ -19,6 +19,7 @@ export type StudioPack = {
   image: string;
   position: string;
   overlay: string;
+  tone: string;
   chip: string;
   bestFor: string[];
   ambience: Array<{

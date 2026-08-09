@@ -11,6 +11,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/modern-hero-v2.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(0,0,0,0.08), rgba(7,7,8,0.78) 72%, #070708)",
+    tone: "rgba(246,199,72,0.16)",
     chip: "Included",
     bestFor: ["Hooks", "Melodic rap", "Night writing"],
     ambience: [
@@ -29,6 +30,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/trap-house-studio.webp",
     position: "center 44%",
     overlay: "linear-gradient(180deg, rgba(20,6,4,0.18), rgba(7,7,8,0.84) 70%, #070708)",
+    tone: "rgba(157,72,255,0.2)",
     chip: "Raw",
     bestFor: ["Trap", "Drill", "Street anthems"],
     ambience: [
@@ -47,6 +49,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/bedroom-dreams.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(0,0,0,0.14), rgba(7,7,8,0.82) 72%, #070708)",
+    tone: "rgba(82,145,255,0.18)",
     chip: "Starter",
     bestFor: ["Lo-fi", "Storytelling", "Personal records"],
     ambience: [
@@ -65,6 +68,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/penthouse-sessions.webp",
     position: "right center",
     overlay: "linear-gradient(180deg, rgba(6,8,18,0.1), rgba(7,7,8,0.76) 68%, #070708)",
+    tone: "rgba(235,183,72,0.18)",
     chip: "Luxury",
     bestFor: ["Hit records", "Melodic rap", "Elevated vibes"],
     ambience: [
@@ -83,6 +87,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/cypher-sessions.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(0,0,0,0.2), rgba(7,7,8,0.9) 68%, #070708)",
+    tone: "rgba(220,226,232,0.1)",
     chip: "Lyricism",
     bestFor: ["Freestyle", "Cyphers", "Raw bars"],
     ambience: [
@@ -101,6 +106,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/afterglow.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(20,8,34,0.08), rgba(7,7,8,0.78) 72%, #070708)",
+    tone: "rgba(190,105,255,0.2)",
     chip: "After Hours",
     bestFor: ["Late-night records", "Melodic rap", "Ambition"],
     ambience: [
@@ -119,6 +125,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/bedroom-diaries.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(28,8,20,0.08), rgba(7,7,8,0.8) 72%, #070708)",
+    tone: "rgba(255,118,184,0.18)",
     chip: "Personal",
     bestFor: ["Personal records", "Melodic rap", "Storytelling"],
     ambience: [
@@ -137,6 +144,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/red-light.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(40,3,3,0.08), rgba(7,7,8,0.84) 72%, #070708)",
+    tone: "rgba(255,58,48,0.2)",
     chip: "Performance",
     bestFor: ["Performance", "Street records", "Raw vocals"],
     ambience: [
@@ -155,6 +163,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/main-room.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(18,5,3,0.06), rgba(7,7,8,0.8) 74%, #070708)",
+    tone: "rgba(255,86,44,0.18)",
     chip: "Club",
     bestFor: ["Club records", "Anthems", "Replay"],
     ambience: [
@@ -173,6 +182,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/skyline-loft.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(5,10,14,0.06), rgba(7,7,8,0.78) 74%, #070708)",
+    tone: "rgba(115,196,255,0.16)",
     chip: "Default",
     bestFor: ["Commercial hooks", "Victory records", "Big ideas"],
     ambience: [
@@ -191,6 +201,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/soft-life.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(20,15,8,0.05), rgba(7,7,8,0.76) 74%, #070708)",
+    tone: "rgba(255,221,157,0.17)",
     chip: "Ease",
     bestFor: ["Melodic rap", "R&B", "Feel-good records"],
     ambience: [
@@ -209,6 +220,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/desert-sessions.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(30,15,4,0.06), rgba(7,7,8,0.8) 74%, #070708)",
+    tone: "rgba(255,156,72,0.18)",
     chip: "Reflective",
     bestFor: ["Storytelling", "Reflective records", "Soul"],
     ambience: [
@@ -227,6 +239,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/rooftop-sessions.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(4,8,18,0.08), rgba(7,7,8,0.82) 72%, #070708)",
+    tone: "rgba(75,137,255,0.18)",
     chip: "Anthem",
     bestFor: ["Anthems", "Night records", "Ambition"],
     ambience: [
@@ -245,6 +258,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/radio-room.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(20,5,4,0.08), rgba(7,7,8,0.84) 72%, #070708)",
+    tone: "rgba(255,76,64,0.16)",
     chip: "Broadcast",
     bestFor: ["Radio hooks", "Commercial records", "Replay"],
     ambience: [
@@ -263,6 +277,7 @@ export const studioPacks: StudioPack[] = [
     image: "/studio/bando-sessions.webp",
     position: "center",
     overlay: "linear-gradient(180deg, rgba(14,11,7,0.1), rgba(7,7,8,0.86) 72%, #070708)",
+    tone: "rgba(192,146,82,0.15)",
     chip: "Survival",
     bestFor: ["Street records", "Pain records", "Raw bars"],
     ambience: [
