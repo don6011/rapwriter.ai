@@ -97,7 +97,7 @@ export function StudioPackSheet({
                   </button>
                   {previewAccess.requiredPlan && (
                     <button type="button" onClick={onOpenMembership} className="mt-2 min-h-10 w-full rounded-xl border border-gold/25 bg-gold/8 px-4 text-xs font-semibold text-gold">
-                      Included with Prep Studio {previewAccess.requiredPlan === "elite" ? "Elite" : "Pro"}
+                      Included with RapWriter Pro
                     </button>
                   )}
                   <p className="mt-2 text-center text-[11px] leading-relaxed text-muted-foreground">

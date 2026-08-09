@@ -17,7 +17,7 @@ export const studioRoomIds = [
 ] as const;
 
 export type StudioRoomId = (typeof studioRoomIds)[number];
-export type StudioRoomRequiredPlan = "pro" | "elite" | null;
+export type StudioRoomRequiredPlan = "pro" | null;
 
 export type StudioRoomAccess = {
   available: boolean;
@@ -29,20 +29,14 @@ export type StudioRoomAccess = {
 export const defaultStudioRoomId: StudioRoomId = "skyline-loft";
 
 const includedRooms = new Set<StudioRoomId>([defaultStudioRoomId, "midnight"]);
-const proRooms = new Set<StudioRoomId>(["trap-house", "bedroom", "cypher"]);
-const eliteRooms = new Set<StudioRoomId>(["penthouse", "red-light", "main-room", "radio-room"]);
-
 export function studioRoomRequiredPlan(roomId: StudioRoomId): StudioRoomRequiredPlan {
-  if (proRooms.has(roomId)) return "pro";
-  if (eliteRooms.has(roomId)) return "elite";
-  return null;
+  return includedRooms.has(roomId) ? null : "pro";
 }
 
 export function membershipIncludesStudioRoom(planId: string | null | undefined, roomId: StudioRoomId) {
   if (includedRooms.has(roomId)) return true;
   if (planId === "creator_all_access") return true;
-  if (planId === "artist_studio") return proRooms.has(roomId) || eliteRooms.has(roomId);
-  if (planId === "artist_pro") return proRooms.has(roomId);
+  if (planId === "artist_studio" || planId === "artist_pro") return true;
   return false;
 }
 
@@ -67,7 +61,7 @@ export function resolveStudioRoomAccess(
   return {
     available: false,
     source: "locked",
-    badge: requiredPlan === "elite" ? "Elite" : requiredPlan === "pro" ? "Pro" : "Store",
+    badge: requiredPlan === "pro" ? "Pro" : "Store",
     requiredPlan,
   };
 }

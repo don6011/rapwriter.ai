@@ -145,8 +145,6 @@ function accessDetails(workspace: WorkspaceMembership, feature: string) {
     audience: workspace.audience,
     feature,
     current_plan: workspace.plan.id,
-    recommended_plan: workspace.audience === "artist"
-      ? feature === "producer_collaboration" || feature === "producer_messaging" ? "artist_studio" : "artist_pro"
-      : "producer_pro",
+    recommended_plan: workspace.audience === "artist" ? "artist_pro" : "producer_pro",
   };
 }

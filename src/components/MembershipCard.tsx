@@ -98,11 +98,11 @@ export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenM
   const artistPlan = withPrepStudioPresentation(artist.plan);
   const producer = membership?.producer ?? null;
   const artistUpgrades = plans
-    .filter((plan) => plan.audience === "artist" && plan.tier > artist.plan.tier)
+    .filter((plan) => plan.audience === "artist" && plan.metadata.retired !== true && plan.tier > artist.plan.tier)
     .map(withPrepStudioPresentation);
   const producerUpgrades = plans.filter((plan) => plan.audience === "producer" && plan.tier > (producer?.plan.tier ?? 0));
   const bundle = bundles.find((item) => item.id === "creator_all_access") ?? bundles[0] ?? null;
-  const bothWorkspacesPaid = artist.plan.tier >= 2 && (producer?.plan.tier ?? 0) >= 1;
+  const bothWorkspacesPaid = artist.plan.tier >= 1 && (producer?.plan.tier ?? 0) >= 1;
   const hasStripeWorkspace = artist.provider === "stripe" || producer?.provider === "stripe";
   const accessSummary = membershipAccessSummary(artist, producer);
   const showBillingInterval = view === "artist"
@@ -284,8 +284,8 @@ export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenM
               <WorkspacePanel
                 eyebrow="RapWriter All Access"
                 name={bundle?.name ?? "Artist + Producer"}
-                tagline={bundle?.tagline ?? "Prep Studio Elite and Producer HQ Pro under one bill."}
-                capabilities={[["Prep Studio Elite", true], ["Producer HQ Pro", true], ["Separate permissions", true]]}
+                tagline={bundle?.tagline ?? "RapWriter Pro and Producer HQ under one bill."}
+                capabilities={[["RapWriter Pro", true], ["Producer HQ", true], ["Separate permissions", true]]}
               >
                 {bundle && (
                   <div className="mt-4 flex items-end justify-between gap-3 rounded-xl border border-gold/20 bg-gold/[0.06] px-3 py-3">

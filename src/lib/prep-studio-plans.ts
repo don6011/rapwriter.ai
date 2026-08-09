@@ -1,8 +1,8 @@
 import type { PlanDefinition } from "@/lib/membership";
 
 export type PrepStudioTier = {
-  id: "artist_free" | "artist_pro" | "artist_studio";
-  shortName: "Free" | "Pro" | "Elite";
+  id: "artist_free" | "artist_pro";
+  shortName: "Free" | "Pro";
   name: string;
   tagline: string;
   monthlyPriceCents: number;
@@ -10,14 +10,13 @@ export type PrepStudioTier = {
   outcome: string;
   previewBenefits: [string, string];
   decisionLabel: string;
-  featured?: boolean;
 };
 
 export const prepStudioTiers: PrepStudioTier[] = [
   {
     id: "artist_free",
     shortName: "Free",
-    name: "Prep Studio Free",
+    name: "RapWriter Free",
     tagline: "Start the record.",
     monthlyPriceCents: 0,
     annualPriceCents: 0,
@@ -28,25 +27,13 @@ export const prepStudioTiers: PrepStudioTier[] = [
   {
     id: "artist_pro",
     shortName: "Pro",
-    name: "Prep Studio Pro",
-    tagline: "Finish better records.",
-    monthlyPriceCents: 1499,
-    annualPriceCents: 14990,
-    outcome: "Finish songs faster and make every section stronger.",
-    previewBenefits: ["Stronger hooks", "5-room core library"],
-    decisionLabel: "Recommended",
-    featured: true,
-  },
-  {
-    id: "artist_studio",
-    shortName: "Elite",
-    name: "Prep Studio Elite",
-    tagline: "Turn serious records into a career.",
-    monthlyPriceCents: 2999,
-    annualPriceCents: 29990,
-    outcome: "Prepare records for consistent, serious releases.",
-    previewBenefits: ["Performance coaching", "9-room professional library"],
-    decisionLabel: "Career mode",
+    name: "RapWriter Pro",
+    tagline: "Finish the record.",
+    monthlyPriceCents: 799,
+    annualPriceCents: 5900,
+    outcome: "Turn complete drafts into records ready for the booth.",
+    previewBenefits: ["Ghostwriter + AI family", "All 15 studio rooms"],
+    decisionLabel: "Finish the record",
   },
 ];
 

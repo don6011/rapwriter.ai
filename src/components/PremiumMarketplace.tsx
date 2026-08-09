@@ -214,7 +214,7 @@ export function PremiumMarketplace({
   const featuredBundleOwned = unlockedIds.has(featuredBundle.id);
   const activeArtistTier = artistPlanId ? prepStudioTier(artistPlanId) : null;
   const roomAccessPlanId = allAccess ? "creator_all_access" : artistPlanId;
-  const hasActiveArtistMembership = Boolean(activeArtistTier && activeArtistTier.id !== "artist_free");
+  const hasActiveArtistMembership = Boolean(artistPlanId && artistPlanId !== "artist_free");
   const featuredProductTitles = useMemo(
     () => new Set(featuredBundle.includes.map((item) => item.toLowerCase())),
     [featuredBundle.includes],
@@ -417,7 +417,7 @@ export function PremiumMarketplace({
       )}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="label-hw text-gold/85">Studio Store&trade;</div>
+          <div className="label-hw text-gold/85">Studio Store</div>
           <h1 className="mt-2 text-2xl font-semibold">Build your perfect studio.</h1>
           <p className="mt-2 max-w-[310px] text-sm leading-relaxed text-muted-foreground">
             Discover the sound, room, and creative tools that fit tonight&apos;s record.
@@ -901,25 +901,20 @@ function PrepStudioMembership({
 }) {
   const activeTier = artistPlanId ? prepStudioTier(artistPlanId) : null;
 
-  if (activeTier && activeTier.id !== "artist_free") {
-    const elite = activeTier.id === "artist_studio";
+  if (artistPlanId && artistPlanId !== "artist_free") {
+    const membershipName = activeTier?.shortName ?? "Legacy";
     return (
       <section className="mt-4 overflow-hidden rounded-2xl border border-gold/25 bg-[linear-gradient(145deg,rgba(246,199,72,0.1),rgba(17,17,19,0.98)_62%)] p-3">
         <div className="flex min-h-14 w-full items-center gap-3">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-gold/30 bg-black/28 text-gold"><Crown className="h-5 w-5" /></span>
           <span className="min-w-0 flex-1">
             <span className="label-hw block text-gold/85">Your Prep Studio</span>
-            <span className="mt-1 block truncate text-sm font-semibold">{activeTier.shortName} active</span>
-            <span className="mt-1 block truncate text-[10px] text-white/48">{elite ? "Producer connections and private rooms are available" : "Rooms and artist intelligence are available"}</span>
+            <span className="mt-1 block truncate text-sm font-semibold">{membershipName} active</span>
+            <span className="mt-1 block truncate text-[10px] text-white/48">Rooms and artist intelligence are available</span>
           </span>
           <button type="button" onClick={onUpgrade} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-gold/25 bg-gold/8 text-gold" aria-label="View membership"><ArrowRight className="h-4 w-4" /></button>
         </div>
-        {elite && (
-          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/8 pt-3">
-            <button type="button" onClick={onFindProducers} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-gold/30 bg-gold/10 px-3 text-xs font-semibold text-gold"><Users className="h-4 w-4" />Find producers</button>
-            <Link href="/collaborations" className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-white/72"><Handshake className="h-4 w-4 text-gold" />Private rooms</Link>
-          </div>
-        )}
+        <button type="button" onClick={onFindProducers} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 border-t border-white/8 pt-3 text-xs font-semibold text-gold"><Users className="h-4 w-4" />Find producers</button>
       </section>
     );
   }
@@ -929,7 +924,7 @@ function PrepStudioMembership({
       <div className="flex items-start gap-3">
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-gold/30 bg-black/28 text-gold"><Mic className="h-5 w-5" /></span>
         <div className="min-w-0 flex-1">
-          <div className="label-hw text-gold/85">Prep Studio&trade; Membership</div>
+          <div className="label-hw text-gold/85">RapWriter Membership</div>
           <h2 className="mt-1 text-xl font-semibold">Build better records.</h2>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Choose how far you want to take tonight&apos;s session.</p>
         </div>
@@ -937,16 +932,16 @@ function PrepStudioMembership({
 
       <div className="mt-4 space-y-2">
         {prepStudioTiers.map((plan) => (
-          <div key={plan.id} className={cn("rounded-xl border px-3 py-3", plan.featured ? "border-gold/45 bg-gold/[0.1] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" : "border-white/10 bg-black/20")}>
+          <div key={plan.id} className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-white">{plan.shortName}</span>
-                  <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-semibold", plan.featured ? "border-gold/35 bg-gold/10 text-gold" : "border-white/10 text-white/48")}>{plan.decisionLabel}</span>
+                  <span className="rounded-full border border-white/10 px-2 py-0.5 text-[9px] font-semibold text-white/48">{plan.decisionLabel}</span>
                 </div>
                 <div className="mt-1 text-[11px] leading-4 text-white/62">{plan.outcome}</div>
               </div>
-              <span className={cn("shrink-0 text-xs font-semibold", plan.featured ? "text-gold" : "text-white/76")}>{plan.monthlyPriceCents === 0 ? "$0" : `$${(plan.monthlyPriceCents / 100).toFixed(2)}/mo`}</span>
+              <span className="shrink-0 text-xs font-semibold text-white/76">{plan.monthlyPriceCents === 0 ? "$0" : `$${(plan.monthlyPriceCents / 100).toFixed(2)}/mo`}</span>
             </div>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
               {plan.previewBenefits.map((benefit) => (
@@ -1399,7 +1394,7 @@ function BeatDetail({ beat, producer, playing, busy, onPreview, onFavorite, onWr
 
 function RoomDetail({ selection, onUse, onUnlock, onOpenMembership }: { selection: Extract<MarketSelection, { kind: "room" }>; onUse: () => void; onUnlock: () => void; onOpenMembership: () => void }) {
   const { pack, product, access } = selection;
-  return <div><div className="relative h-60"><img src={pack.image} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: pack.position }} decoding="async" /><div className="absolute inset-0" style={{ background: pack.overlay }} /><div className="absolute bottom-5 left-5 right-5"><div className="label-hw text-gold/85">{access.available ? access.badge : "Locked Preview"}</div><h2 className="mt-2 text-3xl font-semibold">{pack.label}</h2><p className="mt-2 text-sm text-white/62">{pack.line}</p></div></div><div className="p-5"><div className="label-hw text-gold/80">Room intelligence</div><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{pack.writingCue}</p><div className="mt-4 flex flex-wrap gap-2">{pack.bestFor.map((tag) => <span key={tag} className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] text-white/62">{tag}</span>)}</div><div className="mt-5 space-y-2">{pack.ambience.slice(0, 3).map((item) => <div key={item.title} className="flex gap-3 border-t border-white/8 pt-3"><Headphones className="mt-0.5 h-4 w-4 shrink-0 text-gold" /><div><div className="text-sm font-semibold">{item.title}</div><div className="mt-1 text-xs text-muted-foreground">{item.detail}</div></div></div>)}</div><button type="button" onClick={access.available ? onUse : onUnlock} className={cn("mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold", access.available ? "gold-seal text-black" : "border border-gold/30 bg-gold/10 text-gold")}>{access.available ? <><Home className="h-4 w-4" />Use this studio</> : <><ShoppingBag className="h-4 w-4" />Unlock {product?.price ?? "Room"}</>}</button>{!access.available && access.requiredPlan && <button type="button" onClick={onOpenMembership} className="mt-2 min-h-11 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-xs font-semibold text-white/72">Included with Prep Studio {access.requiredPlan === "elite" ? "Elite" : "Pro"}</button>}<p className="mt-2 text-center text-[11px] text-muted-foreground">{access.source === "owned" ? "You own this room permanently." : access.source === "membership" ? "Available while your membership is active." : access.available ? "Included with every RapWriter account." : "Preview freely. Studio Store purchases remain yours permanently."}</p></div></div>;
+  return <div><div className="relative h-60"><img src={pack.image} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: pack.position }} decoding="async" /><div className="absolute inset-0" style={{ background: pack.overlay }} /><div className="absolute bottom-5 left-5 right-5"><div className="label-hw text-gold/85">{access.available ? access.badge : "Locked Preview"}</div><h2 className="mt-2 text-3xl font-semibold">{pack.label}</h2><p className="mt-2 text-sm text-white/62">{pack.line}</p></div></div><div className="p-5"><div className="label-hw text-gold/80">Room intelligence</div><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{pack.writingCue}</p><div className="mt-4 flex flex-wrap gap-2">{pack.bestFor.map((tag) => <span key={tag} className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] text-white/62">{tag}</span>)}</div><div className="mt-5 space-y-2">{pack.ambience.slice(0, 3).map((item) => <div key={item.title} className="flex gap-3 border-t border-white/8 pt-3"><Headphones className="mt-0.5 h-4 w-4 shrink-0 text-gold" /><div><div className="text-sm font-semibold">{item.title}</div><div className="mt-1 text-xs text-muted-foreground">{item.detail}</div></div></div>)}</div><button type="button" onClick={access.available ? onUse : onUnlock} className={cn("mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold", access.available ? "gold-seal text-black" : "border border-gold/30 bg-gold/10 text-gold")}>{access.available ? <><Home className="h-4 w-4" />Use this studio</> : <><ShoppingBag className="h-4 w-4" />Unlock {product?.price ?? "Room"}</>}</button>{!access.available && access.requiredPlan && <button type="button" onClick={onOpenMembership} className="mt-2 min-h-11 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-xs font-semibold text-white/72">Included with RapWriter Pro</button>}<p className="mt-2 text-center text-[11px] text-muted-foreground">{access.source === "owned" ? "You own this room permanently." : access.source === "membership" ? "Available while your membership is active." : access.available ? "Included with every RapWriter account." : "Preview freely. Studio Store purchases remain yours permanently."}</p></div></div>;
 }
 
 function ProductDetail({ selection, previewVisual, onUnlock }: { selection: Extract<MarketSelection, { kind: "product" }>; previewVisual: StorePreviewVisual | null; onUnlock: () => void }) {

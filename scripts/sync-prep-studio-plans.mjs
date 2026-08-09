@@ -24,7 +24,7 @@ const commonEntitlements = {
 const plans = [
   {
     id: "artist_free",
-    name: "Prep Studio Free",
+    name: "RapWriter Free",
     tagline: "Start the record.",
     monthly_price_cents: 0,
     annual_price_cents: 0,
@@ -57,10 +57,10 @@ const plans = [
       early_features: false,
     },
     limits: {
-      active_projects: 3,
-      song_storage: 12,
+      active_projects: -1,
+      song_storage: -1,
       ghostwriter_actions_monthly: 3,
-      studio_rooms: 1,
+      studio_rooms: 2,
       ai_pens: 1,
       storage_mb: 250,
       priority_ai_actions_monthly: 0,
@@ -74,10 +74,10 @@ const plans = [
   },
   {
     id: "artist_pro",
-    name: "Prep Studio Pro",
-    tagline: "Finish better records.",
-    monthly_price_cents: 1499,
-    annual_price_cents: 14990,
+    name: "RapWriter Pro",
+    tagline: "Finish the record.",
+    monthly_price_cents: 799,
+    annual_price_cents: 5900,
     entitlements: {
       ...commonEntitlements,
       ghostwriter: true,
@@ -109,16 +109,16 @@ const plans = [
     limits: {
       active_projects: -1,
       song_storage: -1,
-      ghostwriter_actions_monthly: 80,
-      studio_rooms: 8,
-      ai_pens: 6,
+      ghostwriter_actions_monthly: 150,
+      studio_rooms: 15,
+      ai_pens: -1,
       storage_mb: 5000,
       priority_ai_actions_monthly: 100,
       private_beat_imports: 25,
     },
     metadata: {
-      brand: "Prep Studio",
-      outcome: "Finish better records",
+      brand: "RapWriter",
+      outcome: "Finish the record.",
       positioning: "Everything that improves the writing process",
     },
   },
@@ -170,6 +170,7 @@ const plans = [
       brand: "Prep Studio",
       outcome: "Build a professional creative practice",
       positioning: "Career-focused intelligence for serious creators",
+      retired: true,
     },
   },
 ];

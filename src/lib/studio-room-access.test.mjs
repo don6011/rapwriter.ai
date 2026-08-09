@@ -12,25 +12,24 @@ describe("studio room access", () => {
     expect(resolveStudioRoomAccess("skyline-loft", "artist_free", false).badge).toBe("Default");
   });
 
-  test("Pro includes the five-room core library", () => {
-    for (const room of ["skyline-loft", "midnight", "bedroom", "trap-house", "cypher"]) {
+  test("Pro includes all fifteen rooms", () => {
+    for (const room of ["skyline-loft", "midnight", "bedroom", "trap-house", "cypher", "penthouse", "afterglow", "bedroom-diaries", "red-light", "main-room", "soft-life", "desert-sessions", "rooftop-sessions", "radio-room", "bando-sessions"]) {
       expect(membershipIncludesStudioRoom("artist_pro", room)).toBe(true);
     }
-    expect(membershipIncludesStudioRoom("artist_pro", "penthouse")).toBe(false);
   });
 
-  test("Elite includes Pro rooms and the professional library", () => {
-    for (const room of ["midnight", "bedroom", "trap-house", "cypher", "penthouse", "skyline-loft", "red-light", "main-room", "radio-room"]) {
+  test("retired Elite subscribers retain every room", () => {
+    for (const room of ["midnight", "bedroom", "trap-house", "cypher", "penthouse", "skyline-loft", "red-light", "main-room", "radio-room", "afterglow", "soft-life"]) {
       expect(membershipIncludesStudioRoom("artist_studio", room)).toBe(true);
     }
   });
 
-  test("specialty rooms remain Store-only", () => {
-    expect(resolveStudioRoomAccess("afterglow", "artist_studio", false)).toEqual({
+  test("free sees RapWriter Pro as the room upgrade", () => {
+    expect(resolveStudioRoomAccess("afterglow", "artist_free", false)).toEqual({
       available: false,
       source: "locked",
-      badge: "Store",
-      requiredPlan: null,
+      badge: "Pro",
+      requiredPlan: "pro",
     });
   });
 

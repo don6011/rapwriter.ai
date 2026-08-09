@@ -77,7 +77,7 @@ function featureLabel(feature: string | null) {
 }
 
 function planLabel(plan: string | null) {
-  if (plan === "artist_pro") return "Prep Studio Pro";
+  if (plan === "artist_pro") return "RapWriter Pro";
   if (plan === "artist_studio") return "Prep Studio Elite";
   if (plan === "producer_pro") return "Producer Pro";
   return "a higher membership";
