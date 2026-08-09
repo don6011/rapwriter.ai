@@ -36,9 +36,7 @@ export function useMarketplaceFeed(productEntitlements: ProductEntitlementRow[])
         if (!cancelled) {
           setMarketplaceFeed({ beats: [], producers: [] });
           setMarketplaceFeedLoading(false);
-          // Known bug, tracked separately: an empty feed and a failed fetch are
-          // reported with the same message. Preserved verbatim on purpose.
-          setMarketplaceFeedError("Producer drops will appear when the live feed reconnects.");
+          setMarketplaceFeedError("The producer feed is temporarily unavailable. Your starter beats are still ready.");
         }
       });
     return () => {
