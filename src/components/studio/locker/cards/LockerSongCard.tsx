@@ -3,14 +3,14 @@
 import { LockerRemoveButton } from "@/components/studio/locker/cards/LockerRemoveButton";
 import type { RoughTakeRow, SongLockerRow } from "@/hooks/use-rapwriter-data";
 import { formatDuration, formatShortDate } from "@/lib/studio/format";
-import { lockerSnapshotNumber, lockerSongProgress } from "@/lib/studio/locker-snapshot";
+import { lockerSongBarCount, lockerSongProgress } from "@/lib/studio/locker-snapshot";
 import { cn } from "@/lib/utils";
 import { ChevronDown, FileText, Mic, Play } from "lucide-react";
 import { useState } from "react";
 
-export function LockerSongCard({ song, takes, live, onResume, onPrepare, onRemove }: { song: SongLockerRow; takes: RoughTakeRow[]; live: boolean; onResume: () => void; onPrepare: () => void; onRemove: () => void }) {
-  const progress = lockerSongProgress(song);
-  const bars = lockerSnapshotNumber(song.snapshot, "totalBars", "total_bars");
+export function LockerSongCard({ song, takes, live, liveProgress, liveBars, onResume, onPrepare, onRemove }: { song: SongLockerRow; takes: RoughTakeRow[]; live: boolean; liveProgress?: number; liveBars?: number; onResume: () => void; onPrepare: () => void; onRemove: () => void }) {
+  const progress = liveProgress ?? lockerSongProgress(song);
+  const bars = liveBars ?? lockerSongBarCount(song);
   const [takesOpen, setTakesOpen] = useState(false);
   return (
     <article className="rounded-2xl border border-white/10 bg-[#111113] p-4">
@@ -18,7 +18,7 @@ export function LockerSongCard({ song, takes, live, onResume, onPrepare, onRemov
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2"><span className="label-hw text-gold/75">Song</span>{live && <span className="rounded-full bg-emerald-400/12 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-300">Live</span>}</div>
           <h2 className="mt-2 truncate text-base font-semibold">{song.title}</h2>
-          <div className="mt-1 text-[11px] text-muted-foreground">{bars !== null ? `${bars} bars / ` : ""}Saved {formatShortDate(song.updated_at || song.created_at)}</div>
+          <div className="mt-1 text-[11px] text-muted-foreground">{bars} bars / {live ? "Current device draft" : `Saved ${formatShortDate(song.updated_at || song.created_at)}`}</div>
         </div>
         <span className={cn("rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em]", song.booth_ready ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-300" : "border-gold/20 bg-gold/8 text-gold")}>{song.booth_ready ? "Booth Ready" : "Draft"}</span>
       </div>

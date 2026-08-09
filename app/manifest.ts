@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "RapWriter.ai - The Prep Studio",
+    name: "RapWriter.ai",
     short_name: "RapWriter",
     description: "Write, rehearse, and prepare every record for the booth.",
     start_url: "/",

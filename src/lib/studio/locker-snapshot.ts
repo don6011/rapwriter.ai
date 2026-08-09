@@ -4,18 +4,19 @@ import { clampScore } from "@/lib/studio/booth-ready";
 import { mobileSections } from "@/lib/studio/sections";
 
 export function lockerSongProgress(song: SongLockerRow) {
-  const stored = lockerSnapshotNumber(song.snapshot, "completionPct", "completion_pct");
-  if (stored !== null) return clampScore(stored);
   const sections = sectionsFromLockerSnapshot(song.snapshot);
-  if (!sections) return song.booth_ready ? 100 : 0;
-  const writtenBars = Object.values(sections).reduce((total, content) => total + content.split(/\r?\n/).filter((line) => line.trim()).length, 0);
-  const targetBars = mobileSections.reduce((total, section) => total + section.target, 0);
-  return clampScore((writtenBars / targetBars) * 100);
+  if (sections) {
+    const writtenBars = Object.values(sections).reduce((total, content) => total + content.split(/\r?\n/).filter((line) => line.trim()).length, 0);
+    const targetBars = mobileSections.reduce((total, section) => total + section.target, 0);
+    return clampScore((writtenBars / targetBars) * 100);
+  }
+  const stored = lockerSnapshotNumber(song.snapshot, "completionPct", "completion_pct");
+  return stored !== null ? clampScore(stored) : song.booth_ready ? 100 : 0;
 }
 
 export function lockerSongBarCount(song: SongLockerRow) {
   const sections = sectionsFromLockerSnapshot(song.snapshot);
-  if (!sections) return 0;
+  if (!sections) return lockerSnapshotNumber(song.snapshot, "totalBars", "total_bars") ?? 0;
   return Object.values(sections).reduce((total, content) => total + content.split(/\r?\n/).filter((line) => line.trim()).length, 0);
 }
 

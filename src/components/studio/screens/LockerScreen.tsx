@@ -12,10 +12,11 @@ import { LockerSongCard } from "@/components/studio/locker/cards/LockerSongCard"
 import { LockerSummaryMetric } from "@/components/studio/locker/cards/LockerSummaryMetric";
 import { StarterBeatCard } from "@/components/studio/locker/cards/StarterBeatCard";
 import { PrivateBeatImportSheet } from "@/components/studio/sheets/PrivateBeatImportSheet";
-import type { BeatLockerRow, CommerceOrderRow, HookLockerRow, PrivateBeatImportInput, RoughTakeRow, SongLockerRow, SongRow } from "@/hooks/use-rapwriter-data";
+import type { BeatLockerRow, CommerceOrderRow, HookLockerRow, PrivateBeatImportInput, RoughTakeRow, SongLockerRow } from "@/hooks/use-rapwriter-data";
 import type { StarterBeat } from "@/lib/starter-beats";
 import { formatShortDate } from "@/lib/studio/format";
-import { lockerSnapshotNumber, lockerSongBarCount, mostFrequent } from "@/lib/studio/locker-snapshot";
+import { countTotalBars } from "@/lib/studio/bars";
+import { lockerSongBarCount, mostFrequent } from "@/lib/studio/locker-snapshot";
 import type { ProductUnlock, StudioPack } from "@/lib/studio/types";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight, Headphones, Pencil, Save, Search, ShoppingCart, Sparkles, Upload, X } from "lucide-react";
@@ -27,7 +28,9 @@ export function LockerScreen({
   songs,
   hooks,
   roughTakes,
-  sessionSongs,
+  activeSongId,
+  activeSectionContent,
+  activeCompletionPct,
   activeStudioPack,
   productUnlocks,
   orders,
@@ -50,7 +53,9 @@ export function LockerScreen({
   songs: SongLockerRow[];
   hooks: HookLockerRow[];
   roughTakes: RoughTakeRow[];
-  sessionSongs: SongRow[];
+  activeSongId: string | null;
+  activeSectionContent: Record<string, string>;
+  activeCompletionPct: number;
   activeStudioPack: StudioPack;
   productUnlocks: ProductUnlock[];
   orders: CommerceOrderRow[];
@@ -83,10 +88,17 @@ export function LockerScreen({
   const savedCount = songs.length + hooks.length + beats.length;
   const collectionCount = savedCount + starterBeats.length + purchaseCount;
   const boothReadyCount = songs.filter((song) => song.booth_ready).length;
-  const totalBarsWritten = songs.reduce((total, song) => total + (lockerSnapshotNumber(song.snapshot, "totalBars", "total_bars") ?? lockerSongBarCount(song)), 0);
+  const totalBarsWritten = songs.reduce((total, song) => total + lockerSongBarCount(song), 0);
   const favoriteProducer = mostFrequent(beats.map((beat) => beat.producer).filter((value): value is string => Boolean(value))) ?? "Not enough saves yet";
   const favoriteMood = mostFrequent(beats.map((beat) => beat.mood).filter((value): value is string => Boolean(value))) ?? "Still taking shape";
-  const sessionSongIds = new Set(sessionSongs.map((song) => song.id));
+  const liveSongState = (song: SongLockerRow) => {
+    const live = Boolean(activeSongId && song.song_id === activeSongId);
+    return {
+      live,
+      liveProgress: live ? activeCompletionPct : undefined,
+      liveBars: live ? countTotalBars(activeSectionContent) : undefined,
+    };
+  };
   const takesForSong = (song: SongLockerRow) => song.song_id
     ? roughTakes.filter((take) => take.song_id === song.song_id)
     : [];
@@ -263,7 +275,7 @@ export function LockerScreen({
           ) : normalizedQuery ? (
             <div className="mt-4 space-y-3">
               <div className="flex items-center justify-between gap-3"><div className="label-hw text-white/52">Vault Results</div><div className="text-[11px] tabular-nums text-gold">{globalSearchCount}</div></div>
-              {visibleSongs.map((song) => <LockerSongCard key={`search-${song.id}`} song={song} takes={takesForSong(song)} live={sessionSongIds.has(song.song_id ?? "")} onResume={() => onResumeSong(song)} onPrepare={() => onPrepareSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
+              {visibleSongs.map((song) => <LockerSongCard key={`search-${song.id}`} song={song} takes={takesForSong(song)} {...liveSongState(song)} onResume={() => onResumeSong(song)} onPrepare={() => onPrepareSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
               {visibleHooks.map((hook) => <LockerHookCard key={`search-${hook.id}`} hook={hook} onUse={() => onUseHook(hook)} onRemove={() => onRemove("hooks", hook.id)} />)}
               {visibleStarterBeats.map((beat) => <StarterBeatCard key={`search-starter-${beat.id}`} beat={beat} onUse={() => onUseStarterBeat(beat)} />)}
               {visibleBeats.map((beat) => <LockerBeatCard key={`search-${beat.id}`} beat={beat} onUse={() => onUseBeat(beat)} onRemove={() => onRemove("beats", beat.id)} />)}
@@ -280,7 +292,7 @@ export function LockerScreen({
                   </button>
                 </div>
               )}
-              {tab === "songs" && visibleSongs.map((song) => <LockerSongCard key={song.id} song={song} takes={takesForSong(song)} live={sessionSongIds.has(song.song_id ?? "")} onResume={() => onResumeSong(song)} onPrepare={() => onPrepareSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
+              {tab === "songs" && visibleSongs.map((song) => <LockerSongCard key={song.id} song={song} takes={takesForSong(song)} {...liveSongState(song)} onResume={() => onResumeSong(song)} onPrepare={() => onPrepareSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
               {tab === "songs" && visibleSongs.length === 0 && <LockerEmpty title={normalizedQuery ? "No songs match." : "No saved songs yet."} body="Save a song from the writing pad and it will be ready to resume here." actionLabel="Open Studio" onAction={onGoToStudio} />}
 
               {tab === "hooks" && visibleHooks.map((hook) => <LockerHookCard key={hook.id} hook={hook} onUse={() => onUseHook(hook)} onRemove={() => onRemove("hooks", hook.id)} />)}

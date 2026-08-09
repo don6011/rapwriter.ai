@@ -67,7 +67,7 @@ const plans = [
       private_beat_imports: 1,
     },
     metadata: {
-      brand: "Prep Studio",
+      brand: "RapWriter",
       outcome: "Experience RapWriter",
       positioning: "Prove the value of a better writing room",
     },
@@ -124,8 +124,8 @@ const plans = [
   },
   {
     id: "artist_studio",
-    name: "Prep Studio Elite",
-    tagline: "Turn serious records into a career.",
+    name: "RapWriter Pro",
+    tagline: "Legacy access",
     monthly_price_cents: 2999,
     annual_price_cents: 29990,
     entitlements: {
@@ -167,7 +167,7 @@ const plans = [
       private_beat_imports: 100,
     },
     metadata: {
-      brand: "Prep Studio",
+      brand: "RapWriter",
       outcome: "Build a professional creative practice",
       positioning: "Career-focused intelligence for serious creators",
       retired: true,

@@ -837,7 +837,7 @@ export function MobileStudioShell() {
     if (membership?.artist?.entitlements.version_history !== true) {
       setScreen("home");
       setActiveNav("profile");
-      setSyncMessage("Prep Studio Pro unlocks revision history");
+      setSyncMessage("RapWriter Pro unlocks revision history");
       return;
     }
 
@@ -1513,7 +1513,9 @@ export function MobileStudioShell() {
                 songs={songLocker}
                 hooks={hookLocker}
                 roughTakes={roughTakes}
-                sessionSongs={songs}
+                activeSongId={activeSongId ?? null}
+                activeSectionContent={sectionContent}
+                activeCompletionPct={completionPct}
                 activeStudioPack={activeStudioPack}
                 productUnlocks={mergedProductUnlocks}
                 orders={commerceOrders}
@@ -1849,7 +1851,7 @@ export function MobileStudioShell() {
             closeSheet("boothExport");
             setScreen("home");
             setActiveNav("profile");
-            setSyncMessage("Prep Studio Pro unlocks the full Booth package");
+            setSyncMessage("RapWriter Pro unlocks the full Booth package");
           }}
         />
         {user && profile && !profile.role_onboarding_completed && (

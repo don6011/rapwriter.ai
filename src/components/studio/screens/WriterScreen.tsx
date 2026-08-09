@@ -125,7 +125,11 @@ export function WriterScreen({
   const hasPenView = artistMembership?.entitlements.full_pen_view === true;
   const hasHistory = artistMembership?.entitlements.version_history === true;
   const hasGhostwriter = artistMembership?.entitlements.ghostwriter === true;
-  const editorBars = sectionText.split("\n");
+  let logicalBarNumber = 0;
+  const editorRows = sectionText.split("\n").map((text) => ({
+    text,
+    number: text.trim() ? ++logicalBarNumber : null,
+  }));
 
   useEffect(() => {
     if (readinessLaunchToken > 0) setReadinessOpen(true);
@@ -290,13 +294,13 @@ export function WriterScreen({
                 className="pointer-events-none absolute inset-0 overflow-hidden"
               >
                 <div className="p-5" style={{ transform: `translateY(-${editorScrollTop}px)` }}>
-                  {editorBars.map((bar, index) => (
+                  {editorRows.map((row, index) => (
                     <div key={index} className="grid grid-cols-[36px_minmax(0,1fr)]">
                       <span className="pr-3 text-right font-mono text-[10px] leading-9 tabular-nums text-white/28">
-                        {index + 1}
+                        {row.number}
                       </span>
                       <span className="invisible min-h-9 whitespace-pre-wrap break-words font-sans text-[18px] leading-9">
-                        {bar || "\u00a0"}
+                        {row.text || "\u00a0"}
                       </span>
                     </div>
                   ))}

@@ -5,6 +5,10 @@ update public.subscription_plans
 set
   name = 'RapWriter Free',
   tagline = 'Start the record.',
+  metadata = (coalesce(metadata, '{}'::jsonb) - 'retired') || jsonb_build_object(
+    'brand', 'RapWriter',
+    'outcome', 'Experience RapWriter'
+  ),
   limits = coalesce(limits, '{}'::jsonb) || jsonb_build_object(
     'active_projects', -1,
     'song_storage', -1,
@@ -33,5 +37,15 @@ set
 where id = 'artist_pro';
 
 update public.subscription_plans
-set metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('retired', true)
+set
+  name = 'RapWriter Pro',
+  tagline = 'Legacy access',
+  metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+    'brand', 'RapWriter',
+    'retired', true
+  )
 where id = 'artist_studio';
+
+update public.launch_campaigns
+set description = replace(description, 'Prep Studio Pro', 'RapWriter Pro')
+where description like '%Prep Studio Pro%';

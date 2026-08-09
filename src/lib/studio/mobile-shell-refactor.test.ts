@@ -123,8 +123,9 @@ describe("mobile studio shell refactor contracts", () => {
   test("uses logical bar numbers instead of a visual-row rule grid", () => {
     const writer = readFileSync(new URL("../../components/studio/screens/WriterScreen.tsx", import.meta.url), "utf8");
 
-    expect(writer).toContain('const editorBars = sectionText.split("\\n")');
-    expect(writer).toContain("editorBars.map((bar, index)");
+    expect(writer).toContain('const editorRows = sectionText.split("\\n")');
+    expect(writer).toContain("text.trim() ? ++logicalBarNumber : null");
+    expect(writer).toContain("editorRows.map((row, index)");
     expect(writer).not.toContain("repeating-linear-gradient");
   });
 });

@@ -6,13 +6,13 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://rapwriter.ai"),
   title: "RapWriter.ai - Sharpen Your Pen",
   description:
-    "The Prep Studio. A premium digital environment where artists go from idea to Booth Ready.",
+    "A premium digital environment where artists go from idea to Booth Ready.",
   icons: {
     icon: "/brand/rapwriter-192.png",
     apple: "/brand/rapwriter-180.png",
   },
   openGraph: {
-    title: "RapWriter.ai - The Prep Studio",
+    title: "RapWriter.ai",
     description:
       "Go from idea to Booth Ready. Not an AI lyric generator - a luxury prep studio for artists.",
     type: "website",

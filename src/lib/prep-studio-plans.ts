@@ -42,6 +42,9 @@ export function prepStudioTier(planId: string) {
 }
 
 export function withPrepStudioPresentation(plan: PlanDefinition): PlanDefinition {
+  if (plan.id === "artist_studio") {
+    return { ...plan, name: "RapWriter Pro", tagline: "Legacy access" };
+  }
   const tier = prepStudioTier(plan.id);
   if (!tier) return plan;
   return {

@@ -20,4 +20,11 @@ describe("collapsed Market", () => {
     expect(market).toContain("Producer beats could not load");
     expect(feed).toContain("The producer feed is temporarily unavailable");
   });
+
+  test("makes the active tier and Pro price explicit", () => {
+    expect(market).toContain("Current");
+    expect(market).toContain("Upgrade to Pro - $7.99/mo");
+    expect(market).toContain("RapWriter Pro is active.");
+    expect(market).not.toContain("Your finishing studio is active.");
+  });
 });

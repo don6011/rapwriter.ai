@@ -166,6 +166,7 @@ export function PremiumMarketplace({
 
 function MembershipDecision({ activePlanId, signedIn, onOpen }: { activePlanId?: string | null; signedIn: boolean; onOpen: () => void }) {
   const paid = Boolean(activePlanId && activePlanId !== "artist_free");
+  const currentTierId = paid ? "artist_pro" : "artist_free";
   return (
     <section className="pt-5">
       <div className="overflow-hidden rounded-2xl border border-gold/25 bg-[linear-gradient(145deg,rgba(246,199,72,0.1),rgba(17,17,19,0.98)_58%)] p-4">
@@ -173,21 +174,24 @@ function MembershipDecision({ activePlanId, signedIn, onOpen }: { activePlanId?:
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-gold/30 bg-black/28 text-gold"><Crown className="h-5 w-5" /></span>
           <div className="min-w-0 flex-1">
             <div className="label-hw text-gold/82">RapWriter Membership</div>
-            <h2 className="mt-1 text-xl font-semibold">{paid ? "Your finishing studio is active." : "Free writes. Pro finishes."}</h2>
+            <h2 className="mt-1 text-xl font-semibold">{paid ? "RapWriter Pro is active." : "Free writes. Pro finishes."}</h2>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">Write complete songs free. RapWriter Pro adds the AI family, booth tools, history, and every room.</p>
           </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2">
           {prepStudioTiers.map((plan) => (
             <div key={plan.id} className={cn("rounded-xl border p-3", plan.id === "artist_pro" ? "border-gold/30 bg-gold/[0.08]" : "border-white/10 bg-black/24")}>
-              <div className="text-xs font-semibold">{plan.name}</div>
+              <div className="flex min-h-5 items-start justify-between gap-1.5">
+                <div className="text-xs font-semibold">{plan.name}</div>
+                {plan.id === currentTierId && <span className="shrink-0 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-1.5 py-0.5 text-[7px] font-semibold uppercase tracking-[0.08em] text-emerald-300">Current</span>}
+              </div>
               <div className="mt-1 text-lg font-semibold text-gold">{plan.monthlyPriceCents === 0 ? "$0" : `$${(plan.monthlyPriceCents / 100).toFixed(2)}`}<span className="text-[9px] text-white/42">{plan.monthlyPriceCents === 0 ? "" : "/mo"}</span></div>
               <div className="mt-2 text-[10px] leading-4 text-white/52">{plan.outcome}</div>
             </div>
           ))}
         </div>
         <button type="button" onClick={onOpen} className={cn("mt-3 min-h-12 w-full rounded-xl px-4 text-sm font-semibold", paid ? "border border-gold/25 bg-gold/8 text-gold" : "gold-seal text-black")}>
-          {paid ? "View your access" : signedIn ? "Get RapWriter Pro" : "See membership"}
+          {paid ? "Manage RapWriter Pro" : signedIn ? "Upgrade to Pro - $7.99/mo" : "Explore Pro - $7.99/mo"}
         </button>
       </div>
     </section>

@@ -205,7 +205,7 @@ export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenM
           <div className="mt-3 min-h-[220px]">
             {view === "artist" && (
               <WorkspacePanel
-                eyebrow="Prep Studio Membership"
+                eyebrow="RapWriter Membership"
                 name={artistPlan.name}
                 tagline={artistPlan.tagline}
                 capabilities={[
@@ -501,7 +501,7 @@ function MembershipAccessGuide({
           <div className="mt-4 rounded-2xl border border-gold/20 bg-gold/[0.06] p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="label-hw text-gold/75">{workspace === "artist" ? "Prep Studio" : "Producer HQ"}</div>
+                <div className="label-hw text-gold/75">{workspace === "artist" ? "RapWriter" : "Producer HQ"}</div>
                 <div className="mt-1 text-lg font-semibold text-white">{workspace === "producer" ? "Producer HQ Free" : current?.plan.name}</div>
               </div>
               <span className="rounded-full border border-emerald-400/25 bg-emerald-400/[0.08] px-2.5 py-1 text-[10px] font-semibold text-emerald-300">Active</span>
