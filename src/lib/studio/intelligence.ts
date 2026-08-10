@@ -1,4 +1,5 @@
 import { countBars, countTotalBars } from "@/lib/studio/bars";
+import { findLyricAnchor } from "@/lib/studio/lyric-language";
 import type { BeatIntelligence, BoothReadyResult, EnvironmentIntelligence, SelectedBeat, StudioDna, StudioPack, StudioPackId } from "@/lib/studio/types";
 
 export function buildBeatIntelligence({
@@ -384,11 +385,5 @@ export function getWritingMomentum(sectionName: string, sectionBars: number, tar
 }
 
 export function findAnchorWord(text: string) {
-  const ignored = new Set(["that", "this", "with", "from", "your", "have", "they", "been", "when", "what", "just", "into", "like", "yeah", "i'm", "you", "the", "and", "for"]);
-  const counts = text.toLowerCase().match(/[a-z0-9']{3,}/g)?.reduce<Record<string, number>>((acc, word) => {
-    if (!ignored.has(word)) acc[word] = (acc[word] ?? 0) + 1;
-    return acc;
-  }, {}) ?? {};
-  const [word, count] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] ?? [];
-  return count >= 2 ? word : null;
+  return findLyricAnchor(text);
 }

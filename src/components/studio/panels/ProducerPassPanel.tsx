@@ -207,9 +207,12 @@ function buildProducerPassReport(
 ) {
   const lines = sectionText.split("\n").map((line) => line.trim()).filter(Boolean);
   const wordCounts = lines.map((line) => line.split(/\s+/).filter(Boolean).length);
+  const totalWords = wordCounts.reduce((sum, count) => sum + count, 0);
+  const substantiveLines = wordCounts.filter((count) => count >= 3).length;
   const averageWords = wordCounts.length ? Math.round(wordCounts.reduce((sum, count) => sum + count, 0) / wordCounts.length) : 0;
   const spread = wordCounts.length ? Math.max(...wordCounts) - Math.min(...wordCounts) : 0;
-  const anchor = findAnchorWord(sectionText);
+  const enoughForPhraseRead = totalWords >= 12 && substantiveLines >= 3;
+  const anchor = enoughForPhraseRead ? findAnchorWord(sectionText) : null;
   const bpm = typeof beat.bpm === "number" ? beat.bpm : 84;
   const pace = bpm >= 120 ? "fast" : bpm >= 92 ? "driving" : "open";
   const emptyAction = `Write at least two lines in ${sectionName} to unlock a sharper read.`;
@@ -242,11 +245,16 @@ function buildProducerPassReport(
   }
 
   if (pass === "commercial") {
-    const replayReady = lines.length >= 4 && Boolean(anchor) && averageWords <= 11;
+    const detailedReadReady = totalWords >= 24 && substantiveLines >= 4;
+    const replayReady = detailedReadReady && Boolean(anchor) && averageWords <= 11;
     return {
       title: "Commercial Pass",
-      summary: replayReady ? "The section has a usable replay shape. The next move is making the title phrase impossible to miss." : "The record needs a clearer repeat point before the commercial shape is ready.",
-      signals: [replayReady ? "Replay shape ready" : "Replay shape forming", anchor ? "Memory phrase detected" : "Memory phrase missing"],
+      summary: !detailedReadReady
+        ? "Keep building the section. Commercial Pass needs four complete lines before it can make a defensible replay read."
+        : replayReady
+          ? "The section has a usable replay shape. The next move is making the title phrase impossible to miss."
+          : "The record needs a clearer repeat point before the commercial shape is ready.",
+      signals: [detailedReadReady ? (replayReady ? "Replay shape ready" : "Replay shape forming") : "Analysis building", anchor ? "Memory phrase detected" : "Memory phrase not established"],
       actions: lines.length ? [
         anchor ? `Treat “${anchor}” as the memory phrase and place it near the section landing.` : "Choose one title-ready phrase and repeat it with intention.",
         lines.length > 8 ? "Remove one idea before adding another; commercial sections reward focus." : "Keep the section focused on one promise, image, or emotion.",

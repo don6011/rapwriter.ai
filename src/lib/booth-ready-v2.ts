@@ -1,3 +1,5 @@
+import { findLyricAnchor, tokenize } from "@/lib/studio/lyric-language";
+
 export type RoughTakeAnalysis = {
   version: "booth-ready-v2";
   durationSeconds: number;
@@ -21,6 +23,10 @@ export type LyricAnalysis = {
   endRhymePct: number;
   hookReplay: number;
   fillerPct: number;
+  averageWordsPerLine: number;
+  substantiveLines: number;
+  analysisConfidence: number;
+  detailedScoresReady: boolean;
   actions: string[];
 };
 
@@ -110,6 +116,12 @@ export function analyzeLyrics(sections: Record<string, string>): LyricAnalysis {
   const uniqueWordPct = percent(new Set(words).size, words.length);
   const lineLengths = sectionLines.map((item) => item.words.length).filter(Boolean);
   const averageLength = average(lineLengths);
+  const substantiveLines = lineLengths.filter((length) => length >= 3).length;
+  const wordEvidence = Math.min(1, words.length / 32);
+  const lineEvidence = Math.min(1, substantiveLines / 4);
+  const lineSubstance = Math.min(1, averageLength / 6);
+  const analysisConfidence = score((wordEvidence * 0.45 + lineEvidence * 0.35 + lineSubstance * 0.2) * 100);
+  const detailedScoresReady = words.length >= 24 && substantiveLines >= 4;
   const lengthDeviation = standardDeviation(lineLengths, averageLength);
   const cadenceConsistency = score(100 - (lengthDeviation / Math.max(1, averageLength)) * 120);
   const rhymeEndings = sectionLines
@@ -122,7 +134,7 @@ export function analyzeLyrics(sections: Record<string, string>): LyricAnalysis {
   const endRhymePct = percent(rhymedLines, rhymeEndings.length);
   const hookLines = sectionLines.filter((item) => item.section === "Hook").map((item) => normalizeLine(item.line));
   const repeatedHookLines = hookLines.filter((line, index) => hookLines.indexOf(line) !== index).length;
-  const hookAnchor = mostFrequentContentWord(sectionLines.filter((item) => item.section === "Hook").flatMap((item) => item.words));
+  const hookAnchor = findLyricAnchor(sectionLines.filter((item) => item.section === "Hook").map((item) => item.line).join("\n"));
   const hookAnchorUses = hookAnchor ? hookLines.filter((line) => line.includes(hookAnchor)).length : 0;
   const hookReplay = score(repeatedHookLines * 35 + hookAnchorUses * 18 + Math.min(28, hookLines.length * 7));
   const fillerPct = percent(words.filter((word) => fillerWords.has(word)).length, words.length, 1);
@@ -142,6 +154,10 @@ export function analyzeLyrics(sections: Record<string, string>): LyricAnalysis {
     endRhymePct,
     hookReplay,
     fillerPct,
+    averageWordsPerLine: round(averageLength, 1),
+    substantiveLines,
+    analysisConfidence,
+    detailedScoresReady,
     actions: actions.slice(0, 3),
   };
 }
@@ -158,10 +174,6 @@ function buildAudioFindings(input: Pick<RoughTakeAnalysis, "rmsDb" | "silencePct
   return findings.slice(0, 3);
 }
 
-function tokenize(value: string) {
-  return value.toLowerCase().match(/[a-z0-9']+/g) ?? [];
-}
-
 function normalizeLine(value: string) {
   return tokenize(value).join(" ");
 }
@@ -169,13 +181,6 @@ function normalizeLine(value: string) {
 function rhymeKey(word: string) {
   const cleaned = word.replace(/(?:ing|ed|es|s)$/i, "");
   return cleaned.slice(-Math.min(3, cleaned.length));
-}
-
-function mostFrequentContentWord(words: string[]) {
-  const ignored = new Set(["and", "the", "that", "with", "this", "from", "your", "you", "for", "but", "not", "are", "was"]);
-  const counts = new Map<string, number>();
-  words.filter((word) => word.length > 3 && !ignored.has(word)).forEach((word) => counts.set(word, (counts.get(word) ?? 0) + 1));
-  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }
 
 function toDb(value: number) {

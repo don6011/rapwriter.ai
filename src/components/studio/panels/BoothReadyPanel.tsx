@@ -18,9 +18,11 @@ export function BoothReadyPanel({
   onPrimaryAction: () => void;
 }) {
   const readiness = getRecordReadiness(result);
-  const metrics = [
+  const foundationMetrics = [
     ["Structure", result.metrics.structure],
     ["Completion", result.metrics.completion],
+  ] as const;
+  const detailedMetrics = [
     ["Cadence", result.metrics.cadence],
     ["Hook", result.metrics.hook],
     ["Originality", result.metrics.originality],
@@ -108,7 +110,7 @@ export function BoothReadyPanel({
           </div>
 
           <div className="space-y-2 border-t border-white/10 pt-4">
-            {metrics.map(([label, value]) => (
+            {foundationMetrics.map(([label, value]) => (
               <div key={label}>
                 <div className="mb-1 flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">{label}</span>
@@ -119,6 +121,22 @@ export function BoothReadyPanel({
                 </div>
               </div>
             ))}
+            {result.lyricAnalysis.detailedScoresReady ? detailedMetrics.map(([label, value]) => (
+              <div key={label}>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{label}</span>
+                  <span className="tabular-nums text-white/80">{value}</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-gold" style={{ width: `${value}%` }} />
+                </div>
+              </div>
+            )) : (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <div className="text-xs font-medium text-white/78">Detailed lyric signals are building</div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Write at least 24 words across four complete lines to unlock cadence, hook, originality, and replay scores.</p>
+              </div>
+            )}
           </div>
 
           {result.blockers.length > 0 && (

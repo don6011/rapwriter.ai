@@ -29,10 +29,13 @@ export function scoreBoothReady(
       (countBars(sections.Outro) > 0 ? 10 : 0),
   );
   const completion = clampScore(completionPct);
-  const cadence = lyricAnalysis.cadenceConsistency;
-  const hook = clampScore(hookBars * 8 + lyricAnalysis.hookReplay * 0.55);
-  const originality = clampScore(lyricAnalysis.uniqueWordPct * 1.2 - lyricAnalysis.fillerPct * 1.5);
-  const replay = clampScore(lyricAnalysis.hookReplay * 0.75 + lyricAnalysis.endRhymePct * 0.25);
+  const evidenceMultiplier = 0.35 + (lyricAnalysis.analysisConfidence / 100) * 0.65;
+  const cadence = clampScore(lyricAnalysis.cadenceConsistency * evidenceMultiplier);
+  const hook = clampScore((Math.min(25, hookBars * 3.125) + lyricAnalysis.hookReplay * 0.75) * evidenceMultiplier);
+  const diversityShape = clampScore(100 - Math.abs(lyricAnalysis.uniqueWordPct - 72) * 1.8 - lyricAnalysis.fillerPct * 1.5);
+  const originalityEvidenceCap = Math.round(30 + (lyricAnalysis.analysisConfidence / 100) * 55);
+  const originality = Math.min(85, originalityEvidenceCap, diversityShape);
+  const replay = clampScore((lyricAnalysis.hookReplay * 0.75 + lyricAnalysis.endRhymePct * 0.25) * evidenceMultiplier);
   const lyricScore = clampScore(structure * 0.2 + completion * 0.24 + cadence * 0.14 + hook * 0.18 + originality * 0.12 + replay * 0.12);
   const takeExists = performanceInput.roughTakeExists;
   const takeSaved = performanceInput.roughTakeSaved;
@@ -176,23 +179,15 @@ export function boothReadyFromLockerSnapshot(snapshot: Record<string, unknown>, 
     ? record.checklist.filter((item): item is { label: string; detail: string; complete: boolean } => Boolean(item && typeof item === "object" && typeof (item as Record<string, unknown>).label === "string" && typeof (item as Record<string, unknown>).detail === "string" && typeof (item as Record<string, unknown>).complete === "boolean")).slice(0, 12)
     : fallback.checklist;
   const improvements = Array.isArray(record.improvements) ? record.improvements.filter((item): item is string => typeof item === "string").slice(0, 12) : fallback.improvements;
-  const rawMetrics = record.metrics && typeof record.metrics === "object" && !Array.isArray(record.metrics) ? record.metrics as Record<string, unknown> : {};
   return {
     ...fallback,
-    score: number("score", fallback.score),
-    lyricScore: number("lyricScore", fallback.lyricScore),
+    score: fallback.score,
+    lyricScore: fallback.lyricScore,
     performanceScore: number("performanceScore", fallback.performanceScore),
     nextAction: string("nextAction", fallback.nextAction),
     checklist,
     improvements,
-    metrics: {
-      structure: typeof rawMetrics.structure === "number" ? clampScore(rawMetrics.structure) : fallback.metrics.structure,
-      completion: typeof rawMetrics.completion === "number" ? clampScore(rawMetrics.completion) : fallback.metrics.completion,
-      cadence: typeof rawMetrics.cadence === "number" ? clampScore(rawMetrics.cadence) : fallback.metrics.cadence,
-      hook: typeof rawMetrics.hook === "number" ? clampScore(rawMetrics.hook) : fallback.metrics.hook,
-      originality: typeof rawMetrics.originality === "number" ? clampScore(rawMetrics.originality) : fallback.metrics.originality,
-      replay: typeof rawMetrics.replay === "number" ? clampScore(rawMetrics.replay) : fallback.metrics.replay,
-    },
+    metrics: fallback.metrics,
   };
 }
 
