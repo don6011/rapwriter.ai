@@ -288,7 +288,7 @@ export function WriterScreen({
           {penView ? (
             <PenView sectionName={section.name} text={sectionText} />
           ) : (
-            <div className="relative min-h-[54svh] overflow-hidden">
+            <div className="relative min-h-[54svh] overflow-hidden bg-black/18 backdrop-blur-sm">
               <div
                 aria-hidden="true"
                 data-testid="bar-gutter"

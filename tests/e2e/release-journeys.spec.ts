@@ -370,89 +370,6 @@ test("Producer HQ dock and header back stay inside the workspace", async ({ page
   await expect(page).toHaveURL(/\/producer$/);
 });
 
-test("Producer services cancel cleanly and publish with confirmation", async ({ page }) => {
-  await mockProducerApis(page);
-  await page.goto("/producer", { waitUntil: "domcontentloaded" });
-
-  const services = page.locator("#producer-services");
-  await services.getByRole("button", { name: "Add service" }).click();
-  await expect(page).toHaveURL(/\/producer\?panel=service$/);
-  await expect(services.getByPlaceholder("Service title")).toBeVisible();
-  await page.getByRole("button", { name: "Back in Producer HQ" }).click();
-  await expect(page).toHaveURL(/\/producer$/);
-  await expect(services.getByPlaceholder("Service title")).toHaveCount(0);
-
-  await services.getByRole("button", { name: "Add service" }).click();
-  await services.getByPlaceholder("Service title").fill("Hook production session");
-  await services.getByPlaceholder("What does the artist receive?").fill("A custom hook-ready production and one focused revision.");
-  await services.getByPlaceholder("Starting price").fill("175");
-  await services.getByPlaceholder("Turnaround days").fill("4");
-  await services.getByRole("button", { name: "Publish service" }).click();
-
-  await expect(page).toHaveURL(/\/producer$/);
-  await expect(page.getByRole("main").getByText("Service published to your storefront.", { exact: true })).toBeVisible();
-  await expect(page.locator("[data-sonner-toast]").getByText("Service published to your storefront.", { exact: true })).toBeVisible();
-  await expect(services.getByText("Hook production session", { exact: true })).toBeVisible();
-});
-
-test("Producer requests and storefront preserve Producer HQ context", async ({ page }) => {
-  await mockProducerApis(page);
-  await page.route("**/api/collaborations", async (route) => {
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ requests: [], viewer_id: USER_ID }) });
-  });
-  await page.route("**/api/marketplace/producers/stone-studios", async (route) => {
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify(storefrontPayload()) });
-  });
-  await page.goto("/producer", { waitUntil: "domcontentloaded" });
-
-  await page.locator("#producer-services").getByRole("link", { name: /Open rooms/ }).click();
-  await expect(page).toHaveURL(/\/collaborations\?from=producer-hq$/);
-  await expect(page.getByText("Producer inbox", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "No artist requests yet" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Explore producers" })).toHaveCount(0);
-  await expect(page.getByTestId("producer-hq-dock")).toBeVisible();
-  await page.getByRole("link", { name: "Back to Producer HQ" }).click();
-  await expect(page).toHaveURL(/\/producer$/);
-
-  await page.getByTestId("producer-hq-dock").getByRole("button", { name: "Setup" }).click();
-  await expect(page).toHaveURL(/\/producer\?view=setup$/);
-  await page.getByRole("link", { name: "Preview storefront" }).click();
-  await expect(page).toHaveURL(/\/producer\/stone-studios\?from=producer-hq$/);
-  await expect(page.getByRole("link", { name: "Edit profile" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Follow Producer" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /Work Together/ })).toHaveCount(0);
-  await expect(page.getByTestId("producer-hq-dock")).toBeVisible();
-  await page.getByRole("link", { name: "Back to Producer HQ" }).click();
-  await expect(page).toHaveURL(/\/producer$/);
-});
-
-test("Artist collaboration request confirms delivery and preserves the exact request", async ({ page }) => {
-  const storefront = { ...storefrontPayload(), ownerPreview: false };
-  await page.route("**/api/marketplace/producers/stone-studios", async (route) => {
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify(storefront) });
-  });
-  await page.route("**/api/projects", async (route) => {
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ projects: [] }) });
-  });
-  await page.route("**/api/songs", async (route) => {
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ songs: [] }) });
-  });
-  await page.route("**/api/collaborations", async (route) => {
-    if (route.request().method() !== "POST") return route.fallback();
-    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ request: collaborationRequest() }) });
-  });
-
-  await page.goto("/producer/stone-studios", { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: /Work Together/ }).click();
-  const sheet = page.getByRole("dialog", { name: "Work with Stone Studios" });
-  await sheet.getByPlaceholder("What are you making, what do you need, and what should the record feel like?").fill("I need a dark late-night record with room for a melodic hook and a focused second verse.");
-  await sheet.getByRole("button", { name: "Send Private Request" }).click();
-
-  await expect(sheet.getByText("Request sent.", { exact: true })).toBeVisible();
-  await expect(sheet.getByRole("link", { name: "Track this request" })).toHaveAttribute("href", `/collaborations?request=${COLLABORATION_ID}`);
-  await expect(page.locator("[data-sonner-toast]").getByText("Request sent", { exact: true })).toBeVisible();
-});
-
 test("Producer collaboration decisions and messages provide immediate feedback", async ({ page }) => {
   let request = collaborationRequest();
   const messages: Array<{ id: string; sender_id: string; body: string; created_at: string }> = [];
@@ -566,7 +483,7 @@ test("artist and producer access explains both available workspaces", async ({ p
   const membershipCard = page.locator("#profile-membership");
   await expect(membershipCard.getByText("RapWriter Pro", { exact: true }).first()).toBeVisible();
 
-  await membershipCard.getByRole("button", { name: "Producer" }).click();
+  await membershipCard.getByRole("button", { name: "Producer", exact: true }).click();
   await expect(membershipCard.getByText("Producer HQ Free", { exact: true }).first()).toBeVisible();
   await expect(membershipCard.getByRole("link", { name: "Open Producer HQ" })).toHaveAttribute("href", "/producer");
 

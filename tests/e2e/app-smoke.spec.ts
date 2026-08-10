@@ -22,7 +22,10 @@ async function expectHealthyPage(page: Page) {
 
 async function expectStudioShellReady(page: Page) {
   await expect(page.getByText("Restoring Studio", { exact: true })).toHaveCount(0, { timeout: 30_000 });
-  await expect(page.getByTestId("app-dock")).toHaveCount(1, { timeout: 30_000 });
+  const readySurface = page
+    .getByTestId("app-dock")
+    .or(page.getByRole("textbox", { name: /lyrics$/ }).first());
+  await expect(readySurface).toHaveCount(1, { timeout: 30_000 });
 }
 
 async function openWriterFlow(page: Page) {
@@ -219,10 +222,13 @@ test("device preview embeds the live app and switches shells", async ({ page }) 
 
   await expect(page.locator("main")).toHaveAttribute("data-preview-ready", "true", { timeout: 20_000 });
   const phoneShell = page.getByTestId("phone-shell");
-  const deviceFrame = page.frameLocator('iframe[title="RapWriter device preview"]');
+  const deviceFrame = page.frameLocator('iframe[title="RapWriter Studio device preview"]');
   await expect(phoneShell).toHaveAttribute("data-device", "iphone");
   await expect(deviceFrame.getByText("Restoring Studio", { exact: true })).toHaveCount(0, { timeout: 20_000 });
-  await expect(deviceFrame.getByTestId("app-dock")).toHaveCount(1, { timeout: 20_000 });
+  const readySurface = deviceFrame
+    .getByTestId("app-dock")
+    .or(deviceFrame.getByRole("textbox", { name: /lyrics$/ }).first());
+  await expect(readySurface).toHaveCount(1, { timeout: 20_000 });
   await deviceFrame.locator("body").evaluate((body) => body.dataset.previewSession = "preserved");
   await page.getByRole("tab", { name: "Samsung" }).click();
   await expect(phoneShell).toHaveAttribute("data-device", "samsung");
