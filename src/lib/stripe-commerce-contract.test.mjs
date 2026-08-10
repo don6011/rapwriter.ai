@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 const checkout = readFileSync(new URL("../../app/api/stripe/checkout/route.ts", import.meta.url), "utf8");
 const webhook = readFileSync(new URL("../../app/api/stripe/webhook/route.ts", import.meta.url), "utf8");
+const subscriptionSync = readFileSync(new URL("server/stripe-billing.ts", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../../supabase/migrations/20260803170000_stripe_connect_producer_payouts.sql", import.meta.url), "utf8");
 
 describe("Stripe commerce contract", () => {
@@ -15,6 +16,11 @@ describe("Stripe commerce contract", () => {
   test("synchronizes connected account updates from signed webhooks", () => {
     expect(webhook).toContain('case "account.updated"');
     expect(webhook).toContain("syncConnectedAccount(account)");
+  });
+
+  test("converges concurrent subscription webhooks on one membership row", () => {
+    expect(subscriptionSync).toContain('result.error?.code === "23505"');
+    expect(subscriptionSync).toContain('.eq("provider_subscription_id", input.providerSubscriptionId)');
   });
 
   test("keeps payout account mutation behind the service role", () => {

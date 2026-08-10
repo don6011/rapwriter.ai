@@ -157,9 +157,22 @@ export async function syncStripeSubscription(subscription: Stripe.Subscription) 
       .maybeSingle();
     if (existingError) throw new Error(existingError.message);
 
-    const result = existing
+    let result = existing
       ? await admin.from("user_subscriptions").update(values).eq("id", existing.id).select("*").single()
       : await admin.from("user_subscriptions").insert(values).select("*").single();
+
+    // Checkout and subscription webhooks can arrive together. If another
+    // handler inserted this Stripe subscription first, converge on that row.
+    if (!existing && result.error?.code === "23505") {
+      const { data: raced, error: racedError } = await admin
+        .from("user_subscriptions")
+        .select("id")
+        .eq("provider", "stripe")
+        .eq("provider_subscription_id", input.providerSubscriptionId)
+        .single();
+      if (racedError) throw new Error(racedError.message);
+      result = await admin.from("user_subscriptions").update(values).eq("id", raced.id).select("*").single();
+    }
     if (result.error) throw new Error(result.error.message);
     return result.data;
   }
