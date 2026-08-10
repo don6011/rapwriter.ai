@@ -291,6 +291,7 @@ export function WriterScreen({
             <div className="relative min-h-[54svh] overflow-hidden">
               <div
                 aria-hidden="true"
+                data-testid="bar-gutter"
                 className="pointer-events-none absolute inset-0 overflow-hidden"
               >
                 <div className="p-5" style={{ transform: `translateY(-${editorScrollTop}px)` }}>

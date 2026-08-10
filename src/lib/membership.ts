@@ -19,17 +19,6 @@ export type PlanDefinition = {
   metadata: Record<string, unknown>;
 };
 
-export type MembershipBundleDefinition = {
-  id: string;
-  name: string;
-  tagline: string;
-  monthly_price_cents: number;
-  annual_price_cents: number | null;
-  currency: string;
-  included_plan_ids: string[];
-  metadata: Record<string, unknown>;
-};
-
 export type SubscriptionRecord = {
   id: string;
   plan_id: string;

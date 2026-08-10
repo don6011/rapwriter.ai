@@ -33,13 +33,6 @@ describe("studio room access", () => {
     });
   });
 
-  test("All Access includes every environment", () => {
-    for (const room of ["afterglow", "bedroom-diaries", "soft-life", "desert-sessions", "rooftop-sessions", "bando-sessions"]) {
-      expect(membershipIncludesStudioRoom("creator_all_access", room)).toBe(true);
-      expect(resolveStudioRoomAccess(room, "creator_all_access", false).badge).toBe("All Access");
-    }
-  });
-
   test("permanent ownership overrides membership requirements", () => {
     expect(resolveStudioRoomAccess("penthouse", "artist_free", true).source).toBe("owned");
     expect(resolveStudioRoomAccess("penthouse", "artist_free", true).available).toBe(true);

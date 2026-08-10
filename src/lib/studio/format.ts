@@ -83,18 +83,8 @@ export function productUnlockFromEntitlement(entitlement: ProductEntitlementRow)
 
 export function membershipAccessLabel(membership: MembershipSnapshot | null) {
   const artistPlan = `${membership?.artist?.plan.id ?? ""} ${membership?.artist?.plan.name ?? ""}`.toLowerCase();
-  const producerPlan = `${membership?.producer?.plan.id ?? ""} ${membership?.producer?.plan.name ?? ""}`.toLowerCase();
-  const hasArtistElite = /\belite\b/.test(artistPlan);
-  const hasArtistPro = /\bpro\b/.test(artistPlan);
-  const hasProducerPro = /\bpro\b/.test(producerPlan);
-  if (hasArtistElite && hasProducerPro) return "All Access";
-  if (hasArtistElite) return "Elite";
-  if (hasArtistPro) return "Pro";
-  if (hasProducerPro) return "Producer Pro";
+  const hasPaidArtistPlan = membership?.artist?.plan.tier ? membership.artist.plan.tier > 0 : /\bpro\b|\belite\b/.test(artistPlan);
+  if (hasPaidArtistPlan) return "Pro";
+  if (membership?.producer) return "Producer HQ";
   return null;
-}
-
-export function hasAllAccessMembership(membership: MembershipSnapshot | null) {
-  return membership?.artist?.plan.id === "artist_studio"
-    && membership?.producer?.plan.id === "producer_pro";
 }

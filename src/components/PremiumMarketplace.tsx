@@ -28,7 +28,6 @@ type PremiumMarketplaceProps = {
   studioPacks: StudioPack[];
   onStudioPack: (id: StudioPackId) => void;
   artistPlanId?: string | null;
-  allAccess?: boolean;
   productUnlocks: ProductUnlock[];
   onUnlockProduct: (product: Omit<ProductUnlock, "unlockedAt">) => void;
   sessionContext: { title: string; mood: string; writingStyle: string };
@@ -104,7 +103,7 @@ export function PremiumMarketplace({
         </label>
       </header>
 
-      <main className="px-4">
+      <div className="px-4">
         <MembershipDecision activePlanId={artistPlanId} signedIn={signedIn} onOpen={onOpenMembership} />
 
         <section id="market-beats" className="scroll-mt-28 pt-9">
@@ -144,7 +143,7 @@ export function PremiumMarketplace({
             </div>
           )}
         </section>
-      </main>
+      </div>
 
       <BeatSheet
         beat={selectedBeat}

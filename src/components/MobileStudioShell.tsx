@@ -48,10 +48,7 @@ import {
   writeMobileDraftRecord,
 } from "@/lib/studio/draft-storage";
 import { buildBoothExportSnapshot } from "@/lib/studio/export-snapshot";
-import {
-  artistDisplayName,
-  hasAllAccessMembership,
-} from "@/lib/studio/format";
+import { artistDisplayName } from "@/lib/studio/format";
 import {
   buildBeatIntelligence,
   buildEnvironmentIntelligence,
@@ -284,12 +281,9 @@ export function MobileStudioShell() {
   }, [membership?.artist, membership?.producer, openSheet, user]);
 
   const getStudioPackAccess = useCallback((id: StudioPackId) => {
-    const accessPlanId = hasAllAccessMembership(membership)
-      ? "creator_all_access"
-      : membership?.artist?.plan.id;
     return resolveStudioRoomAccess(
       id,
-      accessPlanId,
+      membership?.artist?.plan.id,
       unlockedProductIds.has(getStudioRoomProductId(id)),
     );
   }, [membership, unlockedProductIds]);
@@ -1647,7 +1641,6 @@ export function MobileStudioShell() {
                 studioPacks={studioPacks}
                 onStudioPack={changeStudioPack}
                 artistPlanId={membership?.artist?.plan.id}
-                allAccess={hasAllAccessMembership(membership)}
                 productUnlocks={mergedProductUnlocks}
                 onUnlockProduct={unlockProduct}
                 onOpenMembership={() => {

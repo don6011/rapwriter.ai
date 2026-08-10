@@ -4,8 +4,9 @@ import { SyntheticWaveform } from "@/components/studio/waveform/SyntheticWavefor
 import { resolveBeatPreviewUrl } from "@/lib/beat-playback";
 import { formatDuration, getProgressPct } from "@/lib/studio/format";
 import type { SelectedBeat } from "@/lib/studio/types";
+import { buildSyntheticWaveBars } from "@/lib/studio/waveform";
 import { cn } from "@/lib/utils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export function BeatWaveform({
   beat,
@@ -31,6 +32,18 @@ export function BeatWaveform({
   const [waveReady, setWaveReady] = useState(false);
   const previewUrl = resolveBeatPreviewUrl(beat);
   const progressPct = recording ? 100 : getProgressPct(currentTime, duration);
+  const visualDuration = useMemo(() => {
+    if (typeof beat.duration === "number" && Number.isFinite(beat.duration)) return Math.max(1, beat.duration);
+    const [minutes, seconds] = typeof beat.duration === "string" ? beat.duration.split(":").map(Number) : [];
+    return Number.isFinite(minutes) && Number.isFinite(seconds) ? Math.max(1, minutes * 60 + seconds) : 1;
+  }, [beat.duration]);
+  const visualPeaks = useMemo(
+    () => Float32Array.from(
+      buildSyntheticWaveBars({ id: beat.id, bpm: beat.bpm, key: beat.key }, compact ? 64 : 96),
+      (height) => height / 100,
+    ),
+    [beat.bpm, beat.id, beat.key, compact],
+  );
   const seekFromPointer = (clientX: number, target: HTMLInputElement) => {
     if (!onSeek || duration <= 0) return;
     const bounds = target.getBoundingClientRect();
@@ -52,7 +65,6 @@ export function BeatWaveform({
         if (!mounted || !containerRef.current) return;
         const waveSurfer = WaveSurfer.create({
           container: containerRef.current,
-          url: previewUrl,
           height: compact ? 14 : 22,
           normalize: true,
           interact: false,
@@ -69,6 +81,10 @@ export function BeatWaveform({
           waveSurfer.setTime(0);
         });
         waveSurferRef.current = waveSurfer;
+        void waveSurfer.load(previewUrl, [visualPeaks], visualDuration).catch((error: unknown) => {
+          if (!mounted || (error instanceof DOMException && error.name === "AbortError")) return;
+          setWaveReady(false);
+        });
       })
       .catch(() => setWaveReady(false));
 
@@ -77,7 +93,7 @@ export function BeatWaveform({
       waveSurferRef.current?.destroy();
       waveSurferRef.current = null;
     };
-  }, [beat.id, compact, previewUrl, recording]);
+  }, [compact, previewUrl, recording, visualDuration, visualPeaks]);
 
   useEffect(() => {
     if (!waveReady || !waveSurferRef.current) return;

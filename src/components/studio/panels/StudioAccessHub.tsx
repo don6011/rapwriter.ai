@@ -2,7 +2,7 @@
 
 import { AccessLaunchRow } from "@/components/studio/primitives/AccessLaunchRow";
 import type { MembershipSnapshot } from "@/lib/membership";
-import { hasAllAccessMembership, membershipAccessLabel } from "@/lib/studio/format";
+import { membershipAccessLabel } from "@/lib/studio/format";
 import { Briefcase, ChevronRight, Crown, Headphones, Home, ShieldCheck, WandSparkles, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
@@ -39,9 +39,8 @@ export function StudioAccessHub({
   const producer = membership?.producer ?? null;
   if (!open || !artist) return null;
 
-  const planLabel = [artist.plan.name, producer?.plan.name].filter(Boolean).join(" + ");
-  const allAccess = hasAllAccessMembership(membership);
-  const roomLimit = allAccess ? -1 : typeof artist.limits.studio_rooms === "number" ? artist.limits.studio_rooms : 1;
+  const planLabel = [artist.plan.name, producer ? "Producer HQ Free" : null].filter(Boolean).join(" + ");
+  const roomLimit = typeof artist.limits.studio_rooms === "number" ? artist.limits.studio_rooms : 1;
   const hasWriterIntelligence = artist.entitlements.ghostwriter === true || artist.entitlements.full_pen_view === true;
   const hasAdvancedReadiness = artist.entitlements.advanced_booth_ready === true;
 

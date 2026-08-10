@@ -70,7 +70,7 @@ export function ProfileScreen({
   const canAccessProducer = Boolean(membership?.producer) || hasProducerWorkspace(profile?.account_type);
   const canAccessArtist = Boolean(membership?.artist) || hasArtistWorkspace(profile?.account_type);
   const canExpandWorkspace = !canAccessProducer || !canAccessArtist;
-  const membershipLabel = [membership?.artist?.plan.name, membership?.producer?.plan.name].filter(Boolean).join(" + ");
+  const membershipLabel = [membership?.artist?.plan.name, canAccessProducer ? "Producer HQ Free" : null].filter(Boolean).join(" + ");
 
   useEffect(() => {
     if (!identityEditorOpen) setArtistNameDraft(artistName);

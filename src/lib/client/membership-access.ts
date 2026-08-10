@@ -80,6 +80,6 @@ function planLabel(plan: string | null) {
   if (plan === "artist_pro") return "RapWriter Pro";
   if (plan === "artist_studio") return "RapWriter Pro";
   if (plan === "producer_free") return "Producer HQ Free";
-  if (plan === "producer_pro") return "Producer Pro";
+  if (plan === "producer_pro") return "Producer HQ Free";
   return "a higher membership";
 }

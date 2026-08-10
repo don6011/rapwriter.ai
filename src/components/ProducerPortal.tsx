@@ -2210,15 +2210,15 @@ function BeatEditorSheet({
           {beat.admin_notes && <div className="rounded-2xl border border-rec/25 bg-rec/10 p-3 text-sm leading-relaxed text-rec"><span className="font-semibold">Review feedback:</span> {beat.admin_notes}</div>}
           {beat.status === "approved" && <div className="rounded-2xl border border-gold/25 bg-gold/8 p-3 text-xs leading-relaxed text-gold">Saving changes moves this beat out of the live Studio Store until it is approved again.</div>}
 
-          <input value={draft.title} onChange={(event) => onDraft({ ...draft, title: event.target.value })} placeholder="Beat title" className="min-h-12 w-full rounded-2xl border border-white/10 bg-black/35 px-4 outline-none" />
+          <BeatField label="Beat title" value={draft.title} onChange={(title) => onDraft({ ...draft, title })} placeholder="Beat title" />
           <div className="grid grid-cols-2 gap-2">
-            <input value={draft.bpm} onChange={(event) => onDraft({ ...draft, bpm: event.target.value })} placeholder="BPM" inputMode="numeric" className="min-h-12 min-w-0 rounded-2xl border border-white/10 bg-black/35 px-4 outline-none" />
-            <input value={draft.musical_key} onChange={(event) => onDraft({ ...draft, musical_key: event.target.value })} placeholder="Key" className="min-h-12 min-w-0 rounded-2xl border border-white/10 bg-black/35 px-4 outline-none" />
-            <input value={draft.genre} onChange={(event) => onDraft({ ...draft, genre: event.target.value })} placeholder="Genre" className="min-h-12 min-w-0 rounded-2xl border border-white/10 bg-black/35 px-4 outline-none" />
-            <input value={draft.region} onChange={(event) => onDraft({ ...draft, region: event.target.value })} placeholder="Region" className="min-h-12 min-w-0 rounded-2xl border border-white/10 bg-black/35 px-4 outline-none" />
+            <BeatField label="BPM" value={draft.bpm} onChange={(bpm) => onDraft({ ...draft, bpm })} placeholder="84" inputMode="numeric" />
+            <BeatField label="Key" value={draft.musical_key} onChange={(musical_key) => onDraft({ ...draft, musical_key })} placeholder="F# Minor" />
+            <BeatField label="Genre" value={draft.genre} onChange={(genre) => onDraft({ ...draft, genre })} placeholder="Trap" />
+            <BeatField label="Region" value={draft.region} onChange={(region) => onDraft({ ...draft, region })} placeholder="Atlanta" />
           </div>
-          <input value={draft.mood} onChange={(event) => onDraft({ ...draft, mood: event.target.value })} placeholder="Mood" className="min-h-12 w-full rounded-2xl border border-white/10 bg-black/35 px-4 outline-none" />
-          <input value={draft.tags} onChange={(event) => onDraft({ ...draft, tags: event.target.value })} placeholder="Tags, comma separated" className="min-h-12 w-full rounded-2xl border border-white/10 bg-black/35 px-4 outline-none" />
+          <BeatField label="Mood" value={draft.mood} onChange={(mood) => onDraft({ ...draft, mood })} placeholder="Late Night" />
+          <BeatField label="Discovery tags" value={draft.tags} onChange={(tags) => onDraft({ ...draft, tags })} placeholder="Trap, Late Night, Street" />
 
           <div className="grid grid-cols-3 gap-2">
             <PriceInput label="Lease" value={draft.lease_price} onChange={(lease_price) => onDraft({ ...draft, lease_price })} />
@@ -2307,8 +2307,11 @@ function PlaylistComposerSheet({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-          <input value={title} onChange={(event) => onTitle(event.target.value)} placeholder="Playlist name" className="min-h-12 w-full rounded-2xl border border-white/10 bg-black/35 px-4 outline-none" />
-          <textarea value={description} onChange={(event) => onDescription(event.target.value)} placeholder="Collection description" className="mt-2 min-h-20 w-full resize-none rounded-2xl border border-white/10 bg-black/35 p-4 outline-none" />
+          <BeatField label="Collection name" value={title} onChange={onTitle} placeholder="Night Sessions" />
+          <label className="block">
+            <span className="label-hw text-gold/80">Description</span>
+            <textarea value={description} onChange={(event) => onDescription(event.target.value)} placeholder="Describe the sound and purpose of this collection" className="mt-2 min-h-20 w-full resize-none rounded-2xl border border-white/10 bg-black/35 p-4 outline-none" />
+          </label>
 
           <div className="mt-5 flex items-center justify-between"><div className="label-hw text-gold/80">Sequence</div><span className="text-xs text-muted-foreground">{selectedBeats.length} beats</span></div>
           <div className="mt-2 space-y-2">

@@ -70,7 +70,7 @@ async function installAuthenticatedSession(page: Page) {
   await page.addInitScript(
     ({ key, session, userId }) => {
       window.localStorage.setItem(key, JSON.stringify(session));
-      window.localStorage.setItem(`rapwriter:membership-announced:${userId}`, "artist_studio:producer_pro");
+      window.localStorage.setItem(`rapwriter:membership-announced:${userId}`, "artist_studio:producer_free");
     },
     { key: storageKey, session, userId: USER_ID },
   );
@@ -99,33 +99,33 @@ function plan(input: { id: string; audience: "artist" | "producer"; tier: number
   };
 }
 
-const artistElite = plan({ id: "artist_studio", audience: "artist", tier: 2, name: "Prep Studio Elite", tagline: "Turn serious records into a career." });
-const producerPro = plan({ id: "producer_pro", audience: "producer", tier: 1, name: "Producer Pro", tagline: "Run your music business." });
+const artistPro = plan({ id: "artist_studio", audience: "artist", tier: 2, name: "RapWriter Pro", tagline: "Finish the record." });
+const producerFree = plan({ id: "producer_free", audience: "producer", tier: 0, name: "Producer HQ Free", tagline: "Sell your sound. Keep 100% of sales." });
 
 const membership = {
   roles: ["artist", "producer"],
   artist: {
     audience: "artist",
-    plan: artistElite,
+    plan: artistPro,
     status: "active",
     source: "subscription",
     provider: "manual",
     renews_at: null,
     cancel_at_period_end: false,
-    entitlements: artistElite.entitlements,
-    limits: artistElite.limits,
+    entitlements: artistPro.entitlements,
+    limits: artistPro.limits,
     usage: { ghostwriter_actions: 4 },
   },
   producer: {
     audience: "producer",
-    plan: producerPro,
-    status: "active",
-    source: "subscription",
-    provider: "manual",
+    plan: producerFree,
+    status: "free",
+    source: "free",
+    provider: null,
     renews_at: null,
     cancel_at_period_end: false,
-    entitlements: producerPro.entitlements,
-    limits: producerPro.limits,
+    entitlements: producerFree.entitlements,
+    limits: producerFree.limits,
     usage: {},
   },
 };
@@ -185,7 +185,7 @@ function producerPayload() {
     },
     billing: { plan: "free", stripe_status: "not_connected", payouts_enabled: false, charges_enabled: false, verification: {} },
     membership,
-    plans: [producerPro],
+    plans: [producerFree],
     metrics: {
       profile_views: 42,
       beat_plays: 120,
@@ -333,18 +333,8 @@ async function mockStudioApis(page: Page) {
     "/api/marketplace/beats": { beats: [], producers: [] },
     "/api/starter-beats": { beats: [] },
   };
-  const bundle = {
-    id: "creator_all_access",
-    name: "RapWriter All Access",
-    tagline: "Prep Studio Elite and Producer HQ Pro under one bill.",
-    monthly_price_cents: 3999,
-    annual_price_cents: 39990,
-    currency: "usd",
-    included_plan_ids: [artistElite.id, producerPro.id],
-    metadata: {},
-  };
   await page.route("**/api/membership", async (route) => {
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ membership, plans: [artistElite, producerPro], bundles: [bundle] }) });
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ membership, plans: [artistPro, producerFree], bundles: [] }) });
   });
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
@@ -567,18 +557,18 @@ test("Artists approve a delivered version and complete the session", async ({ pa
   await expect(page.getByText("Approved by the artist. Session complete.", { exact: true })).toBeVisible();
 });
 
-test("All Access is visible and explains both unlocked workspaces", async ({ page }) => {
+test("artist and producer access explains both available workspaces", async ({ page }) => {
   await mockStudioApis(page);
   await page.goto("/?view=profile", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByText("Nova", { exact: true })).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText("Prep Studio Elite + Producer Pro", { exact: true })).toBeVisible();
+  await expect(page.getByText("RapWriter Pro + Producer HQ Free", { exact: true })).toBeVisible();
   const membershipCard = page.locator("#profile-membership");
-  await expect(membershipCard.getByText("Prep Studio Elite", { exact: true }).first()).toBeVisible();
+  await expect(membershipCard.getByText("RapWriter Pro", { exact: true }).first()).toBeVisible();
 
-  await membershipCard.getByRole("button", { name: "All Access" }).click();
-  await expect(membershipCard.getByText("Both workspaces are active.", { exact: true })).toBeVisible();
-  await expect(membershipCard.getByRole("link", { name: "Producer HQ" })).toHaveAttribute("href", "/producer");
+  await membershipCard.getByRole("button", { name: "Producer" }).click();
+  await expect(membershipCard.getByText("Producer HQ Free", { exact: true }).first()).toBeVisible();
+  await expect(membershipCard.getByRole("link", { name: "Open Producer HQ" })).toHaveAttribute("href", "/producer");
 
   await membershipCard.getByRole("button", { name: /See everything you unlocked/ }).click();
   const accessGuide = page.getByRole("dialog", { name: "Unlocked membership access" });
@@ -586,7 +576,7 @@ test("All Access is visible and explains both unlocked workspaces", async ({ pag
   await expect(accessGuide.getByText("Ghostwriter", { exact: true })).toBeVisible();
   await expect(accessGuide.getByText("Advanced Booth Ready", { exact: true })).toBeVisible();
 
-  await accessGuide.getByRole("button", { name: "Producer Pro" }).click();
+  await accessGuide.getByRole("button", { name: "Producer HQ Free" }).click();
   await expect(accessGuide.getByText("Producer storefront", { exact: true })).toBeVisible();
   await expect(accessGuide.getByText("Producer intelligence", { exact: true })).toBeVisible();
   await expect(accessGuide.getByRole("link", { name: "Open Producer HQ" })).toHaveAttribute("href", "/producer");

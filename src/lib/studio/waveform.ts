@@ -2,7 +2,7 @@
 
 import type { SelectedBeat } from "@/lib/studio/types";
 
-export function buildSyntheticWaveBars(beat: SelectedBeat, count: number) {
+export function buildSyntheticWaveBars(beat: Pick<SelectedBeat, "id" | "bpm" | "key">, count: number) {
   const seed = Array.from(`${beat.id}-${beat.bpm ?? ""}-${beat.key ?? ""}`).reduce((sum, char) => sum + char.charCodeAt(0), 0);
   const tempo = typeof beat.bpm === "number" ? beat.bpm : 84;
   return Array.from({ length: count }, (_, index) => {

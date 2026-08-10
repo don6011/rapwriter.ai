@@ -26,10 +26,23 @@ async function expectStudioShellReady(page: Page) {
 }
 
 async function openWriterFlow(page: Page) {
+  if (await page.getByRole("textbox", { name: /lyrics$/ }).first().isVisible().catch(() => false)) return;
   const action = page.getByTestId("open-writer-flow");
   await expect(action).toBeVisible({ timeout: 20_000 });
   await action.click();
 }
+
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/auth/me", async (route) => {
+    await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ authenticated: false }) });
+  });
+  await page.route("**/api/marketplace/beats", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ beats: [], producers: [] }) });
+  });
+  await page.route("**/api/starter-beats", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ beats: [] }) });
+  });
+});
 
 test.describe("public app shell", () => {
   for (const route of publicRoutes) {
@@ -141,10 +154,12 @@ test("writer glass pad stays focused and mobile safe", async ({ page }, testInfo
   const hookTabRadius = await page.getByRole("tab", { name: /^Hook/ }).evaluate((element) => parseFloat(getComputedStyle(element).borderRadius));
 
   expect(editorStyle.color).toMatch(/255,\s*255,\s*255|0\.999/);
-  expect(editorStyle.backgroundImage).toContain("linear-gradient");
+  expect(editorStyle.backgroundImage).toBe("none");
   expect(editorStyle.surfaceBackground).not.toBe("rgba(0, 0, 0, 0)");
   expect(editorStyle.surfaceBackdrop).not.toBe("none");
   expect(hookTabRadius).toBeGreaterThanOrEqual(20);
+  await expect(page.getByTestId("bar-gutter").getByText("1", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("bar-gutter").getByText("2", { exact: true })).toBeVisible();
   await expect(page.getByTestId("app-dock")).toHaveCount(0);
   await expectHealthyPage(page);
   await page.screenshot({ path: testInfo.outputPath("writer-glass.png"), fullPage: false });
