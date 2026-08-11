@@ -24,11 +24,14 @@ export type RoughTakeState = {
   duration: number;
   beat: SelectedBeat | null;
   beatPosition: number;
+  recordingMode: RecordingMode;
   saved: boolean;
   saving: boolean;
   analyzing: boolean;
   analysis: RoughTakeAnalysis | null;
 };
+
+export type RecordingMode = "with_beat" | "vocals_only";
 
 const initialState: RoughTakeState = {
   recording: false,
@@ -40,6 +43,7 @@ const initialState: RoughTakeState = {
   duration: 0,
   beat: null,
   beatPosition: 0,
+  recordingMode: "with_beat",
   saved: false,
   saving: false,
   analyzing: false,
@@ -48,7 +52,7 @@ const initialState: RoughTakeState = {
 
 type RoughTakeAction =
   | { type: "record/arm" }
-  | { type: "record/armed"; beat: SelectedBeat; beatPosition: number }
+  | { type: "record/armed"; beat: SelectedBeat | null; beatPosition: number; recordingMode: RecordingMode }
   | { type: "record/started"; startedAt: number }
   | { type: "record/tick"; seconds: number }
   | { type: "record/failed"; message: string }
@@ -63,6 +67,7 @@ type RoughTakeAction =
       duration: number;
       beat: SelectedBeat | null;
       beatPosition: number;
+      recordingMode: RecordingMode;
       analysis: RoughTakeAnalysis | null;
     }
   | { type: "take/server-cleared" }
@@ -80,7 +85,7 @@ export function roughTakeReducer(state: RoughTakeState, action: RoughTakeAction)
     case "record/arm":
       return { ...state, error: null, analyzing: false };
     case "record/armed":
-      return { ...state, beat: action.beat, beatPosition: action.beatPosition };
+      return { ...state, beat: action.beat, beatPosition: action.beatPosition, recordingMode: action.recordingMode };
     case "record/started":
       return { ...state, recording: true, recordingSeconds: 0, recordStartedAt: action.startedAt };
     case "record/tick":
@@ -114,11 +119,12 @@ export function roughTakeReducer(state: RoughTakeState, action: RoughTakeAction)
         duration: action.duration,
         beat: action.beat,
         beatPosition: action.beatPosition,
+        recordingMode: action.recordingMode,
         saved: true,
         analysis: action.analysis,
       };
     case "take/server-cleared":
-      return { ...state, analysis: null, beat: null, beatPosition: 0 };
+      return { ...state, analysis: null, beat: null, beatPosition: 0, recordingMode: "with_beat" };
     case "take/deleted":
       return {
         ...state,
@@ -127,6 +133,7 @@ export function roughTakeReducer(state: RoughTakeState, action: RoughTakeAction)
         duration: 0,
         beat: null,
         beatPosition: 0,
+        recordingMode: "with_beat",
         saved: false,
         analysis: null,
         analyzing: false,
@@ -150,10 +157,11 @@ export function roughTakeReducer(state: RoughTakeState, action: RoughTakeAction)
 }
 
 export type StartRecordingOptions = {
+  recordingMode: RecordingMode;
   /** Read after getUserMedia resolves, so the beat position matches the real take start. */
-  captureBeat: () => { beat: SelectedBeat; beatPosition: number };
+  captureBeat: () => { beat: SelectedBeat | null; beatPosition: number };
   /** Runs immediately before recorder.start(), for kicking off beat playback. */
-  beforeStart: (beat: SelectedBeat) => Promise<void>;
+  beforeStart: (beat: SelectedBeat | null) => Promise<void>;
 };
 
 export function useRoughTake(serverTake: RoughTakeRow | null) {
@@ -192,6 +200,7 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
       duration: serverTake.duration_seconds,
       beat: beatSnapshotFromRecord(serverTake.beat_snapshot) ?? null,
       beatPosition: Math.max(0, Number(serverTake.beat_position_seconds) || 0),
+      recordingMode: beatSnapshotFromRecord(serverTake.beat_snapshot) ? "with_beat" : "vocals_only",
       analysis: isRoughTakeAnalysis(serverTake.analysis) ? serverTake.analysis : null,
     });
   }, [serverTake, blob]);
@@ -209,7 +218,7 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
     if (recorder && recorder.state !== "inactive") recorder.stop();
   }, []);
 
-  const startRecording = useCallback(async ({ captureBeat, beforeStart }: StartRecordingOptions) => {
+  const startRecording = useCallback(async ({ captureBeat, beforeStart, recordingMode }: StartRecordingOptions) => {
     dispatch({ type: "record/arm" });
     analysisRunRef.current += 1;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
@@ -227,7 +236,7 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
       recorderRef.current = recorder;
       recordBeatRef.current = beatAtStart;
       recordBeatPositionRef.current = beatPositionAtStart;
-      dispatch({ type: "record/armed", beat: beatAtStart, beatPosition: beatPositionAtStart });
+      dispatch({ type: "record/armed", beat: beatAtStart, beatPosition: beatPositionAtStart, recordingMode });
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) recorderChunksRef.current.push(event.data);

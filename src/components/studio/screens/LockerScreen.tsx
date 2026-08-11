@@ -10,17 +10,20 @@ import { LockerOwnedCard } from "@/components/studio/locker/cards/LockerOwnedCar
 import { LockerReceiptRow } from "@/components/studio/locker/cards/LockerReceiptRow";
 import { LockerSongCard } from "@/components/studio/locker/cards/LockerSongCard";
 import { LockerSummaryMetric } from "@/components/studio/locker/cards/LockerSummaryMetric";
+import { LockerVocalCard } from "@/components/studio/locker/cards/LockerVocalCard";
 import { StarterBeatCard } from "@/components/studio/locker/cards/StarterBeatCard";
 import { PrivateBeatImportSheet } from "@/components/studio/sheets/PrivateBeatImportSheet";
 import type { BeatLockerRow, CommerceOrderRow, HookLockerRow, PrivateBeatImportInput, RoughTakeRow, SongLockerRow } from "@/hooks/use-rapwriter-data";
 import type { StarterBeat } from "@/lib/starter-beats";
+import { resolveBeatPreviewUrl } from "@/lib/beat-playback";
+import { beatSnapshotFromLockerBeat, beatSnapshotFromStarterBeat, getBeatDurationSeconds } from "@/lib/studio/beat-snapshot";
 import { formatShortDate } from "@/lib/studio/format";
 import { countTotalBars } from "@/lib/studio/bars";
 import { lockerSongBarCount, mostFrequent } from "@/lib/studio/locker-snapshot";
 import type { ProductUnlock, StudioPack } from "@/lib/studio/types";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, Headphones, Pencil, Save, Search, ShoppingCart, Sparkles, Upload, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, Headphones, Mic2, Pencil, Save, Search, ShoppingCart, Sparkles, Upload, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function LockerScreen({
   beats,
@@ -73,7 +76,7 @@ export function LockerScreen({
   onGoToStudio: () => void;
   onGoToMarket: () => void;
 }) {
-  type LockerTab = "songs" | "hooks" | "beats" | "purchases";
+  type LockerTab = "songs" | "hooks" | "beats" | "vocals" | "purchases";
   const [tab, setTab] = useState<LockerTab>("songs");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -82,10 +85,14 @@ export function LockerScreen({
   const [starterCollection, setStarterCollection] = useState("all");
   const [creativeDnaOpen, setCreativeDnaOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const [previewProgress, setPreviewProgress] = useState(0);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const visibleProductUnlocks = productUnlocks.filter((unlock) => unlock.category !== "Producer Style");
   const purchaseCount = visibleProductUnlocks.length;
-  const savedCount = songs.length + hooks.length + beats.length;
+  const savedCount = songs.length + hooks.length + beats.length + roughTakes.length;
   const collectionCount = savedCount + starterBeats.length + purchaseCount;
   const boothReadyCount = songs.filter((song) => song.booth_ready).length;
   const totalBarsWritten = songs.reduce((total, song) => total + lockerSongBarCount(song), 0);
@@ -106,6 +113,7 @@ export function LockerScreen({
     { id: "songs", label: "Songs", count: songs.length, icon: Save },
     { id: "hooks", label: "Hooks", count: hooks.length, icon: Pencil },
     { id: "beats", label: "Beats", count: beats.length + starterBeats.length, icon: Headphones },
+    { id: "vocals", label: "Vocals", count: roughTakes.length, icon: Mic2 },
     { id: "purchases", label: "Owned", count: purchaseCount, icon: ShoppingCart },
   ];
   const normalizedQuery = query.trim().toLowerCase();
@@ -137,13 +145,82 @@ export function LockerScreen({
   const visibleUnlocks = visibleProductUnlocks.filter((unlock) =>
     !normalizedQuery || [unlock.title, unlock.category, unlock.detail].join(" ").toLowerCase().includes(normalizedQuery),
   );
-  const globalSearchCount = visibleSongs.length + visibleHooks.length + visibleBeats.length + visibleStarterBeats.length + visibleUnlocks.length;
+  const songTitleForTake = (take: RoughTakeRow) => songs.find((song) => song.song_id === take.song_id)?.title ?? "Saved session";
+  const visibleVocals = roughTakes.filter((take) =>
+    !normalizedQuery || [take.section_name, songTitleForTake(take), take.created_at, formatShortDate(take.created_at)].join(" ").toLowerCase().includes(normalizedQuery),
+  );
+  const globalSearchCount = visibleSongs.length + visibleHooks.length + visibleBeats.length + visibleStarterBeats.length + visibleVocals.length + visibleUnlocks.length;
+
+  const stopPreview = useCallback(() => {
+    const audio = previewAudioRef.current;
+    if (audio) {
+      audio.ontimeupdate = null;
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+      audio.removeAttribute("src");
+      previewAudioRef.current = null;
+    }
+    setPreviewingId(null);
+    setPreviewProgress(0);
+  }, []);
+
+  const togglePreview = useCallback(async (id: string, url: string | null, fallbackDuration: number) => {
+    if (previewingId === id) {
+      stopPreview();
+      return;
+    }
+    stopPreview();
+    setPreviewError(null);
+    if (!url) {
+      setPreviewError("This audio file is not available yet.");
+      return;
+    }
+    const audio = new Audio(url);
+    previewAudioRef.current = audio;
+    setPreviewingId(id);
+    audio.ontimeupdate = () => {
+      const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : Math.max(1, fallbackDuration);
+      setPreviewProgress(Math.min(100, (audio.currentTime / duration) * 100));
+    };
+    audio.onended = stopPreview;
+    audio.onerror = () => {
+      stopPreview();
+      setPreviewError("This audio could not be played.");
+    };
+    try {
+      await audio.play();
+    } catch {
+      stopPreview();
+      setPreviewError("Tap the preview again to start playback.");
+    }
+  }, [previewingId, stopPreview]);
+
+  const starterPreviewProps = (beat: StarterBeat) => {
+    const id = `starter:${beat.id}`;
+    const snapshot = beatSnapshotFromStarterBeat(beat);
+    return {
+      previewing: previewingId === id,
+      previewProgress: previewingId === id ? previewProgress : 0,
+      onPreview: () => void togglePreview(id, resolveBeatPreviewUrl(snapshot), getBeatDurationSeconds(snapshot)),
+    };
+  };
+
+  const beatPreviewProps = (beat: BeatLockerRow) => {
+    const id = `beat:${beat.id}`;
+    const snapshot = beatSnapshotFromLockerBeat(beat);
+    return {
+      previewing: previewingId === id,
+      previewProgress: previewingId === id ? previewProgress : 0,
+      onPreview: () => void togglePreview(id, resolveBeatPreviewUrl(snapshot), getBeatDurationSeconds(snapshot)),
+    };
+  };
 
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
     const storedTab = window.sessionStorage.getItem("rapwriter:locker:tab") as LockerTab | null;
     const storedScroll = Number(window.sessionStorage.getItem("rapwriter:locker:scroll") ?? 0);
-    if (storedTab && ["songs", "hooks", "beats", "purchases"].includes(storedTab)) setTab(storedTab);
+    if (storedTab && ["songs", "hooks", "beats", "vocals", "purchases"].includes(storedTab)) setTab(storedTab);
     window.requestAnimationFrame(() => {
       if (scrollContainer && Number.isFinite(storedScroll)) scrollContainer.scrollTop = storedScroll;
     });
@@ -153,10 +230,13 @@ export function LockerScreen({
   }, []);
 
   useEffect(() => {
+    stopPreview();
     window.sessionStorage.setItem("rapwriter:locker:tab", tab);
     setQuery("");
     setSearchOpen(false);
-  }, [tab]);
+  }, [stopPreview, tab]);
+
+  useEffect(() => stopPreview, [stopPreview]);
 
   return (
     <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-5 pb-32 pt-5">
@@ -215,7 +295,7 @@ export function LockerScreen({
             )}
           </section>
 
-          <div className="mt-5 grid grid-cols-4 gap-1.5" role="tablist" aria-label="Locker collections">
+          <div className="mt-5 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Locker collections">
             {tabs.map((item) => {
               const Icon = item.icon;
               return (
@@ -225,7 +305,7 @@ export function LockerScreen({
                   role="tab"
                   aria-selected={tab === item.id}
                   onClick={() => setTab(item.id)}
-                  className={cn("flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 transition-colors", tab === item.id ? "border-gold/40 bg-gold/10 text-gold" : "border-white/8 bg-white/[0.025] text-muted-foreground")}
+                  className={cn("flex min-h-[58px] min-w-[76px] flex-1 flex-col items-center justify-center gap-1 rounded-xl border px-1 transition-colors", tab === item.id ? "border-gold/40 bg-gold/10 text-gold" : "border-white/8 bg-white/[0.025] text-muted-foreground")}
                 >
                   <Icon className="h-3.5 w-3.5" />
                   <span className="max-w-full truncate text-[10px] font-semibold">{item.label} <span className="opacity-65">{item.count}</span></span>
@@ -277,8 +357,12 @@ export function LockerScreen({
               <div className="flex items-center justify-between gap-3"><div className="label-hw text-white/52">Vault Results</div><div className="text-[11px] tabular-nums text-gold">{globalSearchCount}</div></div>
               {visibleSongs.map((song) => <LockerSongCard key={`search-${song.id}`} song={song} takes={takesForSong(song)} {...liveSongState(song)} onResume={() => onResumeSong(song)} onPrepare={() => onPrepareSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
               {visibleHooks.map((hook) => <LockerHookCard key={`search-${hook.id}`} hook={hook} onUse={() => onUseHook(hook)} onRemove={() => onRemove("hooks", hook.id)} />)}
-              {visibleStarterBeats.map((beat) => <StarterBeatCard key={`search-starter-${beat.id}`} beat={beat} onUse={() => onUseStarterBeat(beat)} />)}
-              {visibleBeats.map((beat) => <LockerBeatCard key={`search-${beat.id}`} beat={beat} onUse={() => onUseBeat(beat)} onRemove={() => onRemove("beats", beat.id)} />)}
+              {visibleStarterBeats.map((beat) => <StarterBeatCard key={`search-starter-${beat.id}`} beat={beat} {...starterPreviewProps(beat)} onUse={() => { stopPreview(); onUseStarterBeat(beat); }} />)}
+              {visibleBeats.map((beat) => <LockerBeatCard key={`search-${beat.id}`} beat={beat} {...beatPreviewProps(beat)} onUse={() => { stopPreview(); onUseBeat(beat); }} onRemove={() => onRemove("beats", beat.id)} />)}
+              {visibleVocals.map((take) => {
+                const previewId = `vocal:${take.id}`;
+                return <LockerVocalCard key={`search-vocal-${take.id}`} take={take} songTitle={songTitleForTake(take)} previewing={previewingId === previewId} previewProgress={previewingId === previewId ? previewProgress : 0} onPreview={() => void togglePreview(previewId, take.signed_url, take.duration_seconds)} />;
+              })}
               {visibleUnlocks.map((unlock) => <LockerOwnedCard key={`search-${unlock.id}`} unlock={unlock} />)}
               {globalSearchCount === 0 && <LockerEmpty title="Nothing in your Vault matches." body="Try a title, producer, mood, room, license, or saved date." />}
             </div>
@@ -299,15 +383,21 @@ export function LockerScreen({
               {tab === "hooks" && visibleHooks.length === 0 && <LockerEmpty title={normalizedQuery ? "No hooks match." : "No hooks saved yet."} body="Capture the lines worth returning to, then reuse them in any session." actionLabel="Write a Hook" onAction={onGoToStudio} />}
 
               {tab === "beats" && visibleStarterBeats.length > 0 && <div className="flex items-center justify-between gap-3 px-1"><div className="label-hw text-gold/75">Included with RapWriter</div><div className="text-[10px] text-muted-foreground">Full session use</div></div>}
-              {tab === "beats" && displayedStarterBeats.map((beat) => <StarterBeatCard key={beat.id} beat={beat} onUse={() => onUseStarterBeat(beat)} />)}
+              {tab === "beats" && displayedStarterBeats.map((beat) => <StarterBeatCard key={beat.id} beat={beat} {...starterPreviewProps(beat)} onUse={() => { stopPreview(); onUseStarterBeat(beat); }} />)}
               {tab === "beats" && beatFilter === "all" && visibleStarterBeats.length > displayedStarterBeats.length && (
                 <button type="button" onClick={() => setBeatFilter("included")} className="min-h-11 w-full rounded-xl border border-gold/25 bg-gold/8 text-xs font-semibold text-gold">
                   See all {visibleStarterBeats.length} included beats
                 </button>
               )}
               {tab === "beats" && visibleBeats.length > 0 && visibleStarterBeats.length > 0 && <div className="px-1 pt-2 label-hw text-white/45">Saved and licensed</div>}
-              {tab === "beats" && visibleBeats.map((beat) => <LockerBeatCard key={beat.id} beat={beat} onUse={() => onUseBeat(beat)} onRemove={() => onRemove("beats", beat.id)} />)}
+              {tab === "beats" && visibleBeats.map((beat) => <LockerBeatCard key={beat.id} beat={beat} {...beatPreviewProps(beat)} onUse={() => { stopPreview(); onUseBeat(beat); }} onRemove={() => onRemove("beats", beat.id)} />)}
               {tab === "beats" && visibleBeats.length === 0 && visibleStarterBeats.length === 0 && <LockerEmpty title={normalizedQuery ? "No beats match." : "No beats saved yet."} body="Favorite a beat in Studio Store and keep the pocket close." actionLabel="Browse Beats" onAction={onGoToMarket} />}
+
+              {tab === "vocals" && visibleVocals.map((take) => {
+                const previewId = `vocal:${take.id}`;
+                return <LockerVocalCard key={take.id} take={take} songTitle={songTitleForTake(take)} previewing={previewingId === previewId} previewProgress={previewingId === previewId ? previewProgress : 0} onPreview={() => void togglePreview(previewId, take.signed_url, take.duration_seconds)} />;
+              })}
+              {tab === "vocals" && visibleVocals.length === 0 && <LockerEmpty title="No saved vocals yet." body="Choose Vocals only on the writing pad, record a take, and keep it here for playback." actionLabel="Open Studio" onAction={onGoToStudio} />}
 
               {tab === "purchases" && (
                   <>
@@ -326,6 +416,7 @@ export function LockerScreen({
                 )}
             </div>
           )}
+          {previewError && <div className="mt-3 rounded-xl border border-rec/25 bg-rec/10 p-3 text-xs text-rec">{previewError}</div>}
           <PrivateBeatImportSheet open={importOpen} onClose={() => setImportOpen(false)} onImport={onImportBeat} />
         </>
       )}

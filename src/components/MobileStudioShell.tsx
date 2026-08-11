@@ -83,7 +83,7 @@ import { useBoothExport } from "@/components/studio/state/use-booth-export";
 import { useVersionHistory } from "@/components/studio/state/use-version-history";
 import { useBeatPlayback } from "@/components/studio/state/use-beat-playback";
 import { useMarketplaceFeed } from "@/components/studio/state/use-marketplace-feed";
-import { useRoughTake } from "@/components/studio/state/use-rough-take";
+import { useRoughTake, type RecordingMode } from "@/components/studio/state/use-rough-take";
 import { useSheetStack } from "@/components/studio/state/use-sheet-stack";
 import { useStudioEnvironment } from "@/components/studio/state/use-studio-environment";
 import { useProducerPass } from "@/components/studio/state/use-producer-pass";
@@ -235,6 +235,7 @@ export function MobileStudioShell() {
     analyzing: roughTakeAnalyzing,
     analysis: roughTakeAnalysis,
   } = take.state;
+  const [recordingMode, setRecordingMode] = useState<RecordingMode>("with_beat");
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const [newSongTitle, setNewSongTitle] = useState("");
   const [newSongStartSection, setNewSongStartSection] = useState("Hook");
@@ -1065,20 +1066,25 @@ export function MobileStudioShell() {
     }
   };
 
-  const startRecording = async (resume?: { beat: SelectedBeat; beatPosition: number }) => {
+  const startRecording = async (resume?: { beat: SelectedBeat | null; beatPosition: number; recordingMode: RecordingMode }) => {
     stopStudioAir();
-    const recordingBeat = resume?.beat ?? selectedBeat;
-    if (resume) {
+    const nextRecordingMode = resume?.recordingMode ?? recordingMode;
+    const recordingBeat = nextRecordingMode === "with_beat" ? (resume?.beat ?? selectedBeat) : null;
+    if (nextRecordingMode === "vocals_only") {
+      stopBeatPreview({ reset: false });
+    } else if (resume && recordingBeat) {
       stopBeatPreview({ reset: false });
       if (recordingBeat.id !== selectedBeat.id) selectBeatKeepingPreview(recordingBeat);
       seekTo(resume.beatPosition);
     }
     await take.startRecording({
+      recordingMode: nextRecordingMode,
       captureBeat: () => ({
-        beat: { ...recordingBeat },
-        beatPosition: resume?.beatPosition ?? Math.max(0, positionSeconds()),
+        beat: recordingBeat ? { ...recordingBeat } : null,
+        beatPosition: recordingBeat ? (resume?.beatPosition ?? Math.max(0, positionSeconds())) : 0,
       }),
       beforeStart: async (beatAtStart) => {
+        if (!beatAtStart) return;
         if (playing && !resume) return;
         try {
           await startBeatPreview(beatAtStart);
@@ -1090,13 +1096,19 @@ export function MobileStudioShell() {
   };
 
   const continueRoughTake = (takeOffsetSeconds: number) => {
+    if (take.state.recordingMode === "vocals_only") {
+      setRecordingMode("vocals_only");
+      void startRecording({ beat: null, beatPosition: 0, recordingMode: "vocals_only" });
+      return;
+    }
     const recordingBeat = roughTakeBeat ?? selectedBeat;
     const beatPosition = getTakeResumeBeatTime(
       roughTakeBeatPosition,
       takeOffsetSeconds,
       getBeatDurationSeconds(recordingBeat),
     );
-    void startRecording({ beat: recordingBeat, beatPosition });
+    setRecordingMode("with_beat");
+    void startRecording({ beat: recordingBeat, beatPosition, recordingMode: "with_beat" });
   };
 
   const toggleRecording = () => {
@@ -1167,8 +1179,8 @@ export function MobileStudioShell() {
         sectionName: section.name,
         durationSeconds: roughTakeDuration,
         analysis: roughTakeAnalysis,
-        beat: roughTakeBeat ?? take.recordBeatRef.current ?? selectedBeat,
-        beatPositionSeconds: roughTakeBeatPosition || take.recordBeatPositionRef.current,
+        beat: take.state.recordingMode === "vocals_only" ? null : (roughTakeBeat ?? take.recordBeatRef.current ?? selectedBeat),
+        beatPositionSeconds: take.state.recordingMode === "vocals_only" ? 0 : (roughTakeBeatPosition || take.recordBeatPositionRef.current),
       });
       take.saveSucceeded();
     } catch (err) {
@@ -1466,6 +1478,7 @@ export function MobileStudioShell() {
                 roughTakeBeat={roughTakeBeat}
                 roughTakeBeatPosition={roughTakeBeatPosition}
                 recording={recording}
+                recordingMode={recordingMode}
                 recordingSeconds={recordingSeconds}
                 recordError={recordError}
                 onDeleteRoughTake={deleteRoughTake}
@@ -1494,6 +1507,7 @@ export function MobileStudioShell() {
                 }}
                 onSaveTitle={() => void saveSongTitle()}
                 onToggleRecording={toggleRecording}
+                onRecordingModeChange={setRecordingMode}
                 onSetActiveSection={setActiveSection}
                 onToggleBeat={toggleBeatPlayback}
                 onSeekBeat={seekBeatPlayback}
@@ -1731,6 +1745,7 @@ export function MobileStudioShell() {
             padActions={padActions}
             playing={playing}
             recording={recording}
+            recordingMode={recordingMode}
             recordingSeconds={recordingSeconds}
             roughTakeUrl={roughTakeUrl}
             roughTakeDuration={roughTakeDuration}
@@ -1754,6 +1769,7 @@ export function MobileStudioShell() {
             onCommitBeatSeek={queueUrgentSessionSync}
             onChangeBeat={() => openSheet("beatSwitcher")}
             onToggleRecording={toggleRecording}
+            onRecordingModeChange={setRecordingMode}
             onDeleteRoughTake={deleteRoughTake}
             onSaveRoughTake={saveRoughTake}
             onContinueRoughTake={continueRoughTake}

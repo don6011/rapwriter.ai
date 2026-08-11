@@ -18,6 +18,7 @@ import type { BeatIntelligence, BoothReadyResult, EnvironmentIntelligence, PadAc
 import { cn } from "@/lib/utils";
 import { Check, ChevronDown, ChevronRight, CloudOff, FolderPlus, Headphones, Pencil, X } from "lucide-react";
 import { useState } from "react";
+import type { RecordingMode } from "@/components/studio/state/use-rough-take";
 
 export function StudioScreen({
   completionPct,
@@ -30,6 +31,7 @@ export function StudioScreen({
   roughTakeBeat,
   roughTakeBeatPosition,
   recording,
+  recordingMode,
   recordingSeconds,
   recordError,
   onDeleteRoughTake,
@@ -54,6 +56,7 @@ export function StudioScreen({
   onCancelTitleEdit,
   onSaveTitle,
   onToggleRecording,
+  onRecordingModeChange,
   onSetActiveSection,
   onToggleBeat,
   onSeekBeat,
@@ -89,6 +92,7 @@ export function StudioScreen({
   roughTakeBeat: SelectedBeat | null;
   roughTakeBeatPosition: number;
   recording: boolean;
+  recordingMode: RecordingMode;
   recordingSeconds: number;
   recordError: string | null;
   onDeleteRoughTake: () => void;
@@ -113,6 +117,7 @@ export function StudioScreen({
   onCancelTitleEdit: () => void;
   onSaveTitle: () => void;
   onToggleRecording: () => void;
+  onRecordingModeChange: (mode: RecordingMode) => void;
   onSetActiveSection: (index: number) => void;
   onToggleBeat: () => void;
   onSeekBeat: (seconds: number) => void;
@@ -312,6 +317,7 @@ export function StudioScreen({
               beat={selectedBeat}
               playing={playing}
               recording={recording}
+              recordingMode={recordingMode}
               compact={false}
               currentTime={beatCurrentTime}
               duration={beatDuration}
@@ -321,6 +327,7 @@ export function StudioScreen({
               onSeekCommit={onCommitBeatSeek}
               onChangeBeat={onChangeBeat}
               onToggleRecording={onToggleRecording}
+              onRecordingModeChange={onRecordingModeChange}
             />
             <RoughTakeStrip
               compact

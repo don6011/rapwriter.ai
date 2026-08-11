@@ -4,11 +4,11 @@ import { PrivateBeatImportSheet } from "@/components/studio/sheets/PrivateBeatIm
 import type { BeatLockerRow, PrivateBeatImportInput } from "@/hooks/use-rapwriter-data";
 import { resolveBeatPreviewUrl } from "@/lib/beat-playback";
 import type { StarterBeat } from "@/lib/starter-beats";
-import { getBeatDurationSeconds, toBeatSnapshot } from "@/lib/studio/beat-snapshot";
+import { beatSnapshotFromLockerBeat, beatSnapshotFromStarterBeat, getBeatDurationSeconds, toBeatSnapshot } from "@/lib/studio/beat-snapshot";
 import { trackMarketplaceEvent } from "@/lib/studio/telemetry";
 import type { MarketplaceBeat, SelectedBeat } from "@/lib/studio/types";
 import { cn } from "@/lib/utils";
-import { Check, Headphones, Pause, Play, Upload, X } from "lucide-react";
+import { Headphones, Pause, Play, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export function BeatSwitcherSheet({
@@ -79,8 +79,8 @@ export function BeatSwitcherSheet({
 
   useEffect(() => stopSample, [stopSample]);
 
-  const toggleMarketplaceSample = async (beat: MarketplaceBeat) => {
-    if (previewingBeatId === beat.id) {
+  const toggleSample = async (previewId: string, snapshot: SelectedBeat, limitSeconds?: number) => {
+    if (previewingBeatId === previewId) {
       stopSample();
       return;
     }
@@ -88,7 +88,6 @@ export function BeatSwitcherSheet({
     stopSample();
     onPreviewStart();
     setPreviewError(null);
-    const snapshot = toBeatSnapshot(beat);
     const previewUrl = resolveBeatPreviewUrl(snapshot);
     if (!previewUrl) {
       setPreviewError("This producer has not added a playable preview yet.");
@@ -96,9 +95,10 @@ export function BeatSwitcherSheet({
     }
 
     const audio = new Audio(previewUrl);
-    const sampleLength = Math.max(1, Math.min(30, getBeatDurationSeconds(snapshot)));
+    const fullDuration = getBeatDurationSeconds(snapshot);
+    const sampleLength = Math.max(1, limitSeconds ? Math.min(limitSeconds, fullDuration) : fullDuration);
     previewAudioRef.current = audio;
-    setPreviewingBeatId(beat.id);
+    setPreviewingBeatId(previewId);
     audio.ontimeupdate = () => {
       const elapsed = Math.min(sampleLength, audio.currentTime);
       setPreviewProgress((elapsed / sampleLength) * 100);
@@ -112,12 +112,14 @@ export function BeatSwitcherSheet({
 
     try {
       await audio.play();
-      trackMarketplaceEvent("beat_play", beat.id);
+      trackMarketplaceEvent("beat_play", snapshot.id);
     } catch {
       stopSample();
       setPreviewError("Tap again to start this preview.");
     }
   };
+
+  const toggleMarketplaceSample = (beat: MarketplaceBeat) => toggleSample(`market:${beat.id}`, toBeatSnapshot(beat), 30);
 
   if (!open) return null;
 
@@ -191,53 +193,53 @@ export function BeatSwitcherSheet({
               )}
               {visibleStarterBeats.map((beat) => {
                 const active = currentBeat.id === `starter-beat-${beat.id}`;
+                const previewId = `starter:${beat.id}`;
+                const previewing = previewingBeatId === previewId;
                 return (
-                  <button
+                  <div
                     key={beat.id}
-                    type="button"
-                    onClick={() => onUseStarterBeat(beat)}
                     className={cn(
                       "flex min-h-[68px] w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
                       active ? "border-gold/40 bg-gold/10" : "border-white/10 bg-white/[0.025] hover:border-gold/25",
                     )}
                   >
-                    <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full border", active ? "border-gold/45 bg-gold text-black" : "border-gold/25 bg-gold/8 text-gold")}>
-                      {active ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" fill="currentColor" />}
-                    </span>
+                    <button type="button" onClick={() => void toggleSample(previewId, beatSnapshotFromStarterBeat(beat))} className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full border", previewing ? "border-gold bg-gold text-black" : "border-gold/25 bg-gold/8 text-gold")} aria-label={previewing ? `Pause ${beat.title}` : `Preview ${beat.title}`}>
+                      {previewing ? <Pause className="h-4 w-4" fill="currentColor" /> : <Play className="h-4 w-4" fill="currentColor" />}
+                    </button>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold">{beat.title}</span>
                       <span className="mt-1 block truncate text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                         {[beat.producer, beat.genre, beat.featured ? "Featured" : "Included"].filter(Boolean).join(" - ")}
                       </span>
                     </span>
-                    <span className="shrink-0 text-[10px] font-semibold text-gold">{active ? "Active" : "Use"}</span>
-                  </button>
+                    <button type="button" disabled={active} onClick={() => { stopSample(); onUseStarterBeat(beat); }} className={cn("min-h-9 shrink-0 rounded-lg px-2.5 text-[10px] font-semibold", active ? "text-emerald-300" : "border border-gold/25 bg-gold/8 text-gold")}>{active ? "Active" : "Use"}</button>
+                  </div>
                 );
               })}
               {starterBeats.length > 0 && lockerBeats.length > 0 && <div className="px-1 pb-1 pt-3 label-hw text-white/45">Saved and licensed</div>}
               {lockerBeats.map((beat) => {
                 const active = currentBeat.id === beat.beat_id;
+                const previewId = `locker:${beat.id}`;
+                const previewing = previewingBeatId === previewId;
                 return (
-                  <button
+                  <div
                     key={beat.id}
-                    type="button"
-                    onClick={() => onUseBeat(beat)}
                     className={cn(
                       "flex min-h-[68px] w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
                       active ? "border-gold/40 bg-gold/10" : "border-white/10 bg-white/[0.025] hover:border-gold/25",
                     )}
                   >
-                    <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full border", active ? "border-gold/45 bg-gold text-black" : "border-gold/25 bg-gold/8 text-gold")}>
-                      {active ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" fill="currentColor" />}
-                    </span>
+                    <button type="button" onClick={() => void toggleSample(previewId, beatSnapshotFromLockerBeat(beat))} className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full border", previewing ? "border-gold bg-gold text-black" : "border-gold/25 bg-gold/8 text-gold")} aria-label={previewing ? `Pause ${beat.title}` : `Preview ${beat.title}`}>
+                      {previewing ? <Pause className="h-4 w-4" fill="currentColor" /> : <Play className="h-4 w-4" fill="currentColor" />}
+                    </button>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold">{beat.title}</span>
                       <span className="mt-1 block truncate text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                         {[beat.producer, beat.bpm ? `${beat.bpm} BPM` : null, beat.license === "Favorite" ? "Saved" : beat.license].filter(Boolean).join(" - ")}
                       </span>
                     </span>
-                    <span className="shrink-0 text-[10px] font-semibold text-gold">{active ? "Active" : "Use"}</span>
-                  </button>
+                    <button type="button" disabled={active} onClick={() => { stopSample(); onUseBeat(beat); }} className={cn("min-h-9 shrink-0 rounded-lg px-2.5 text-[10px] font-semibold", active ? "text-emerald-300" : "border border-gold/25 bg-gold/8 text-gold")}>{active ? "Active" : "Use"}</button>
+                  </div>
                 );
               })}
               {starterBeats.length === 0 && lockerBeats.length === 0 && (
@@ -254,7 +256,7 @@ export function BeatSwitcherSheet({
             <div className="space-y-2">
               {marketplaceBeats.slice(0, 12).map((beat) => {
                 const ownedBeat = lockerByBeatId.get(beat.id);
-                const previewing = previewingBeatId === beat.id;
+                const previewing = previewingBeatId === `market:${beat.id}`;
                 return (
                   <div key={beat.id} className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.025]">
                     <div className="flex min-h-[72px] items-center gap-3 px-3 py-2.5">

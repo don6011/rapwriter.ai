@@ -16,6 +16,7 @@ import type { BoothReadyResult, EnvironmentIntelligence, PadActions, ProducerAct
 import { cn } from "@/lib/utils";
 import { Briefcase, ChevronRight, CloudOff, Download, FolderPlus, Headphones, Heart, History, LockKeyhole, Pencil, Save, Sparkles, WandSparkles, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { RecordingMode } from "@/components/studio/state/use-rough-take";
 
 export function WriterScreen({
   readinessLaunchToken,
@@ -27,6 +28,7 @@ export function WriterScreen({
   padActions,
   playing,
   recording,
+  recordingMode,
   recordingSeconds,
   roughTakeUrl,
   roughTakeDuration,
@@ -50,6 +52,7 @@ export function WriterScreen({
   onCommitBeatSeek,
   onChangeBeat,
   onToggleRecording,
+  onRecordingModeChange,
   onDeleteRoughTake,
   onSaveRoughTake,
   onContinueRoughTake,
@@ -72,6 +75,7 @@ export function WriterScreen({
   padActions: PadActions;
   playing: boolean;
   recording: boolean;
+  recordingMode: RecordingMode;
   recordingSeconds: number;
   roughTakeUrl: string | null;
   roughTakeDuration: number;
@@ -95,6 +99,7 @@ export function WriterScreen({
   onCommitBeatSeek: () => void;
   onChangeBeat: () => void;
   onToggleRecording: () => void;
+  onRecordingModeChange: (mode: RecordingMode) => void;
   onDeleteRoughTake: () => void;
   onSaveRoughTake: () => void;
   onContinueRoughTake: (takeOffsetSeconds: number) => void;
@@ -261,6 +266,7 @@ export function WriterScreen({
             beat={selectedBeat}
             playing={playing}
             recording={recording}
+            recordingMode={recordingMode}
             compact={transportCompact}
             currentTime={beatCurrentTime}
             duration={beatDuration}
@@ -270,6 +276,7 @@ export function WriterScreen({
             onSeekCommit={onCommitBeatSeek}
             onChangeBeat={onChangeBeat}
             onToggleRecording={onToggleRecording}
+            onRecordingModeChange={onRecordingModeChange}
           />
           <RoughTakeStrip
             recording={recording}

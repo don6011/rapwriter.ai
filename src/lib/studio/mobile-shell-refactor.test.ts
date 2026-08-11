@@ -33,6 +33,7 @@ describe("mobile studio shell refactor contracts", () => {
       duration: 12,
       beat: EMPTY_BEAT,
       beatPosition: 34,
+      recordingMode: "with_beat",
       saved: true,
       saving: false,
       analyzing: false,
@@ -61,7 +62,31 @@ describe("mobile studio shell refactor contracts", () => {
     expect(strip).toContain("Continue at {formatDuration(resumeBeatTime)}");
     expect(strip).toContain("onContinue(resumeOffset)");
     expect(shell).toContain("getTakeResumeBeatTime(");
-    expect(shell).toContain("void startRecording({ beat: recordingBeat, beatPosition })");
+    expect(shell).toContain('void startRecording({ beat: recordingBeat, beatPosition, recordingMode: "with_beat" })');
+  });
+
+  test("keeps beat preview separate from selecting a beat", () => {
+    const locker = readFileSync(new URL("../../components/studio/screens/LockerScreen.tsx", import.meta.url), "utf8");
+    const switcher = readFileSync(new URL("../../components/studio/sheets/BeatSwitcherSheet.tsx", import.meta.url), "utf8");
+
+    expect(locker).toContain("resolveBeatPreviewUrl(snapshot)");
+    expect(locker).toContain("onPreview={() => void togglePreview");
+    expect(switcher).toContain("toggleSample(previewId, beatSnapshotFromStarterBeat(beat))");
+    expect(switcher).toContain("stopSample(); onUseStarterBeat(beat);");
+    expect(switcher).toContain("stopSample(); onUseBeat(beat);");
+  });
+
+  test("supports explicit vocal-only recording and a vocal Locker collection", () => {
+    const shell = readFileSync(new URL("../../components/MobileStudioShell.tsx", import.meta.url), "utf8");
+    const transport = readFileSync(new URL("../../components/studio/panels/PadTransport.tsx", import.meta.url), "utf8");
+    const locker = readFileSync(new URL("../../components/studio/screens/LockerScreen.tsx", import.meta.url), "utf8");
+
+    expect(shell).toContain('nextRecordingMode === "vocals_only"');
+    expect(shell).toContain('take.state.recordingMode === "vocals_only" ? null');
+    expect(transport).toContain('"Vocals only"');
+    expect(transport).toContain('{recording ? "Stop" : "Start"}');
+    expect(locker).toContain('{ id: "vocals", label: "Vocals"');
+    expect(locker).toContain("<LockerVocalCard");
   });
 
   test("restores an owner-scoped draft and active section after storage reload", () => {

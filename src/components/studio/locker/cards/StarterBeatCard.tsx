@@ -3,19 +3,36 @@
 import type { StarterBeat } from "@/lib/starter-beats";
 import { formatDuration } from "@/lib/studio/format";
 import { starterBeatArt } from "@/lib/studio/locker-snapshot";
-import { Headphones, Play } from "lucide-react";
+import { Headphones, Pause, Play } from "lucide-react";
 
-export function StarterBeatCard({ beat, onUse }: { beat: StarterBeat; onUse: () => void }) {
+export function StarterBeatCard({
+  beat,
+  previewing,
+  previewProgress,
+  onPreview,
+  onUse,
+}: {
+  beat: StarterBeat;
+  previewing: boolean;
+  previewProgress: number;
+  onPreview: () => void;
+  onUse: () => void;
+}) {
   return (
     <article className="rounded-2xl border border-gold/20 bg-[#111113] p-3">
       <div className="flex gap-3">
-        <div
+        <button
+          type="button"
+          onClick={onPreview}
           className="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-xl border border-gold/25 bg-cover bg-center"
           style={{ background: starterBeatArt(beat) }}
+          aria-label={previewing ? `Pause ${beat.title}` : `Preview ${beat.title}`}
         >
-          <Headphones className="h-5 w-5 text-gold" />
-          <div className="absolute inset-x-2 bottom-2 h-0.5 rounded-full bg-gold/70" />
-        </div>
+          <span className="grid h-9 w-9 place-items-center rounded-full border border-gold/30 bg-black/65 text-gold backdrop-blur-sm">
+            {previewing ? <Pause className="h-4 w-4 fill-current" /> : <Headphones className="h-4 w-4" />}
+          </span>
+          <span className="absolute inset-x-2 bottom-2 h-0.5 overflow-hidden rounded-full bg-white/20"><span className="block h-full bg-gold transition-[width] duration-150" style={{ width: `${previewProgress}%` }} /></span>
+        </button>
         <div className="min-w-0 flex-1 py-1">
           <div className="flex items-center justify-between gap-2">
             <span className="label-hw text-gold/80">{beat.collection ?? "RapWriter Originals"}</span>
