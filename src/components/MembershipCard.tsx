@@ -215,6 +215,11 @@ export function MembershipCard({ initialMembership = null, onOpenStudio, onOpenM
                 ]}
               >
                 <ArtistUsage workspace={artist} />
+                {artist.provider === "stripe" && artist.cancel_at_period_end && (
+                  <p className="mt-3 rounded-xl border border-gold/20 bg-gold/[0.06] px-3 py-2.5 text-xs leading-relaxed text-gold">
+                    Pro stays active through {membershipDate(artist.renews_at)}. It will not renew.
+                  </p>
+                )}
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <ActionButton label="Start Writer Flow" onClick={onOpenStudio} />
                   <ActionButton label="Browse beats" onClick={onOpenMarket} subtle />
@@ -287,6 +292,11 @@ function campaignClaimMessage(code?: string) {
   if (code === "campaign_full") return "All founding spots have been claimed.";
   if (code === "campaign_expired" || code === "campaign_inactive") return "This founding offer is no longer active.";
   return "Promotional access could not be claimed.";
+}
+
+function membershipDate(value: string | null) {
+  if (!value) return "the end of this billing period";
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 }
 
 function MembershipTab({ active, icon: Icon, label, onClick }: { active: boolean; icon: typeof Mic2; label: string; onClick: () => void }) {
