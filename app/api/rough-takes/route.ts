@@ -1,19 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api/auth";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
+import { MAX_ROUGH_TAKE_BYTES, normalizeRoughTakeMimeType, roughTakeExtension } from "@/lib/rough-take-upload";
 import { roughTakeAnalysisSchema, roughTakeUploadSchema } from "@/lib/schemas";
 
 const BUCKET = "rough-takes";
-const MAX_ROUGH_TAKE_BYTES = 50 * 1024 * 1024;
-const AUDIO_MIME_TYPES = new Set(["audio/webm", "audio/mp4", "audio/mpeg", "audio/wav", "audio/ogg"]);
-
-function extensionForMime(mimeType: string) {
-  if (mimeType.includes("mp4")) return "m4a";
-  if (mimeType.includes("mpeg")) return "mp3";
-  if (mimeType.includes("wav")) return "wav";
-  if (mimeType.includes("ogg")) return "ogg";
-  return "webm";
-}
 
 async function signedUrl(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"], path: string) {
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60);
@@ -86,7 +77,8 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const file = formData.get("file");
   if (!(file instanceof File)) return NextResponse.json({ error: "Rough take file is required." }, { status: 400 });
-  if (file.size < 1 || file.size > MAX_ROUGH_TAKE_BYTES || !AUDIO_MIME_TYPES.has(file.type)) {
+  const mimeType = normalizeRoughTakeMimeType(file.type);
+  if (file.size < 1 || file.size > MAX_ROUGH_TAKE_BYTES || !mimeType) {
     return NextResponse.json({ error: "Rough takes must be valid audio files under 50 MB." }, { status: 400 });
   }
 
@@ -147,8 +139,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Rough take analysis is invalid." }, { status: 400 });
     }
   }
-  const mimeType = file.type;
-  const path = `${user.id}/${songId ?? "unsorted"}/${crypto.randomUUID()}.${extensionForMime(mimeType)}`;
+  const path = `${user.id}/${songId ?? "unsorted"}/${crypto.randomUUID()}.${roughTakeExtension(mimeType)}`;
 
   const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, file, {
     contentType: mimeType,
