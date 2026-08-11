@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { isAppRole, type AppRole } from "@/lib/access-control";
+import { AUTH_RECOVERY_EVENT, recoveryModeUrl, recoverySessionFromHash } from "@/lib/auth-recovery-url";
 import { createClient } from "@/lib/supabase/client";
 
 const SESSION_REQUEST_TIMEOUT_MS = 8_000;
@@ -96,6 +97,23 @@ export function useAuth() {
 
     void (async () => {
       try {
+        const recoverySession = recoverySessionFromHash(window.location.hash);
+        if (recoverySession) {
+          const { error: recoveryError } = await supabase.auth.setSession({
+            access_token: recoverySession.accessToken,
+            refresh_token: recoverySession.refreshToken,
+          });
+
+          window.history.replaceState({}, "", recoveryModeUrl(window.location.href));
+          window.dispatchEvent(new Event(AUTH_RECOVERY_EVENT));
+
+          if (recoveryError) {
+            setError("This recovery link is invalid or expired. Request a new password reset.");
+            setUser(null);
+            return;
+          }
+        }
+
         const { data, error: userError } = await Promise.race([
           supabase.auth.getSession(),
           rejectAfter(SESSION_REQUEST_TIMEOUT_MS, "Session restore timed out."),

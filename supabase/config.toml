@@ -1,1 +1,24 @@
 project_id = "ouhehttmpjrnwmhteqbl"
+
+[auth]
+site_url = "https://rapwriter.ai"
+additional_redirect_urls = [
+  "https://rapwriter.ai/api/auth/callback",
+  "https://www.rapwriter.ai/api/auth/callback",
+  "http://localhost:3000/api/auth/callback",
+  "http://127.0.0.1:3000/api/auth/callback",
+  "http://localhost:3024/api/auth/callback",
+  "http://127.0.0.1:3024/api/auth/callback",
+]
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+enable_confirmations = true
+max_frequency = "1m0s"
+otp_length = 8
+
+[storage.vector]
+enabled = false

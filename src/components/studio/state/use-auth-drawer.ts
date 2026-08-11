@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { useRapWriterData } from "@/hooks/use-rapwriter-data";
+import { AUTH_RECOVERY_EVENT } from "@/lib/auth-recovery-url";
 
 type Workspace = ReturnType<typeof useRapWriterData>;
 
@@ -36,13 +37,22 @@ export function useAuthDrawer({
   }, []);
 
   useEffect(() => {
+    const activateRecovery = () => {
+      setAuthRecoveryMode(true);
+      setAuthOpen(true);
+      setAuthNotice("Choose a new password for your RapWriter account.");
+    };
+
     const url = new URL(window.location.href);
-    if (url.searchParams.get("auth_mode") !== "recovery") return;
-    setAuthRecoveryMode(true);
-    setAuthOpen(true);
-    setAuthNotice("Choose a new password for your RapWriter account.");
-    url.searchParams.delete("auth_mode");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    const hash = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
+    if (url.searchParams.get("auth_mode") === "recovery" || hash.get("type") === "recovery") {
+      activateRecovery();
+      url.searchParams.delete("auth_mode");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+
+    window.addEventListener(AUTH_RECOVERY_EVENT, activateRecovery);
+    return () => window.removeEventListener(AUTH_RECOVERY_EVENT, activateRecovery);
   }, []);
 
   const requestAuth = useCallback((message = "Sign in to sync your studio.") => {
