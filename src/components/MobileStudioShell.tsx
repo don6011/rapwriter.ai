@@ -1250,6 +1250,12 @@ export function MobileStudioShell() {
       requestAuth("Sign in to freeze a Booth Ready version and download studio files.");
       return;
     }
+    if (membership?.artist?.entitlements.premium_exports !== true) {
+      setScreen("home");
+      setActiveNav("profile");
+      setSyncMessage("Export Song is included with RapWriter Pro");
+      return;
+    }
 
     boothExport.beginPrepare();
     try {
@@ -1315,6 +1321,12 @@ export function MobileStudioShell() {
   const openLockerBoothExport = (lockerSong: SongLockerRow) => {
     if (!user) {
       requestAuth("Sign in to export songs from your Locker.");
+      return;
+    }
+    if (membership?.artist?.entitlements.premium_exports !== true) {
+      setScreen("home");
+      setActiveNav("profile");
+      setSyncMessage("Export Song is included with RapWriter Pro");
       return;
     }
     if (!lockerSong.project_id || !lockerSong.song_id) {
@@ -1844,7 +1856,7 @@ export function MobileStudioShell() {
             closeSheet("boothExport");
             setScreen("home");
             setActiveNav("profile");
-            setSyncMessage("RapWriter Pro unlocks the full Booth package");
+            setSyncMessage("Export Song is included with RapWriter Pro");
           }}
         />
         {user && profile && !profile.role_onboarding_completed && (

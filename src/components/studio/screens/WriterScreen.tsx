@@ -14,7 +14,7 @@ import { getWritingMomentum } from "@/lib/studio/intelligence";
 import { mobileSections } from "@/lib/studio/sections";
 import type { BoothReadyResult, EnvironmentIntelligence, PadActions, ProducerActionControls, SelectedBeat, StudioDna, StudioPack } from "@/lib/studio/types";
 import { cn } from "@/lib/utils";
-import { Briefcase, ChevronRight, CloudOff, FolderPlus, Headphones, Heart, History, Pencil, Save, Sparkles, WandSparkles, X } from "lucide-react";
+import { Briefcase, ChevronRight, CloudOff, Download, FolderPlus, Headphones, Heart, History, LockKeyhole, Pencil, Save, Sparkles, WandSparkles, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export function WriterScreen({
@@ -125,6 +125,7 @@ export function WriterScreen({
   const hasPenView = artistMembership?.entitlements.full_pen_view === true;
   const hasHistory = artistMembership?.entitlements.version_history === true;
   const hasGhostwriter = artistMembership?.entitlements.ghostwriter === true;
+  const hasPremiumExports = artistMembership?.entitlements.premium_exports === true;
   let logicalBarNumber = 0;
   const editorRows = sectionText.split("\n").map((text) => ({
     text,
@@ -383,6 +384,25 @@ export function WriterScreen({
                 );
               })}
             </div>
+            <button
+              type="button"
+              onClick={() => signedIn && !hasPremiumExports ? onUpgrade() : onPrepareForBooth()}
+              className="mt-2 flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border border-gold/25 bg-gold/[0.07] px-4 text-left transition-colors hover:border-gold/45 hover:bg-gold/10"
+            >
+              <span className="inline-flex min-w-0 items-center gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-gold/25 bg-black/25 text-gold">
+                  <Download className="h-4 w-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-white">Export Song</span>
+                  <span className="mt-0.5 block text-[10px] text-muted-foreground">Lyrics, studio package, and rough take</span>
+                </span>
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-gold/25 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-gold">
+                {!hasPremiumExports && <LockKeyhole className="h-3 w-3" />}
+                {hasPremiumExports ? "Ready" : "Pro"}
+              </span>
+            </button>
           </MobileDrawer>
           <MobileDrawer title="Record Readiness" open={readinessOpen} onOpenChange={setReadinessOpen}>
             <BoothReadyPanel

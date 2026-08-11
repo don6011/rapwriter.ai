@@ -22,6 +22,12 @@ export async function GET(request: Request, context: RouteContext) {
   const format = formatSchema.safeParse(new URL(request.url).searchParams.get("format") ?? "json");
   if (!id.success || !format.success) return NextResponse.json({ error: "Export not found." }, { status: 404 });
 
+  try {
+    await requireMembershipEntitlement(supabase, user.id, "artist", "premium_exports");
+  } catch (membershipError) {
+    return membershipErrorResponse(membershipError);
+  }
+
   const { data, error } = await supabase
     .from("booth_exports")
     .select("id,project_id,song_id,session_id,rough_take_id,version_number,title,booth_score,completion_pct,total_bars,snapshot,created_at")
@@ -41,12 +47,6 @@ export async function GET(request: Request, context: RouteContext) {
   }
   if (format.data === "txt") {
     return downloadResponse(buildBoothLyricsText(record), "text/plain; charset=utf-8", `${stem}-lyrics.txt`);
-  }
-
-  try {
-    await requireMembershipEntitlement(supabase, user.id, "artist", "premium_exports");
-  } catch (membershipError) {
-    return membershipErrorResponse(membershipError);
   }
 
   if (format.data === "pdf") {

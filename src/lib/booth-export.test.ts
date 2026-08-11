@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { unzipSync } from "fflate";
+import { readFileSync } from "node:fs";
 import { buildBoothLyricsText, buildBoothPdf, buildBoothZip, type BoothExportRecord } from "./booth-export";
 
 const sample: BoothExportRecord = {
@@ -61,5 +62,16 @@ describe("Booth Ready export", () => {
     expect(names.some((name) => name.endsWith("-lyrics.txt"))).toBe(true);
     expect(names.some((name) => name.endsWith("-credits.txt"))).toBe(true);
     expect(names.some((name) => name.endsWith("-session.json"))).toBe(true);
+  });
+
+  test("keeps every export format behind RapWriter Pro", () => {
+    const createRoute = readFileSync(new URL("../../app/api/booth-exports/route.ts", import.meta.url), "utf8");
+    const downloadRoute = readFileSync(new URL("../../app/api/booth-exports/[id]/route.ts", import.meta.url), "utf8");
+    const writer = readFileSync(new URL("../components/studio/screens/WriterScreen.tsx", import.meta.url), "utf8");
+
+    expect(createRoute).toContain('requireMembershipEntitlement(supabase, user.id, "artist", "premium_exports")');
+    expect(downloadRoute.indexOf("requireMembershipEntitlement")).toBeLessThan(downloadRoute.indexOf('format.data === "txt"'));
+    expect(writer).toContain("Export Song");
+    expect(writer).toContain('hasPremiumExports ? "Ready" : "Pro"');
   });
 });

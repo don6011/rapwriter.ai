@@ -4,6 +4,7 @@ import { parseJson } from "@/lib/api/json";
 import { hasValidRequestOrigin } from "@/lib/api/origin";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
 import { boothExportCreateSchema, boothExportSnapshotSchema } from "@/lib/booth-export";
+import { membershipErrorResponse, requireMembershipEntitlement } from "@/lib/server/membership-access";
 
 export async function GET() {
   const { supabase, user, response } = await requireUser();
@@ -26,6 +27,11 @@ export async function POST(request: Request) {
 
   const { supabase, user, response } = await requireUser();
   if (response) return response;
+  try {
+    await requireMembershipEntitlement(supabase, user.id, "artist", "premium_exports");
+  } catch (membershipError) {
+    return membershipErrorResponse(membershipError);
+  }
   const rateLimit = await enforceRateLimit(request, {
     scope: "booth-export-create",
     limit: 30,
