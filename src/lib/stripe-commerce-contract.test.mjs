@@ -33,6 +33,7 @@ describe("Stripe commerce contract", () => {
     expect(membershipCard).toContain("artist.cancel_at_period_end");
     expect(membershipCard).toContain("Pro stays active through");
     expect(membershipCard).toContain("It will not renew.");
+    expect(membershipCard).toContain('timeZone: "UTC"');
   });
 
   test("keeps payout account mutation behind the service role", () => {

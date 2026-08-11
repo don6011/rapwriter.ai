@@ -296,7 +296,12 @@ function campaignClaimMessage(code?: string) {
 
 function membershipDate(value: string | null) {
   if (!value) return "the end of this billing period";
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(value));
 }
 
 function MembershipTab({ active, icon: Icon, label, onClick }: { active: boolean; icon: typeof Mic2; label: string; onClick: () => void }) {
