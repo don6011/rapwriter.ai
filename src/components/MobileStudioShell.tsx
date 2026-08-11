@@ -20,7 +20,7 @@ import {
   type MembershipAccessNotice,
 } from "@/lib/client/membership-access";
 import { consumePendingBeat, type Beat } from "@/lib/marketplace";
-import { resolveBeatPreviewUrl } from "@/lib/beat-playback";
+import { getTakeResumeBeatTime, resolveBeatPreviewUrl } from "@/lib/beat-playback";
 import {
   defaultStudioRoomId,
   resolveStudioRoomAccess,
@@ -33,6 +33,7 @@ import {
   beatSnapshotFromSong,
   beatSnapshotFromStarterBeat,
   EMPTY_BEAT,
+  getBeatDurationSeconds,
   getStudioRoomProductId,
   lockerSnapshotBeat,
   toBeatSnapshot,
@@ -1064,15 +1065,21 @@ export function MobileStudioShell() {
     }
   };
 
-  const startRecording = async () => {
+  const startRecording = async (resume?: { beat: SelectedBeat; beatPosition: number }) => {
     stopStudioAir();
+    const recordingBeat = resume?.beat ?? selectedBeat;
+    if (resume) {
+      stopBeatPreview({ reset: false });
+      if (recordingBeat.id !== selectedBeat.id) selectBeatKeepingPreview(recordingBeat);
+      seekTo(resume.beatPosition);
+    }
     await take.startRecording({
       captureBeat: () => ({
-        beat: { ...selectedBeat },
-        beatPosition: Math.max(0, positionSeconds()),
+        beat: { ...recordingBeat },
+        beatPosition: resume?.beatPosition ?? Math.max(0, positionSeconds()),
       }),
       beforeStart: async (beatAtStart) => {
-        if (playing) return;
+        if (playing && !resume) return;
         try {
           await startBeatPreview(beatAtStart);
         } catch {
@@ -1080,6 +1087,16 @@ export function MobileStudioShell() {
         }
       },
     });
+  };
+
+  const continueRoughTake = (takeOffsetSeconds: number) => {
+    const recordingBeat = roughTakeBeat ?? selectedBeat;
+    const beatPosition = getTakeResumeBeatTime(
+      roughTakeBeatPosition,
+      takeOffsetSeconds,
+      getBeatDurationSeconds(recordingBeat),
+    );
+    void startRecording({ beat: recordingBeat, beatPosition });
   };
 
   const toggleRecording = () => {
@@ -1455,6 +1472,7 @@ export function MobileStudioShell() {
                 roughTakeSaved={roughTakeSaved}
                 roughTakeSaving={roughTakeSaving}
                 onSaveRoughTake={saveRoughTake}
+                onContinueRoughTake={continueRoughTake}
                 activeSong={activeSong}
                 songTitleDraft={titleDraft}
                 titleEditing={titleEditing}
@@ -1738,6 +1756,7 @@ export function MobileStudioShell() {
             onToggleRecording={toggleRecording}
             onDeleteRoughTake={deleteRoughTake}
             onSaveRoughTake={saveRoughTake}
+            onContinueRoughTake={continueRoughTake}
             onPrepareForBooth={() => void openCurrentBoothExport()}
             studioPack={activeStudioPack}
             studioDna={studioDna}

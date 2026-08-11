@@ -50,6 +50,20 @@ describe("mobile studio shell refactor contracts", () => {
     expect(recording.error).toBeNull();
   });
 
+  test("lets a saved take scrub and continue from its matching beat position", () => {
+    const shell = readFileSync(new URL("../../components/MobileStudioShell.tsx", import.meta.url), "utf8");
+    const strip = readFileSync(new URL("../../components/studio/panels/RoughTakeStrip.tsx", import.meta.url), "utf8");
+    const waveform = readFileSync(new URL("../../components/studio/waveform/TakeWaveform.tsx", import.meta.url), "utf8");
+
+    expect(waveform).toContain('aria-label="Seek rough take"');
+    expect(waveform).toContain("onSeek(ratio * duration)");
+    expect(strip).toContain("onSeek={seekReview}");
+    expect(strip).toContain("Continue at {formatDuration(resumeBeatTime)}");
+    expect(strip).toContain("onContinue(resumeOffset)");
+    expect(shell).toContain("getTakeResumeBeatTime(");
+    expect(shell).toContain("void startRecording({ beat: recordingBeat, beatPosition })");
+  });
+
   test("restores an owner-scoped draft and active section after storage reload", () => {
     const values = new Map<string, string>();
     const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");

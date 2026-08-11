@@ -1,7 +1,7 @@
 "use client";
 
 import { TakeWaveform } from "@/components/studio/waveform/TakeWaveform";
-import { resolveBeatPreviewUrl } from "@/lib/beat-playback";
+import { getTakeResumeBeatTime, resolveBeatPreviewUrl } from "@/lib/beat-playback";
 import type { RoughTakeAnalysis } from "@/lib/booth-ready-v2";
 import { getBeatDurationSeconds } from "@/lib/studio/beat-snapshot";
 import { formatDuration } from "@/lib/studio/format";
@@ -25,6 +25,7 @@ export function RoughTakeStrip({
   compact = false,
   onDelete,
   onSave,
+  onContinue,
 }: {
   recording: boolean;
   recordingSeconds: number;
@@ -40,19 +41,24 @@ export function RoughTakeStrip({
   compact?: boolean;
   onDelete: () => void;
   onSave: () => void;
+  onContinue: (takeOffsetSeconds: number) => void;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const reviewBeatRef = useRef<HTMLAudioElement | null>(null);
   const [reviewPlaying, setReviewPlaying] = useState(false);
   const [reviewTime, setReviewTime] = useState(0);
+  const [resumeOffset, setResumeOffset] = useState(roughTakeDuration);
   const beatPreviewUrl = beat ? resolveBeatPreviewUrl(beat) : null;
+  const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
+  const resumeBeatTime = getTakeResumeBeatTime(beatStartTime, resumeOffset, beatDuration);
 
   useEffect(() => {
     audioRef.current?.pause();
     reviewBeatRef.current?.pause();
     setReviewPlaying(false);
     setReviewTime(0);
-  }, [beat?.id, roughTakeUrl]);
+    setResumeOffset(roughTakeDuration);
+  }, [beat?.id, roughTakeDuration, roughTakeUrl]);
 
   useEffect(() => () => {
     audioRef.current?.pause();
@@ -60,6 +66,19 @@ export function RoughTakeStrip({
   }, []);
 
   if (!recording && !roughTakeUrl && !error) return null;
+
+  const seekReview = (seconds: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const nextTime = Math.max(0, Math.min(seconds, roughTakeDuration));
+    audio.currentTime = nextTime;
+    setReviewTime(nextTime);
+    setResumeOffset(nextTime);
+
+    const reviewBeat = reviewBeatRef.current;
+    if (!reviewBeat || !beat) return;
+    reviewBeat.currentTime = getTakeResumeBeatTime(beatStartTime, nextTime, getBeatDurationSeconds(beat));
+  };
 
   const toggleReview = () => {
     const audio = audioRef.current;
@@ -126,6 +145,7 @@ export function RoughTakeStrip({
             onTimeUpdate={(event) => {
               const nextTime = event.currentTarget.currentTime;
               setReviewTime(nextTime);
+              setResumeOffset(nextTime);
               const reviewBeat = reviewBeatRef.current;
               if (!reviewBeat || !beat) return;
               const beatDuration = getBeatDurationSeconds(beat);
@@ -138,6 +158,7 @@ export function RoughTakeStrip({
               if (reviewBeat) reviewBeat.currentTime = beatStartTime;
               setReviewPlaying(false);
               setReviewTime(0);
+              setResumeOffset(roughTakeDuration);
             }}
             className="hidden"
           />
@@ -151,20 +172,23 @@ export function RoughTakeStrip({
                 <span className="font-medium text-white/85">{beatPreviewUrl ? "Listen with beat" : saved ? "Kept take" : "Listen back"}</span>
                 <span className="tabular-nums text-muted-foreground">{formatDuration(reviewTime)} / {formatDuration(roughTakeDuration)}</span>
               </div>
-              <TakeWaveform currentTime={reviewTime} duration={roughTakeDuration} active={reviewPlaying} saved={saved} />
+              <TakeWaveform currentTime={reviewTime} duration={roughTakeDuration} active={reviewPlaying} saved={saved} onSeek={seekReview} />
             </div>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <button
-              onClick={onSave}
-              disabled={saved || saving || analyzing}
-              className={cn(
-                "min-h-10 rounded-xl border px-3 text-xs font-semibold",
-                saved ? "border-emerald-500/20 bg-emerald-500/12 text-emerald-300" : "border-gold/30 bg-gold/10 text-gold",
-              )}
-            >
-              {analyzing ? "Reading Take..." : saving ? "Saving..." : saved ? "Kept in Session" : "Keep Take"}
-            </button>
+            {saved ? (
+              <button onClick={() => onContinue(resumeOffset)} className="min-h-10 rounded-xl border border-emerald-500/25 bg-emerald-500/12 px-3 text-xs font-semibold text-emerald-300">
+                Continue at {formatDuration(resumeBeatTime)}
+              </button>
+            ) : (
+              <button
+                onClick={onSave}
+                disabled={saving || analyzing}
+                className="min-h-10 rounded-xl border border-gold/30 bg-gold/10 px-3 text-xs font-semibold text-gold"
+              >
+                {analyzing ? "Reading Take..." : saving ? "Saving..." : "Keep Take"}
+              </button>
+            )}
             <button onClick={onDelete} className="min-h-10 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-muted-foreground">
               Retake
             </button>

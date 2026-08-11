@@ -34,3 +34,13 @@ export function clampBeatSeekTime(requestedTime: number, duration: number) {
   const upperBound = safeDuration > 0.1 ? safeDuration - 0.05 : safeDuration;
   return Math.min(upperBound, Math.max(0, safeRequestedTime));
 }
+
+export function getTakeResumeBeatTime(beatStartTime: number, takeOffsetSeconds: number, beatDuration: number) {
+  const safeStart = Number.isFinite(beatStartTime) ? Math.max(0, beatStartTime) : 0;
+  const safeOffset = Number.isFinite(takeOffsetSeconds) ? Math.max(0, takeOffsetSeconds) : 0;
+  const safeDuration = Number.isFinite(beatDuration) ? Math.max(0, beatDuration) : 0;
+  const requestedTime = safeStart + safeOffset;
+
+  if (safeDuration <= 0) return requestedTime;
+  return requestedTime % safeDuration;
+}
