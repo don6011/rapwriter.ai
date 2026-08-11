@@ -5,7 +5,8 @@ import { formatDuration } from "@/lib/studio/format";
 import type { SelectedBeat } from "@/lib/studio/types";
 import type { RecordingMode } from "@/components/studio/state/use-rough-take";
 import { cn } from "@/lib/utils";
-import { Mic, Pause, Play, RefreshCw, Square } from "lucide-react";
+import { Headphones, Mic, Pause, Play, RefreshCw, Square, X } from "lucide-react";
+import { useState } from "react";
 
 export function PadTransport({
   beat,
@@ -35,14 +36,23 @@ export function PadTransport({
   onSeek: (seconds: number) => void;
   onSeekCommit: () => void;
   onChangeBeat: () => void;
-  onToggleRecording: () => void;
+  onToggleRecording: (mode?: RecordingMode) => void;
   onRecordingModeChange: (mode: RecordingMode) => void;
 }) {
+  const [recordFlowOpen, setRecordFlowOpen] = useState(false);
+
+  const beginRecording = (mode: RecordingMode) => {
+    onRecordingModeChange(mode);
+    setRecordFlowOpen(false);
+    onToggleRecording(mode);
+  };
+
   return (
-    <div className={cn(
-      "border border-gold/15 bg-[#151516]/96 shadow-[0_14px_32px_rgba(0,0,0,0.42)] backdrop-blur-xl transition-[border-radius,padding] duration-200",
-      compact ? "rounded-xl px-2 py-1.5" : "rounded-2xl px-3 py-2",
-    )}>
+    <>
+      <div className={cn(
+        "border border-gold/15 bg-[#151516]/96 shadow-[0_14px_32px_rgba(0,0,0,0.42)] backdrop-blur-xl transition-[border-radius,padding] duration-200",
+        compact ? "rounded-xl px-2 py-1.5" : "rounded-2xl px-3 py-2",
+      )}>
       <div className={cn("flex items-center", compact ? "gap-2" : "gap-3")}>
       <button onClick={onToggleBeat} className={cn("grid shrink-0 place-items-center rounded-full bg-gold text-black", compact ? "h-9 w-9" : "h-11 w-11")} aria-label={playing ? "Pause beat" : "Play beat"}>
         {playing ? <Pause className="h-4 w-4" fill="currentColor" /> : <Play className="h-4 w-4" fill="currentColor" />}
@@ -67,7 +77,7 @@ export function PadTransport({
         {error && <div className="mt-1 text-[10px] text-rec">{error}</div>}
       </div>
       <button
-        onClick={onToggleRecording}
+        onClick={() => recording ? onToggleRecording() : setRecordFlowOpen(true)}
         className={cn(
           "flex shrink-0 flex-col items-center justify-center rounded-xl border font-semibold",
           compact ? "h-10 min-w-[48px] px-1 text-[9px]" : "h-12 min-w-[58px] px-2 text-[10px]",
@@ -79,26 +89,45 @@ export function PadTransport({
         <span className="mt-0.5">{recording ? "Stop" : "Start"}</span>
       </button>
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-white/8 pt-1.5">
-        <span className="pl-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/42">Record</span>
-        <div className="flex rounded-lg border border-white/10 bg-black/25 p-0.5" role="group" aria-label="Recording mode">
-          {(["with_beat", "vocals_only"] as const).map((mode) => (
+      </div>
+
+      {recordFlowOpen && !recording && (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center" role="dialog" aria-modal="true" aria-labelledby="record-flow-title">
+          <button type="button" className="absolute inset-0 bg-black/68 backdrop-blur-sm" onClick={() => setRecordFlowOpen(false)} aria-label="Close recording options" />
+          <div className="relative w-full max-w-[430px] rounded-t-2xl border border-white/12 bg-[#101011] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_70px_rgba(0,0,0,0.7)]">
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="label-hw text-gold">Record</div>
+                <h2 id="record-flow-title" className="mt-1 text-lg font-semibold">Choose what you hear.</h2>
+                <p className="mt-1 text-xs text-muted-foreground">Your lyrics stay open while the take records.</p>
+              </div>
+              <button type="button" onClick={() => setRecordFlowOpen(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Close recording options">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              {(["with_beat", "vocals_only"] as const).map((mode) => (
             <button
               key={mode}
               type="button"
-              disabled={recording}
-              onClick={() => onRecordingModeChange(mode)}
+              onClick={() => beginRecording(mode)}
               className={cn(
-                "min-h-7 rounded-md px-2.5 text-[9px] font-semibold transition-colors disabled:cursor-not-allowed",
-                recordingMode === mode ? "bg-gold/14 text-gold" : "text-white/48 hover:text-white/75",
+                "flex min-h-24 flex-col items-start justify-between rounded-xl border p-3 text-left transition-colors",
+                recordingMode === mode ? "border-gold/45 bg-gold/12 text-gold" : "border-white/10 bg-white/[0.03] text-white hover:border-white/20",
               )}
-              aria-pressed={recordingMode === mode}
             >
-              {mode === "with_beat" ? "With beat" : "Vocals only"}
+              {mode === "with_beat" ? <Headphones className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+              <span>
+                <span className="block text-sm font-semibold">{mode === "with_beat" ? "With beat" : "Vocals only"}</span>
+                <span className="mt-1 block text-[10px] font-normal leading-4 text-muted-foreground">{mode === "with_beat" ? "Capture the pocket." : "Capture a clean vocal."}</span>
+              </span>
             </button>
-          ))}
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </>
   );
 }

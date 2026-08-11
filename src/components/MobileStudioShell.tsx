@@ -1066,9 +1066,12 @@ export function MobileStudioShell() {
     }
   };
 
-  const startRecording = async (resume?: { beat: SelectedBeat | null; beatPosition: number; recordingMode: RecordingMode }) => {
+  const startRecording = async (
+    resume?: { beat: SelectedBeat | null; beatPosition: number; recordingMode: RecordingMode },
+    requestedMode?: RecordingMode,
+  ) => {
     stopStudioAir();
-    const nextRecordingMode = resume?.recordingMode ?? recordingMode;
+    const nextRecordingMode = resume?.recordingMode ?? requestedMode ?? recordingMode;
     const recordingBeat = nextRecordingMode === "with_beat" ? (resume?.beat ?? selectedBeat) : null;
     if (nextRecordingMode === "vocals_only") {
       stopBeatPreview({ reset: false });
@@ -1111,12 +1114,12 @@ export function MobileStudioShell() {
     void startRecording({ beat: recordingBeat, beatPosition, recordingMode: "with_beat" });
   };
 
-  const toggleRecording = () => {
+  const toggleRecording = (nextMode?: RecordingMode) => {
     if (recording) {
       take.stopRecording();
       return;
     }
-    void startRecording();
+    void startRecording(undefined, nextMode);
   };
 
   const deleteRoughTake = () => {

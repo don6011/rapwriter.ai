@@ -23,6 +23,7 @@ export function RoughTakeStrip({
   beat,
   beatStartTime,
   compact = false,
+  overlay = false,
   onDelete,
   onSave,
   onContinue,
@@ -39,6 +40,7 @@ export function RoughTakeStrip({
   beat: SelectedBeat | null;
   beatStartTime: number;
   compact?: boolean;
+  overlay?: boolean;
   onDelete: () => void;
   onSave: () => void;
   onContinue: (takeOffsetSeconds: number) => void;
@@ -48,6 +50,7 @@ export function RoughTakeStrip({
   const [reviewPlaying, setReviewPlaying] = useState(false);
   const [reviewTime, setReviewTime] = useState(0);
   const [resumeOffset, setResumeOffset] = useState(roughTakeDuration);
+  const [dismissed, setDismissed] = useState(saved);
   const beatPreviewUrl = beat ? resolveBeatPreviewUrl(beat) : null;
   const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
   const resumeBeatTime = getTakeResumeBeatTime(beatStartTime, resumeOffset, beatDuration);
@@ -65,7 +68,15 @@ export function RoughTakeStrip({
     reviewBeatRef.current?.pause();
   }, []);
 
-  if (!recording && !roughTakeUrl && !error) return null;
+  useEffect(() => {
+    if (recording) setDismissed(false);
+  }, [recording]);
+
+  useEffect(() => {
+    if (overlay && saved && !recording) setDismissed(true);
+  }, [overlay, recording, saved]);
+
+  if ((!recording && !roughTakeUrl && !error) || (overlay && dismissed)) return null;
 
   const seekReview = (seconds: number) => {
     const audio = audioRef.current;
@@ -101,8 +112,8 @@ export function RoughTakeStrip({
     });
   };
 
-  return (
-    <div className={cn("rounded-2xl border border-white/10 bg-black/28 p-3", compact ? "mt-3" : "mt-3")}>
+  const content = (
+    <div className={cn("rounded-2xl border border-white/10 bg-[#0d0d0f]/96 p-3 shadow-[0_20px_70px_rgba(0,0,0,0.58)] backdrop-blur-xl", !overlay && (compact ? "mt-3" : "mt-3"))}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="label-hw text-gold/85">Rough Take</div>
@@ -202,6 +213,23 @@ export function RoughTakeStrip({
         </div>
       )}
       {error && <p className="mt-2 text-xs text-rec">{error}</p>}
+    </div>
+  );
+
+  if (!overlay) return content;
+
+  return (
+    <div
+      className={cn("fixed inset-0 z-[70] flex items-end justify-center", recording ? "pointer-events-none" : "")}
+      role={recording ? "status" : "dialog"}
+      aria-modal={recording ? undefined : true}
+      aria-label={recording ? "Recording rough take" : "Review rough take"}
+    >
+      {!recording && <div className="absolute inset-0 bg-black/64 backdrop-blur-sm" aria-hidden="true" />}
+      <div className="pointer-events-auto relative w-full max-w-[430px] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        {!recording && <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/25" />}
+        {content}
+      </div>
     </div>
   );
 }

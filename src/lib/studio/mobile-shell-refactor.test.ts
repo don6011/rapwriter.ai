@@ -85,6 +85,8 @@ describe("mobile studio shell refactor contracts", () => {
     expect(shell).toContain('take.state.recordingMode === "vocals_only" ? null');
     expect(transport).toContain('"Vocals only"');
     expect(transport).toContain('{recording ? "Stop" : "Start"}');
+    expect(transport).toContain("setRecordFlowOpen(true)");
+    expect(transport).toContain("onToggleRecording(mode)");
     expect(locker).toContain('{ id: "vocals", label: "Vocals"');
     expect(locker).toContain("<LockerVocalCard");
   });
@@ -166,6 +168,20 @@ describe("mobile studio shell refactor contracts", () => {
     expect(writer).toContain("text.trim() ? ++logicalBarNumber : null");
     expect(writer).toContain("editorRows.map((row, index)");
     expect(writer).not.toContain("repeating-linear-gradient");
+  });
+
+  test("keeps Writer Flow focused by overlaying transient recording UI", () => {
+    const writer = readFileSync(new URL("../../components/studio/screens/WriterScreen.tsx", import.meta.url), "utf8");
+    const strip = readFileSync(new URL("../../components/studio/panels/RoughTakeStrip.tsx", import.meta.url), "utf8");
+    const transport = readFileSync(new URL("../../components/studio/panels/PadTransport.tsx", import.meta.url), "utf8");
+
+    expect(writer).not.toContain("Now writing");
+    expect(writer).toContain("toast(momentum.label");
+    expect(writer).toContain("<RoughTakeStrip\n            overlay");
+    expect(writer).toContain('className="pointer-events-none absolute inset-0 z-0 overflow-hidden"');
+    expect(writer).toContain('className="relative z-10 min-h-[54svh]');
+    expect(strip).toContain('"fixed inset-0 z-[70] flex items-end justify-center"');
+    expect(transport).not.toContain('className="mt-1.5 flex items-center justify-between gap-2 border-t');
   });
 
   test("makes the active Studio card a truthful Current Session resume surface", () => {

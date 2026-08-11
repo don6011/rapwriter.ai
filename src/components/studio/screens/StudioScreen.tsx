@@ -116,7 +116,7 @@ export function StudioScreen({
   onStartTitleEdit: () => void;
   onCancelTitleEdit: () => void;
   onSaveTitle: () => void;
-  onToggleRecording: () => void;
+  onToggleRecording: (mode?: RecordingMode) => void;
   onRecordingModeChange: (mode: RecordingMode) => void;
   onSetActiveSection: (index: number) => void;
   onToggleBeat: () => void;

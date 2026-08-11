@@ -14,9 +14,10 @@ import { getWritingMomentum } from "@/lib/studio/intelligence";
 import { mobileSections } from "@/lib/studio/sections";
 import type { BoothReadyResult, EnvironmentIntelligence, PadActions, ProducerActionControls, SelectedBeat, StudioDna, StudioPack } from "@/lib/studio/types";
 import { cn } from "@/lib/utils";
-import { Briefcase, ChevronRight, CloudOff, Download, FolderPlus, Headphones, Heart, History, LockKeyhole, Pencil, Save, Sparkles, WandSparkles, X } from "lucide-react";
+import { Briefcase, ChevronRight, CloudOff, Download, FolderPlus, Headphones, Heart, History, LockKeyhole, Pencil, Save, WandSparkles, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RecordingMode } from "@/components/studio/state/use-rough-take";
+import { toast } from "sonner";
 
 export function WriterScreen({
   readinessLaunchToken,
@@ -98,7 +99,7 @@ export function WriterScreen({
   onSeekBeat: (seconds: number) => void;
   onCommitBeatSeek: () => void;
   onChangeBeat: () => void;
-  onToggleRecording: () => void;
+  onToggleRecording: (mode?: RecordingMode) => void;
   onRecordingModeChange: (mode: RecordingMode) => void;
   onDeleteRoughTake: () => void;
   onSaveRoughTake: () => void;
@@ -125,9 +126,8 @@ export function WriterScreen({
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const editorPositionsRef = useRef<Record<string, { selectionStart: number; selectionEnd: number; scrollTop: number }>>({});
   const sectionBars = countBars(sectionText);
-  const sectionWords = sectionText.trim() ? sectionText.trim().split(/\s+/).length : 0;
-  const progressPct = Math.min(100, Math.round((sectionBars / section.target) * 100));
   const momentum = getWritingMomentum(section.name, sectionBars, section.target, boothReady);
+  const previousMomentumRef = useRef(momentum.label);
   const writerSaveLabel = !signedIn ? "On device" : saveStatus === "error" ? "On device" : saveStatus;
   const hasPenView = artistMembership?.entitlements.full_pen_view === true;
   const hasHistory = artistMembership?.entitlements.version_history === true;
@@ -142,6 +142,12 @@ export function WriterScreen({
   useEffect(() => {
     if (readinessLaunchToken > 0) setReadinessOpen(true);
   }, [readinessLaunchToken]);
+
+  useEffect(() => {
+    if (previousMomentumRef.current === momentum.label) return;
+    previousMomentumRef.current = momentum.label;
+    toast(momentum.label, { description: momentum.detail });
+  }, [momentum.detail, momentum.label]);
 
   const rememberEditorPosition = useCallback((sectionName: string, editor = editorRef.current) => {
     if (!editor) return;
@@ -233,34 +239,7 @@ export function WriterScreen({
         <MobileSectionTabs sectionContent={sectionContent} activeSection={activeSection} onSetActiveSection={switchSection} />
       </div>
 
-      <div className="relative z-10 bg-[#070708]/88 backdrop-blur-xl">
-        <div className="border-b border-white/10 px-5 pb-4 pt-3">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <div className="label-hw">Now writing</div>
-              <div className="mt-1 text-lg font-semibold">{section.name}</div>
-            </div>
-            <div className="text-right text-xs text-muted-foreground">
-              <div><span className="text-gold">{sectionBars}</span> / {section.target} bars</div>
-              <div className="mt-1">{sectionWords} words</div>
-            </div>
-          </div>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-gold shadow-[0_0_16px_rgba(246,199,72,0.5)] transition-[width] duration-500 ease-out motion-reduce:transition-none" style={{ width: `${progressPct}%` }} />
-          </div>
-          <div key={momentum.label} className="mt-3 flex min-h-12 items-center gap-3 border-t border-white/10 pt-3 animate-[fade-in_240ms_ease-out] motion-reduce:animate-none">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gold/10 text-gold">
-              <Sparkles className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-gold">{momentum.label}</div>
-              <div className="mt-0.5 truncate text-xs text-muted-foreground">{momentum.detail}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="relative z-10 flex flex-none flex-col px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
+      <div className="relative z-10 flex flex-none flex-col px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
         <div className="sticky top-16 z-20 mb-3 transition-[padding] duration-200">
           <PadTransport
             beat={selectedBeat}
@@ -279,6 +258,7 @@ export function WriterScreen({
             onRecordingModeChange={onRecordingModeChange}
           />
           <RoughTakeStrip
+            overlay
             recording={recording}
             recordingSeconds={recordingSeconds}
             roughTakeUrl={roughTakeUrl}
@@ -295,7 +275,7 @@ export function WriterScreen({
             onContinue={onContinueRoughTake}
           />
         </div>
-        <div className="overflow-hidden rounded-2xl border border-white/12 bg-black/26 shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_18px_50px_rgba(0,0,0,0.26)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 focus-within:border-gold/28 focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_0_0_3px_rgba(246,199,72,0.055),0_18px_50px_rgba(0,0,0,0.3)]">
+        <div className="isolate overflow-hidden rounded-2xl border border-white/12 bg-black/26 shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_18px_50px_rgba(0,0,0,0.26)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 focus-within:border-gold/28 focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_0_0_3px_rgba(246,199,72,0.055),0_18px_50px_rgba(0,0,0,0.3)]">
           {penView ? (
             <PenView sectionName={section.name} text={sectionText} />
           ) : (
@@ -303,7 +283,7 @@ export function WriterScreen({
               <div
                 aria-hidden="true"
                 data-testid="bar-gutter"
-                className="pointer-events-none absolute inset-0 overflow-hidden"
+                className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
               >
                 <div className="p-5" style={{ transform: `translateY(-${editorScrollTop}px)` }}>
                   {editorRows.map((row, index) => (
@@ -335,11 +315,11 @@ export function WriterScreen({
                 placeholder={`Start ${section.name}...`}
                 aria-label={`${section.name} lyrics`}
                 spellCheck={false}
-                className="relative min-h-[54svh] w-full flex-none resize-none bg-transparent py-5 pl-14 pr-5 font-sans text-[18px] leading-9 text-white/92 caret-gold outline-none placeholder:text-white/28"
+                className="relative z-10 min-h-[54svh] w-full flex-none resize-none bg-transparent py-5 pl-14 pr-5 font-sans text-[18px] leading-9 text-white/92 caret-gold outline-none placeholder:text-white/28"
               />
             </div>
           )}
-          <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-1 border-t border-white/10 bg-black/24 p-1.5 backdrop-blur-xl">
+          <div className="relative z-20 grid grid-cols-[1fr_auto_auto_auto] items-center gap-1 border-t border-white/10 bg-black/24 p-1.5 backdrop-blur-xl">
             <div className="min-w-0 px-2">
               <div className="text-[10px] font-semibold tabular-nums text-white/72">{sectionBars} / {section.target} bars</div>
               <div className="mt-0.5 truncate text-[9px] uppercase tracking-[0.13em] text-emerald-300/80">{writerSaveLabel}</div>
