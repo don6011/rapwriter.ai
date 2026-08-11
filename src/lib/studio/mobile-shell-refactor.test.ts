@@ -128,4 +128,15 @@ describe("mobile studio shell refactor contracts", () => {
     expect(writer).toContain("editorRows.map((row, index)");
     expect(writer).not.toContain("repeating-linear-gradient");
   });
+
+  test("previews locked rooms without activating them and makes DNA rails scrollable", () => {
+    const dnaSheet = readFileSync(new URL("../../components/studio/sheets/StudioDnaSheet.tsx", import.meta.url), "utf8");
+    const dnaChoice = readFileSync(new URL("../../components/studio/primitives/StudioDnaChoice.tsx", import.meta.url), "utf8");
+    expect(dnaSheet).toContain("setPreviewEnvironment(nextEnvironment)");
+    expect(dnaSheet).toContain("if (canUseStudioPack(nextEnvironment)) onChange");
+    expect(dnaSheet).toContain("previewPack.image");
+    expect(dnaChoice).toContain("rail.scrollBy");
+    expect(dnaChoice).toContain("canScrollForward");
+    expect(dnaChoice).not.toContain("pointer-events-none");
+  });
 });
