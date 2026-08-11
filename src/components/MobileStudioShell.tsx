@@ -1440,7 +1440,6 @@ export function MobileStudioShell() {
             {activeNav === "studio" && (
               <StudioScreen
                 completionPct={completionPct}
-                syncMessage={syncMessage}
                 saveStatus={saveStatus}
                 boothReady={boothReady}
                 sectionContent={sectionContent}

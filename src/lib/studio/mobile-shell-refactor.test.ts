@@ -129,6 +129,16 @@ describe("mobile studio shell refactor contracts", () => {
     expect(writer).not.toContain("repeating-linear-gradient");
   });
 
+  test("makes the active Studio card a truthful Current Session resume surface", () => {
+    const studioScreen = readFileSync(new URL("../../components/studio/screens/StudioScreen.tsx", import.meta.url), "utf8");
+
+    expect(studioScreen).toContain("Current session");
+    expect(studioScreen).toContain("Continue writing");
+    expect(studioScreen).toContain("Saved to cloud");
+    expect(studioScreen).not.toContain("Session status");
+    expect(studioScreen).not.toContain("syncMessage");
+  });
+
   test("previews locked rooms without activating them and makes DNA rails scrollable", () => {
     const dnaSheet = readFileSync(new URL("../../components/studio/sheets/StudioDnaSheet.tsx", import.meta.url), "utf8");
     const dnaChoice = readFileSync(new URL("../../components/studio/primitives/StudioDnaChoice.tsx", import.meta.url), "utf8");

@@ -22,7 +22,6 @@ import { useState } from "react";
 export function StudioScreen({
   completionPct,
   boothReady,
-  syncMessage,
   saveStatus,
   sectionContent,
   activeSection,
@@ -81,7 +80,6 @@ export function StudioScreen({
 }: {
   completionPct: number;
   boothReady: BoothReadyResult;
-  syncMessage: string;
   saveStatus: "saved" | "saving" | "error";
   sectionContent: Record<string, string>;
   activeSection: number;
@@ -148,8 +146,8 @@ export function StudioScreen({
     ? saveStatus === "saving"
       ? "Saving..."
       : saveStatus === "error"
-        ? "Saved on device. Sync pending"
-        : syncMessage
+        ? "Sync pending"
+        : "Saved to cloud"
     : "Saved on device";
   const padStatus = saveStatus === "saving" ? "Saving" : saveStatus === "error" ? "On device" : "Saved";
 
@@ -196,7 +194,7 @@ export function StudioScreen({
       </section>
 
       <section className="px-5">
-        <div className="-mt-1 label-hw mb-2">Last project</div>
+        <div className="-mt-1 label-hw mb-2">Current session</div>
         <div className="rounded-2xl border border-white/10 bg-[#151516]/92 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.34)]">
           <div className="flex items-center gap-3">
             <div className="h-[78px] w-[78px] shrink-0 overflow-hidden rounded-xl border border-gold/20 bg-black">
@@ -255,16 +253,19 @@ export function StudioScreen({
               </div>
             </div>
           </div>
-          <div className="mt-3 flex min-h-9 items-center justify-between border-t border-white/10 pt-3 text-xs">
-            <span className="text-muted-foreground">Session status</span>
+          <div className="mt-3 flex min-h-11 items-center justify-between gap-3 border-t border-white/10 pt-3 text-xs">
             {signedIn ? (
-              <span className="text-right text-gold">{sessionStatus}</span>
+              <span className={cn("font-medium", saveStatus === "error" ? "text-gold" : "text-muted-foreground")}>{sessionStatus}</span>
             ) : (
-              <button type="button" onClick={onSyncRequest} className="inline-flex items-center gap-1.5 text-right font-semibold text-gold" aria-label="Protect device-only draft">
+              <button type="button" onClick={onSyncRequest} className="inline-flex items-center gap-1.5 font-medium text-gold" aria-label="Protect device-only draft">
                 <CloudOff className="h-3.5 w-3.5" />
-                On this device
+                {sessionStatus}
               </button>
             )}
+            <button type="button" onClick={onContinue} className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border border-gold/25 bg-gold/8 px-3 font-semibold text-gold" aria-label={`Continue writing ${songTitle}`}>
+              Continue writing
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
 
