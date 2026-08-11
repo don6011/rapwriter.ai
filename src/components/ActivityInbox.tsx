@@ -211,7 +211,7 @@ export function ActivityInbox({
                 </div>
               ) : (
                 <div className="grid min-h-60 place-items-center p-8 text-center">
-                  <div><Inbox className="mx-auto h-7 w-7 text-gold/65" /><h3 className="mt-4 text-base font-semibold">The room is quiet.</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">Reviews, collaboration updates, and account changes will arrive here.</p></div>
+                  <div><Inbox className="mx-auto h-7 w-7 text-gold/65" /><h3 className="mt-4 text-base font-semibold">The room is quiet.</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">Membership, collaboration, review, and account updates will arrive here.</p></div>
                 </div>
               )}
             </div>

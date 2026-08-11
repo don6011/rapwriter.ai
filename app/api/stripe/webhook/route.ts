@@ -4,6 +4,7 @@ import { fulfillCommerceOrder, transitionCommerceOrder, type CommerceOrderStatus
 import { createStripeClient, syncStripeSubscription } from "@/lib/server/stripe-billing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { syncConnectedAccount } from "@/lib/server/stripe-connect";
+import { notifyInvoiceEvent, notifySubscriptionEvent } from "@/lib/server/billing-notifications";
 
 export async function POST(request: Request) {
   const stripe = createStripeClient();
@@ -56,6 +57,13 @@ export async function POST(request: Request) {
         const subscription = await stripe.subscriptions.retrieve(eventSubscription.id);
         const synced = await syncStripeSubscription(subscription);
         ownerId = typeof synced.owner_id === "string" ? synced.owner_id : ownerId;
+        if (ownerId) await notifySubscriptionEvent(event, subscription, ownerId);
+        break;
+      }
+      case "invoice.paid":
+      case "invoice.payment_failed":
+      case "invoice.payment_action_required": {
+        ownerId = await notifyInvoiceEvent(event, event.data.object);
         break;
       }
       case "account.updated": {
