@@ -23,6 +23,11 @@ describe("Stripe commerce contract", () => {
     expect(subscriptionSync).toContain('.eq("provider_subscription_id", input.providerSubscriptionId)');
   });
 
+  test("resolves out-of-order subscription events against Stripe's current state", () => {
+    expect(webhook).toContain("stripe.subscriptions.retrieve(eventSubscription.id)");
+    expect(webhook).not.toContain("syncStripeSubscription(eventSubscription)");
+  });
+
   test("keeps payout account mutation behind the service role", () => {
     expect(migration).toContain("revoke insert, update, delete on public.producer_billing_accounts from authenticated");
     expect(migration).toContain("grant all on public.producer_billing_accounts to service_role");

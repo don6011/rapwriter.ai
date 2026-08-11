@@ -48,8 +48,12 @@ export async function POST(request: Request) {
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
-        const subscription = event.data.object;
-        ownerId = subscription.metadata.user_id ?? null;
+        const eventSubscription = event.data.object;
+        ownerId = eventSubscription.metadata.user_id ?? null;
+        // Stripe can deliver subscription lifecycle events concurrently and out
+        // of order. Always sync the current provider state so an older
+        // `incomplete` payload cannot overwrite an already-active membership.
+        const subscription = await stripe.subscriptions.retrieve(eventSubscription.id);
         const synced = await syncStripeSubscription(subscription);
         ownerId = typeof synced.owner_id === "string" ? synced.owner_id : ownerId;
         break;
