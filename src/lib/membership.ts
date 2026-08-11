@@ -89,11 +89,6 @@ export function isSubscriptionEffective(subscription: SubscriptionRecord, now = 
     return trialEnd === null || trialEnd > timestamp;
   }
 
-  if (subscription.status === "canceled") {
-    const periodEnd = validDate(subscription.current_period_end);
-    return periodEnd !== null && periodEnd > timestamp;
-  }
-
   if (subscription.status === "past_due") {
     const graceEnd = validDate(subscription.grace_period_end);
     return graceEnd !== null && graceEnd > timestamp;

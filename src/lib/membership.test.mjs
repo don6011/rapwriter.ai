@@ -124,9 +124,9 @@ describe("membership resolution", () => {
     expect(entitlementLimit(result, "artist", "ghostwriter_actions_monthly")).toBe(80);
   });
 
-  test("keeps canceled access through the paid period", () => {
-    expect(isSubscriptionEffective(subscription({ status: "canceled" }), now)).toBe(true);
-    expect(isSubscriptionEffective(subscription({ status: "canceled", current_period_end: "2026-07-19T00:00:00.000Z" }), now)).toBe(false);
+  test("keeps scheduled cancellation active but revokes a canceled subscription", () => {
+    expect(isSubscriptionEffective(subscription({ status: "active", cancel_at_period_end: true }), now)).toBe(true);
+    expect(isSubscriptionEffective(subscription({ status: "canceled" }), now)).toBe(false);
   });
 
   test("honors a bounded grace period and rejects expired past due access", () => {
