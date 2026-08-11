@@ -105,42 +105,49 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: songError?.message ?? "Could not create the first song." }, { status: 500 });
   }
 
-  let { data: session, error: sessionError } = await supabase
+  const { data: activeSessions, error: sessionReadError } = await supabase
     .from("ghost_studio_sessions")
     .select("*")
     .eq("owner_id", user.id)
-    .eq("song_id", song.id)
     .eq("is_active", true)
-    .maybeSingle();
+    .order("last_active_at", { ascending: false })
+    .limit(1);
 
-  if (!session && !sessionError) {
-    const createdSession = await supabase
-      .from("ghost_studio_sessions")
-      .insert({
-        owner_id: user.id,
-        project_id: project.id,
-        song_id: song.id,
-        beat_id: typeof beat?.id === "string" ? beat.id : null,
-        beat_snapshot: beat ?? {},
-        mode: "skyline-loft",
-        ambiance: "skyline-loft",
-        section_content: blankSections,
-        active_section: "Hook",
-        song_state: 0,
-        completion_pct: 0,
-        booth_score: 0,
-        total_bars: 0,
-        is_active: true,
-      })
-      .select("*")
-      .single();
-    session = createdSession.data;
-    sessionError = createdSession.error;
+  if (sessionReadError) return NextResponse.json({ error: sessionReadError.message }, { status: 500 });
+
+  let currentSession = activeSessions?.[0] ?? null;
+  let session: Record<string, unknown> | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const { data: saveResult, error: sessionError } = await supabase.rpc("save_ghost_studio_session", {
+      p_session_id: currentSession?.id ?? null,
+      p_project_id: project.id,
+      p_song_id: song.id,
+      p_beat_id: typeof beat?.id === "string" ? beat.id : null,
+      p_beat_snapshot: beat ?? {},
+      p_mode: "skyline-loft",
+      p_ambiance: "skyline-loft",
+      p_section_content: blankSections,
+      p_active_section: "Hook",
+      p_song_state: 0,
+      p_completion_pct: 0,
+      p_booth_score: 0,
+      p_total_bars: 0,
+      p_expected_revision: currentSession?.revision ?? null,
+      p_playback_position_seconds: 0,
+      p_studio_dna: currentSession?.studio_dna ?? {},
+      p_client_updated_at: new Date().toISOString(),
+    });
+    if (sessionError) return NextResponse.json({ error: sessionError.message }, { status: 500 });
+
+    const result = saveResult as { conflict?: boolean; session?: Record<string, unknown> } | null;
+    if (!result?.conflict) {
+      session = result?.session ?? null;
+      break;
+    }
+    currentSession = result.session ?? null;
   }
 
-  if (sessionError || !session) {
-    return NextResponse.json({ error: sessionError?.message ?? "Could not start the first session." }, { status: 500 });
-  }
+  if (!session) return NextResponse.json({ error: "Could not start the first session. Please try again." }, { status: 409 });
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")

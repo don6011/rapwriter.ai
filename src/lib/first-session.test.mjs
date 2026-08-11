@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { firstSessionActivationSchema } from "./schemas.ts";
+
+const activationRoute = readFileSync(new URL("../../app/api/activation/route.ts", import.meta.url), "utf8");
 
 describe("first session activation", () => {
   test("accepts a focused starter workspace", () => {
@@ -24,5 +27,13 @@ describe("first session activation", () => {
       beat: null,
     });
     expect(result.success).toBe(true);
+  });
+
+  test("reuses the owner's active session instead of violating the one-active-session constraint", () => {
+    expect(activationRoute).toContain('.eq("owner_id", user.id)');
+    expect(activationRoute).not.toContain('.eq("song_id", song.id)');
+    expect(activationRoute).toContain('.rpc("save_ghost_studio_session"');
+    expect(activationRoute).toContain("for (let attempt = 0; attempt < 2; attempt += 1)");
+    expect(activationRoute).toContain("currentSession = result.session ?? null");
   });
 });
