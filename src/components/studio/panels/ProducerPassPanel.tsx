@@ -69,7 +69,7 @@ export function ProducerPassPanel({
       <div className="rounded-xl border border-gold/20 bg-gold/8 p-3">
         <div className="flex items-center justify-between gap-3">
           <div className="label-hw text-gold/80">{report.title}</div>
-          <span className="rounded-full bg-emerald-500/12 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-300">Live</span>
+          <span className={cn("rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em]", activePassUnlocked ? (sectionText.trim() ? "bg-emerald-500/12 text-emerald-300" : "bg-white/8 text-white/55") : "bg-gold/12 text-gold")}>{activePassUnlocked ? (sectionText.trim() ? "Live" : "Waiting") : "Pro"}</span>
         </div>
         <p className="mt-2 text-sm leading-relaxed text-white/74">{report.summary}</p>
       </div>
@@ -234,8 +234,8 @@ function buildProducerPassReport(
     const longestLine = lines.reduce((longest, line) => line.split(/\s+/).length > longest.split(/\s+/).length ? line : longest, lines[0] ?? "");
     return {
       title: "Producer Rewrite",
-      summary: lines.length ? `The revision plan keeps your voice intact: clarify the image, tighten the longest setup, and protect the section payoff.` : `Producer Rewrite is ready to shape ${sectionName} without replacing the artist's voice.`,
-      signals: [`${averageWords || 0} words per line`, spread <= 4 ? "Line shape is consistent" : "Line shape varies"],
+      summary: lines.length ? `The revision plan keeps your voice intact: clarify the image, tighten the longest setup, and protect the section payoff.` : `Add two lines to ${sectionName} before Producer Rewrite can make a useful read.`,
+      signals: lines.length ? [`${averageWords} words per line`, spread <= 4 ? "Line shape is consistent" : "Line shape varies"] : ["Analysis waits for content", "Two lines unlock the first read"],
       actions: lines.length ? [
         longestLine ? `Tighten this setup first: “${longestLine.slice(0, 72)}${longestLine.length > 72 ? "..." : "”"}` : emptyAction,
         anchor ? `Use “${anchor}” to connect the section instead of adding a new subject.` : "Add one concrete image that makes the emotion visible.",

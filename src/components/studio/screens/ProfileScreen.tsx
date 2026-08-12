@@ -37,7 +37,7 @@ export function ProfileScreen({
   activeStudioPack: StudioPack;
   membership: MembershipSnapshot | null;
   profile: ProfileRow | null;
-  lockerCounts: { beats: number; songs: number; hooks: number };
+  lockerCounts: { beats: number; songs: number; hooks: number; collection: number };
   loading: boolean;
   signedIn: boolean;
   emailVerified: boolean;
@@ -64,7 +64,6 @@ export function ProfileScreen({
   const joinedLabel = profile?.created_at
     ? new Intl.DateTimeFormat("en", { month: "short", year: "numeric" }).format(new Date(profile.created_at))
     : "Private beta";
-  const vaultTotal = lockerCounts.songs + lockerCounts.hooks + lockerCounts.beats;
   const boothLabel = boothReady.locked ? "Keep writing" : `${boothReady.score}/100`;
   const profileLabel = accountTypeLabel(profile?.account_type);
   const canAccessProducer = Boolean(membership?.producer) || hasProducerWorkspace(profile?.account_type);
@@ -250,7 +249,7 @@ export function ProfileScreen({
             [String(lockerCounts.songs), "Songs"],
             [String(lockerCounts.hooks), "Hooks"],
             [String(lockerCounts.beats), "Beats"],
-            [String(vaultTotal), "Vault"],
+            [String(lockerCounts.collection), "Vault"],
           ].map(([value, label]) => (
             <div key={label} className="rounded-xl border border-white/10 bg-black/24 p-3">
               <div className="text-lg font-semibold text-gold">{value}</div>

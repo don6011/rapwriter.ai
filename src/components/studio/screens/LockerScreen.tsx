@@ -20,6 +20,7 @@ import { beatSnapshotFromLockerBeat, beatSnapshotFromStarterBeat, getBeatDuratio
 import { formatShortDate } from "@/lib/studio/format";
 import { countTotalBars } from "@/lib/studio/bars";
 import { lockerSongBarCount, mostFrequent } from "@/lib/studio/locker-snapshot";
+import { lockerBeatCount, lockerCollectionCount } from "@/lib/studio/locker-counts";
 import type { ProductUnlock, StudioPack } from "@/lib/studio/types";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight, Headphones, Mic2, Pencil, Save, Search, ShoppingCart, Sparkles, Upload, X } from "lucide-react";
@@ -92,8 +93,14 @@ export function LockerScreen({
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const visibleProductUnlocks = productUnlocks.filter((unlock) => unlock.category !== "Producer Style");
   const purchaseCount = visibleProductUnlocks.length;
-  const savedCount = songs.length + hooks.length + beats.length + roughTakes.length;
-  const collectionCount = savedCount + starterBeats.length + purchaseCount;
+  const totalBeatCount = lockerBeatCount(beats.map((beat) => beat.beat_id), starterBeats.map((beat) => beat.id));
+  const collectionCount = lockerCollectionCount({
+    beats: totalBeatCount,
+    songs: songs.length,
+    hooks: hooks.length,
+    roughTakes: roughTakes.length,
+    ownedItems: purchaseCount,
+  });
   const boothReadyCount = songs.filter((song) => song.booth_ready).length;
   const totalBarsWritten = songs.reduce((total, song) => total + lockerSongBarCount(song), 0);
   const favoriteProducer = mostFrequent(beats.map((beat) => beat.producer).filter((value): value is string => Boolean(value))) ?? "Not enough saves yet";
@@ -112,7 +119,7 @@ export function LockerScreen({
   const tabs: Array<{ id: LockerTab; label: string; count: number; icon: typeof Save }> = [
     { id: "songs", label: "Songs", count: songs.length, icon: Save },
     { id: "hooks", label: "Hooks", count: hooks.length, icon: Pencil },
-    { id: "beats", label: "Beats", count: beats.length + starterBeats.length, icon: Headphones },
+    { id: "beats", label: "Beats", count: totalBeatCount, icon: Headphones },
     { id: "vocals", label: "Vocals", count: roughTakes.length, icon: Mic2 },
     { id: "purchases", label: "Owned", count: purchaseCount, icon: ShoppingCart },
   ];
@@ -276,7 +283,7 @@ export function LockerScreen({
             <div className="mt-3 grid grid-cols-3 divide-x divide-white/10">
               <LockerSummaryMetric value={collectionCount} label="Saved items" />
               <LockerSummaryMetric value={boothReadyCount} label="Booth Ready" />
-              <LockerSummaryMetric value={beats.length + starterBeats.length} label="Beats" />
+              <LockerSummaryMetric value={totalBeatCount} label="Beats" />
             </div>
           </section>
 
@@ -377,7 +384,7 @@ export function LockerScreen({
                 </div>
               )}
               {tab === "songs" && visibleSongs.map((song) => <LockerSongCard key={song.id} song={song} takes={takesForSong(song)} {...liveSongState(song)} onResume={() => onResumeSong(song)} onPrepare={() => onPrepareSong(song)} onRemove={() => onRemove("songs", song.id)} />)}
-              {tab === "songs" && visibleSongs.length === 0 && <LockerEmpty title={normalizedQuery ? "No songs match." : "No saved songs yet."} body="Save a song from the writing pad and it will be ready to resume here." actionLabel="Open Studio" onAction={onGoToStudio} />}
+              {tab === "songs" && visibleSongs.length === 0 && <LockerEmpty title={normalizedQuery ? "No songs match." : "No saved songs yet."} body="Your drafts stay in Studio until you save a song here for your Locker." actionLabel="Open Studio" onAction={onGoToStudio} />}
 
               {tab === "hooks" && visibleHooks.map((hook) => <LockerHookCard key={hook.id} hook={hook} onUse={() => onUseHook(hook)} onRemove={() => onRemove("hooks", hook.id)} />)}
               {tab === "hooks" && visibleHooks.length === 0 && <LockerEmpty title={normalizedQuery ? "No hooks match." : "No hooks saved yet."} body="Capture the lines worth returning to, then reuse them in any session." actionLabel="Write a Hook" onAction={onGoToStudio} />}

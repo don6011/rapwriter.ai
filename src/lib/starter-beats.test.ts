@@ -13,8 +13,8 @@ test("starter beat access stays consistent across the app", () => {
   expect(hasFullStarterBeatLibrary("artist_pro")).toBe(true);
 });
 
-test("Market curates two starter beats while Locker retains the complete included pocket", () => {
+test("Market curates two starter beats while clearly pointing to the complete included pocket", () => {
   const market = readFileSync(new URL("../components/PremiumMarketplace.tsx", import.meta.url), "utf8");
   expect(market).toContain("visibleStarterBeats.slice(0, 2)");
-  expect(market).toContain("full starter pocket is in your Locker");
+  expect(market).toContain("Your free pocket includes 3 beats. Hear 2 here, or load all 3 in your Locker.");
 });

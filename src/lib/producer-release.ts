@@ -52,7 +52,7 @@ export function getProducerProfileBlockers(
   profile: ProducerProfileReadiness | null | undefined,
   business: ProducerBusinessReadiness | null | undefined,
 ) {
-  if (!profile) return ["Create a producer profile."];
+  if (!profile) return ["Add your producer details before submitting."];
   const blockers: string[] = [];
   if (!hasText(profile.display_name)) blockers.push("Add a producer name.");
   if (!hasText(profile.handle)) blockers.push("Claim a storefront handle.");

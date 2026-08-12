@@ -64,6 +64,7 @@ import { trackMarketplaceEvent } from "@/lib/studio/telemetry";
 import { getStudioPack, studioPacks } from "@/lib/studio/packs";
 import { mobileSections } from "@/lib/studio/sections";
 import { starterBeatsForArtist } from "@/lib/starter-beats";
+import { lockerBeatCount, lockerCollectionCount } from "@/lib/studio/locker-counts";
 import type {
   MobileDraftRecord,
   MobileNavView,
@@ -1722,7 +1723,17 @@ export function MobileStudioShell() {
                 activeStudioPack={activeStudioPack}
                 membership={membership}
                 profile={profile}
-                lockerCounts={lockerCounts}
+                lockerCounts={{
+                  ...lockerCounts,
+                  beats: lockerBeatCount(beatLocker.map((beat) => beat.beat_id), accessibleStarterBeats.map((beat) => beat.id)),
+                  collection: lockerCollectionCount({
+                    beats: lockerBeatCount(beatLocker.map((beat) => beat.beat_id), accessibleStarterBeats.map((beat) => beat.id)),
+                    songs: lockerCounts.songs,
+                    hooks: lockerCounts.hooks,
+                    roughTakes: roughTakes.length,
+                    ownedItems: mergedProductUnlocks.filter((unlock) => unlock.category !== "Producer Style").length,
+                  }),
+                }}
                 loading={loading || loadingData}
                 signedIn={Boolean(user)}
                 emailVerified={emailVerified}

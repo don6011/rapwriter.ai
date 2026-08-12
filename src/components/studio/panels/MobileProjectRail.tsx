@@ -83,7 +83,7 @@ export function MobileProjectRail({
               <div className="p-3 pt-1">
                 <div className="truncate text-sm font-semibold text-white">{project.title}</div>
                 <div className="mt-1 text-[11px] text-muted-foreground">
-                  {projectSongs.length} {projectSongs.length === 1 ? "song" : "songs"} in motion
+                  {projectSongs.length} {projectSongs.length === 1 ? "draft" : "drafts"} in motion
                 </div>
                 <div className="mt-3 flex items-center gap-2">
                   <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/12">
