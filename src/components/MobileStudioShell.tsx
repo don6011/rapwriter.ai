@@ -63,6 +63,7 @@ import {
 import { trackMarketplaceEvent } from "@/lib/studio/telemetry";
 import { getStudioPack, studioPacks } from "@/lib/studio/packs";
 import { mobileSections } from "@/lib/studio/sections";
+import { starterBeatsForArtist } from "@/lib/starter-beats";
 import type {
   MobileDraftRecord,
   MobileNavView,
@@ -160,6 +161,10 @@ export function MobileStudioShell() {
     unlockedProductIds,
     saveSessionProductUnlock,
   } = useMarketplaceFeed(productEntitlements);
+  const accessibleStarterBeats = useMemo(
+    () => starterBeatsForArtist(starterBeats, membership?.artist?.plan.id),
+    [membership?.artist?.plan.id, starterBeats],
+  );
   const boothExport = useBoothExport(createBoothExport);
   const versionHistory = useVersionHistory();
   const { sheets, openSheet, closeSheet } = useSheetStack();
@@ -1555,7 +1560,7 @@ export function MobileStudioShell() {
             {activeNav === "locker" && (
               <LockerScreen
                 beats={beatLocker}
-                starterBeats={starterBeats}
+                starterBeats={accessibleStarterBeats}
                 songs={songLocker}
                 hooks={hookLocker}
                 roughTakes={roughTakes}
@@ -1811,7 +1816,7 @@ export function MobileStudioShell() {
           open={sheets.beatSwitcher}
           signedIn={Boolean(user)}
           currentBeat={selectedBeat}
-          starterBeats={starterBeats}
+          starterBeats={accessibleStarterBeats}
           lockerBeats={beatLocker}
           marketplaceBeats={marketplaceFeed.beats}
           marketplaceLoading={marketplaceFeedLoading}

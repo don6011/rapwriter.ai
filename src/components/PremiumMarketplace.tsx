@@ -5,7 +5,7 @@ import { ArrowRight, Check, Crown, Heart, LoaderCircle, Pause, Play, Search, Shi
 import { useEffect, useMemo, useState } from "react";
 import type { Beat } from "@/lib/marketplace";
 import { prepStudioTiers } from "@/lib/prep-studio-plans";
-import type { StarterBeat } from "@/lib/starter-beats";
+import { hasFullStarterBeatLibrary, lockedStarterBeatCount, starterBeatsForArtist, type StarterBeat } from "@/lib/starter-beats";
 import type { MarketplaceFeed, PadActionStatus, ProductUnlock, StudioPack, StudioPackId } from "@/lib/studio/types";
 import { cn } from "@/lib/utils";
 
@@ -59,20 +59,16 @@ export function PremiumMarketplace({
   const [query, setQuery] = useState("");
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [selectedBeat, setSelectedBeat] = useState<ProducerBeat | null>(null);
-  const isPaid = Boolean(artistPlanId && artistPlanId !== "artist_free");
+  const isPaid = hasFullStarterBeatLibrary(artistPlanId);
   const normalizedQuery = query.trim().toLowerCase();
 
   const producerBeats = useMemo(() => marketplaceFeed.beats.filter((beat) => beatMatches(beat, normalizedQuery)), [marketplaceFeed.beats, normalizedQuery]);
-  const availableStarterBeats = useMemo(() => {
-    if (isPaid) return starterBeats;
-    const featured = starterBeats.filter((beat) => beat.featured);
-    return (featured.length > 0 ? featured : starterBeats).slice(0, 3);
-  }, [isPaid, starterBeats]);
+  const availableStarterBeats = useMemo(() => starterBeatsForArtist(starterBeats, artistPlanId), [artistPlanId, starterBeats]);
   const visibleStarterBeats = useMemo(
     () => availableStarterBeats.filter((beat) => starterBeatMatches(beat, normalizedQuery)),
     [availableStarterBeats, normalizedQuery],
   );
-  const hiddenStarterCount = Math.max(0, starterBeats.length - availableStarterBeats.length);
+  const hiddenStarterCount = lockedStarterBeatCount(starterBeats, artistPlanId);
 
   useEffect(() => {
     if (!focusCategory) return;

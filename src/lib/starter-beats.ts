@@ -23,3 +23,17 @@ export type StarterBeat = {
   previewUrl: string;
   artworkUrl: string | null;
 };
+
+const freeStarterBeatLimit = 3;
+
+export function hasFullStarterBeatLibrary(artistPlanId?: string | null) {
+  return Boolean(artistPlanId && artistPlanId !== "artist_free");
+}
+
+export function starterBeatsForArtist(starterBeats: StarterBeat[], artistPlanId?: string | null) {
+  return hasFullStarterBeatLibrary(artistPlanId) ? starterBeats : starterBeats.slice(0, freeStarterBeatLimit);
+}
+
+export function lockedStarterBeatCount(starterBeats: StarterBeat[], artistPlanId?: string | null) {
+  return Math.max(0, starterBeats.length - starterBeatsForArtist(starterBeats, artistPlanId).length);
+}
