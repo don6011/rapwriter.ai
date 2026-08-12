@@ -240,6 +240,7 @@ export function MobileStudioShell() {
   const [newSongTitle, setNewSongTitle] = useState("");
   const [newSongStartSection, setNewSongStartSection] = useState("Hook");
   const [newSongUseBeat, setNewSongUseBeat] = useState(true);
+  const [newSongProjectId, setNewSongProjectId] = useState<string | null>(null);
   const [hydratedSessionId, setHydratedSessionId] = useState<string | null>(null);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [syncRetryNonce, setSyncRetryNonce] = useState(0);
@@ -938,10 +939,12 @@ export function MobileStudioShell() {
     title,
     startSection,
     useCurrentBeat,
+    projectId,
   }: {
     title: string;
     startSection: string;
     useCurrentBeat: boolean;
+    projectId?: string | null;
   }) => {
     if (!user) {
       requestAuth("Sign in to create and switch between songs.");
@@ -976,7 +979,7 @@ export function MobileStudioShell() {
           studioDna: { ...studioDna, environment: activeStudioPack.id },
         });
       }
-      let project: ProjectRow | undefined = projects[0];
+      let project: ProjectRow | undefined = projects.find((item) => item.id === projectId) ?? projects.find((item) => item.id === activeProjectId) ?? projects[0];
       if (!project) {
         const created = await ensureWorkspace({
           title: "Untitled Project",
@@ -1026,6 +1029,7 @@ export function MobileStudioShell() {
       setSaveStatus("saved");
       setSyncMessage("New song ready");
       setTitleDraft(cleanTitle);
+      setNewSongProjectId(null);
       closeSheet("newSong");
       setScreen("writer");
       setSongSwitchStatus({ state: "saved", message: "New song created." });
@@ -1523,11 +1527,12 @@ export function MobileStudioShell() {
                 signedIn={Boolean(user)}
                 onSyncRequest={() => requestAuth("Sign in to protect this draft across devices.")}
                 onLoadSong={(song) => void loadMobileSong(song)}
-                onNewSong={() => {
+                onNewSong={(projectId) => {
                   if (!user) {
                     requestAuth("Sign in to create and switch between songs.");
                     return;
                   }
+                  setNewSongProjectId(projectId ?? activeProjectId ?? null);
                   openSheet("newSong");
                 }}
                 studioPack={activeStudioPack}
@@ -1859,6 +1864,7 @@ export function MobileStudioShell() {
           startSection={newSongStartSection}
           useCurrentBeat={newSongUseBeat}
           beat={selectedBeat}
+          projectTitle={projects.find((project) => project.id === newSongProjectId)?.title ?? null}
           status={songSwitchStatus}
           onTitle={setNewSongTitle}
           onStartSection={setNewSongStartSection}
@@ -1869,6 +1875,7 @@ export function MobileStudioShell() {
               title: newSongTitle,
               startSection: newSongStartSection,
               useCurrentBeat: newSongUseBeat,
+              projectId: newSongProjectId,
             })
           }
         />

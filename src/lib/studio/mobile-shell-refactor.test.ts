@@ -247,6 +247,19 @@ describe("mobile studio shell refactor contracts", () => {
     expect(studioScreen).not.toContain("syncMessage");
   });
 
+  test("treats Singles as quick resumes and EPs as track containers", () => {
+    const rail = readFileSync(new URL("../../components/studio/panels/MobileProjectRail.tsx", import.meta.url), "utf8");
+    const shell = readFileSync(new URL("../../components/MobileStudioShell.tsx", import.meta.url), "utf8");
+    const newSong = readFileSync(new URL("../../components/studio/sheets/NewSongSheet.tsx", import.meta.url), "utf8");
+
+    expect(rail).toContain('project.project_type.toLowerCase() === "single"');
+    expect(rail).toContain("Open ${project.title} track list");
+    expect(rail).toContain("Add song to {openProject.title}");
+    expect(shell).toContain("setNewSongProjectId(projectId ?? activeProjectId ?? null)");
+    expect(shell).toContain("projects.find((item) => item.id === projectId)");
+    expect(newSong).toContain("Adding to");
+  });
+
   test("previews locked rooms without activating them and makes DNA rails scrollable", () => {
     const dnaSheet = readFileSync(new URL("../../components/studio/sheets/StudioDnaSheet.tsx", import.meta.url), "utf8");
     const dnaChoice = readFileSync(new URL("../../components/studio/primitives/StudioDnaChoice.tsx", import.meta.url), "utf8");

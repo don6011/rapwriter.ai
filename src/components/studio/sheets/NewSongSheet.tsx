@@ -11,6 +11,7 @@ export function NewSongSheet({
   startSection,
   useCurrentBeat,
   beat,
+  projectTitle,
   status,
   onTitle,
   onStartSection,
@@ -23,6 +24,7 @@ export function NewSongSheet({
   startSection: string;
   useCurrentBeat: boolean;
   beat: SelectedBeat;
+  projectTitle: string | null;
   status: PadActionStatus;
   onTitle: (value: string) => void;
   onStartSection: (value: string) => void;
@@ -56,6 +58,8 @@ export function NewSongSheet({
             autoFocus
           />
         </label>
+
+        {projectTitle && <div className="mt-3 rounded-xl border border-gold/20 bg-gold/[0.06] px-3 py-2 text-xs text-gold">Adding to <span className="font-semibold">{projectTitle}</span></div>}
 
         <div className="mt-5">
           <div className="label-hw">Start writing in</div>

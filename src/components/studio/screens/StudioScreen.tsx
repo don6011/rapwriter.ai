@@ -129,7 +129,7 @@ export function StudioScreen({
   signedIn: boolean;
   onSyncRequest: () => void;
   onLoadSong: (song: SongRow) => void;
-  onNewSong: () => void;
+  onNewSong: (projectId?: string) => void;
   studioPack: StudioPack;
   studioPacks: StudioPack[];
   studioDna: StudioDna;
@@ -277,7 +277,7 @@ export function StudioScreen({
         </div>
 
         {projects.length <= 1 && (
-          <button type="button" onClick={onNewSong} className="ml-auto mt-2 flex min-h-10 items-center gap-2 px-1 text-xs font-semibold text-white/65">
+          <button type="button" onClick={() => onNewSong()} className="ml-auto mt-2 flex min-h-10 items-center gap-2 px-1 text-xs font-semibold text-white/65">
             <FolderPlus className="h-4 w-4 text-gold" />
             New song
           </button>
