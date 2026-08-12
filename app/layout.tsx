@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Toaster } from "@/components/studio/primitives/sonner";
+import { OfflineRuntime } from "@/components/OfflineRuntime";
 import "../src/styles.css";
 
 export const metadata: Metadata = {
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         {children}
+        <OfflineRuntime />
         <Toaster
           theme="dark"
           position="top-center"

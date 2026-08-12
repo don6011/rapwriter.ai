@@ -6,6 +6,7 @@ import { analyzeRoughTakeAudio, type RoughTakeAnalysis } from "@/lib/booth-ready
 import { beatSnapshotFromRecord } from "@/lib/studio/beat-snapshot";
 import { isRoughTakeAnalysis } from "@/lib/studio/booth-ready";
 import type { SelectedBeat } from "@/lib/studio/types";
+import { preferredRoughTakeMimeType, resolvedRoughTakeMimeType } from "@/lib/studio/rough-take-mime";
 
 /**
  * The thirteen values that used to live as separate `useState` calls in the shell.
@@ -237,7 +238,10 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recorderStreamRef.current = stream;
       recorderChunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
+      const negotiatedMimeType = preferredRoughTakeMimeType((mimeType) => MediaRecorder.isTypeSupported(mimeType));
+      const recorder = negotiatedMimeType
+        ? new MediaRecorder(stream, { mimeType: negotiatedMimeType })
+        : new MediaRecorder(stream);
       const startedAt = Date.now();
       const { beat: beatAtStart, beatPosition: beatPositionAtStart } = captureBeat();
       recorderRef.current = recorder;
@@ -252,7 +256,9 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
       recorder.onstop = async () => {
         const analysisRunId = analysisRunRef.current;
         const duration = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-        const captured = new Blob(recorderChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const captured = new Blob(recorderChunksRef.current, {
+          type: resolvedRoughTakeMimeType(recorder.mimeType, negotiatedMimeType),
+        });
         const url = URL.createObjectURL(captured);
         if (urlRef.current) URL.revokeObjectURL(urlRef.current);
         urlRef.current = url;

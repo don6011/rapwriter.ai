@@ -29,6 +29,11 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
+    "@capacitor/network": "^8.0.1",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.110.0",
