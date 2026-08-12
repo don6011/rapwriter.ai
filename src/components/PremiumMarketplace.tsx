@@ -68,6 +68,7 @@ export function PremiumMarketplace({
     () => availableStarterBeats.filter((beat) => starterBeatMatches(beat, normalizedQuery)),
     [availableStarterBeats, normalizedQuery],
   );
+  const featuredStarterBeats = normalizedQuery ? visibleStarterBeats : visibleStarterBeats.slice(0, 2);
   const hiddenStarterCount = lockedStarterBeatCount(starterBeats, artistPlanId);
 
   useEffect(() => {
@@ -103,11 +104,11 @@ export function PremiumMarketplace({
         <MembershipDecision activePlanId={artistPlanId} signedIn={signedIn} onOpen={onOpenMembership} />
 
         <section id="market-beats" className="scroll-mt-28 pt-9">
-          <SectionHeading eyebrow="RapWriter Beats" title="Start with a pocket" detail={isPaid ? "Your complete starter library is ready." : "Three starter beats are included. Upgrade for the full library."} />
+          <SectionHeading eyebrow="RapWriter Beats" title="Start with a pocket" detail={isPaid ? "Your complete starter library is ready." : "Three starter beats are included. Two are featured here; the full starter pocket is in your Locker."} />
           <div className="mt-4 grid grid-cols-2 gap-3">
-            {visibleStarterBeats.map((beat) => <StarterBeatCard key={beat.id} beat={beat} onUse={() => onUseStarterBeat(beat)} />)}
+            {featuredStarterBeats.map((beat) => <StarterBeatCard key={beat.id} beat={beat} onUse={() => onUseStarterBeat(beat)} />)}
           </div>
-          {visibleStarterBeats.length === 0 && <EmptyState title="No starter beats match" detail="Try a title, mood, genre, or collection." />}
+          {featuredStarterBeats.length === 0 && <EmptyState title="No starter beats match" detail="Try a title, mood, genre, or collection." />}
           {!isPaid && hiddenStarterCount > 0 && (
             <button type="button" onClick={onOpenMembership} className="mt-3 flex min-h-12 w-full items-center justify-between rounded-xl border border-gold/25 bg-gold/8 px-4 text-left text-xs font-semibold text-gold">
               <span>Unlock {hiddenStarterCount} more starter beats</span><ArrowRight className="h-4 w-4" />
