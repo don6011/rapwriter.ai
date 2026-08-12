@@ -112,7 +112,16 @@ export function RoughTakeStrip({
     });
   };
 
-  const content = (
+  const content = recording && overlay ? (
+    <div className="flex min-h-11 items-center gap-2.5 rounded-xl border border-rec/25 bg-[#160b0e]/94 px-3.5 shadow-[0_16px_48px_rgba(0,0,0,0.48)] backdrop-blur-xl" aria-live="polite">
+      <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rec/45" />
+        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rec" />
+      </span>
+      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-white/88">Recording rough take</span>
+      <span className="shrink-0 font-mono text-xs tabular-nums text-rec">{formatDuration(recordingSeconds)}</span>
+    </div>
+  ) : (
     <div className={cn("rounded-2xl border border-white/10 bg-[#0d0d0f]/96 p-3 shadow-[0_20px_70px_rgba(0,0,0,0.58)] backdrop-blur-xl", !overlay && (compact ? "mt-3" : "mt-3"))}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
@@ -135,7 +144,7 @@ export function RoughTakeStrip({
         </div>
       </div>
 
-      {recording && (
+      {recording && !overlay && (
         <div className="mt-3 flex items-center gap-2 rounded-xl border border-rec/20 bg-rec/8 p-3">
           <div className="h-2.5 w-2.5 rounded-full bg-rec shadow-[0_0_18px_rgba(255,71,87,0.8)]" />
           <div className="flex-1">

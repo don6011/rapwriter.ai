@@ -20,6 +20,7 @@ import type { RecordingMode } from "@/components/studio/state/use-rough-take";
 import { toast } from "sonner";
 
 export function WriterScreen({
+  songTitle,
   readinessLaunchToken,
   activeSection,
   sectionContent,
@@ -67,6 +68,7 @@ export function WriterScreen({
   onStudioAirVolume,
   producerActions,
 }: {
+  songTitle: string;
   readinessLaunchToken: number;
   activeSection: number;
   sectionContent: Record<string, string>;
@@ -133,6 +135,8 @@ export function WriterScreen({
   const hasHistory = artistMembership?.entitlements.version_history === true;
   const hasGhostwriter = artistMembership?.entitlements.ghostwriter === true;
   const hasPremiumExports = artistMembership?.entitlements.premium_exports === true;
+  const savePrimary = section.name === "Hook" ? padActions.onSaveHook : padActions.onSaveSong;
+  const savePrimaryLabel = section.name === "Hook" ? "Save hook" : "Save song";
   let logicalBarNumber = 0;
   const editorRows = sectionText.split("\n").map((text) => ({
     text,
@@ -207,8 +211,8 @@ export function WriterScreen({
         <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-full border border-white/10 text-muted-foreground" aria-label="Exit writer">
           <X className="h-5 w-5" />
         </button>
-        <div className="min-w-0 text-center">
-          <div className="label-hw text-gold">Writer Flow</div>
+        <div className="min-w-0 flex-1 px-2 text-center">
+          <div className="truncate text-sm font-semibold text-white/92">{songTitle}</div>
           <button
             type="button"
             onClick={() => setStudioAirOpen(true)}
@@ -236,7 +240,7 @@ export function WriterScreen({
       </div>
 
       <div className="sticky top-0 z-30 border-b border-white/10 bg-[#070708]/94 backdrop-blur-xl">
-        <MobileSectionTabs sectionContent={sectionContent} activeSection={activeSection} onSetActiveSection={switchSection} />
+        <MobileSectionTabs sectionContent={sectionContent} activeSection={activeSection} onSetActiveSection={switchSection} disabled={recording} />
       </div>
 
       <div className="relative z-10 flex flex-none flex-col px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
@@ -280,6 +284,7 @@ export function WriterScreen({
             <PenView sectionName={section.name} text={sectionText} />
           ) : (
             <div className="relative min-h-[54svh] overflow-hidden bg-black/18 backdrop-blur-sm">
+              <div aria-hidden="true" className="pointer-events-none absolute bottom-0 left-14 top-0 z-0 w-px bg-white/[0.055]" />
               <div
                 aria-hidden="true"
                 data-testid="bar-gutter"
@@ -287,8 +292,8 @@ export function WriterScreen({
               >
                 <div className="p-5" style={{ transform: `translateY(-${editorScrollTop}px)` }}>
                   {editorRows.map((row, index) => (
-                    <div key={index} className="grid grid-cols-[36px_minmax(0,1fr)]">
-                      <span className="pr-3 text-right font-mono text-[10px] leading-9 tabular-nums text-white/28">
+                    <div key={index} className="grid grid-cols-[44px_minmax(0,1fr)]">
+                      <span className="pr-4 text-right font-mono text-[10px] leading-9 tabular-nums text-white/18">
                         {row.number}
                       </span>
                       <span className="invisible min-h-9 whitespace-pre-wrap break-words font-sans text-[18px] leading-9">
@@ -315,7 +320,7 @@ export function WriterScreen({
                 placeholder={`Start ${section.name}...`}
                 aria-label={`${section.name} lyrics`}
                 spellCheck={false}
-                className="relative z-10 min-h-[54svh] w-full flex-none resize-none bg-transparent py-5 pl-14 pr-5 font-sans text-[18px] leading-9 text-white/92 caret-gold outline-none placeholder:text-white/28"
+                className="relative z-10 min-h-[54svh] w-full flex-none resize-none bg-transparent py-5 pl-16 pr-5 font-sans text-[18px] leading-9 text-white/92 caret-gold outline-none placeholder:text-white/28"
               />
             </div>
           )}
@@ -340,9 +345,9 @@ export function WriterScreen({
               <History className="mb-0.5 h-3.5 w-3.5" />
               {hasHistory ? "History" : "History Pro"}
             </button>
-            <button type="button" onClick={padActions.onSaveHook} disabled={padActions.status.state === "saving"} className="flex min-h-10 flex-col items-center justify-center rounded-full border border-transparent px-2.5 text-[9px] font-semibold text-gold transition-colors hover:border-gold/20 hover:bg-gold/[0.06] disabled:opacity-50">
+            <button type="button" onClick={savePrimary} disabled={padActions.status.state === "saving" || (section.name === "Hook" && !sectionText.trim())} className="flex min-h-10 flex-col items-center justify-center rounded-full border border-transparent px-2.5 text-[9px] font-semibold text-gold transition-colors hover:border-gold/20 hover:bg-gold/[0.06] disabled:opacity-40">
               <Save className="mb-0.5 h-3.5 w-3.5" />
-              Save hook
+              {savePrimaryLabel}
             </button>
           </div>
         </div>

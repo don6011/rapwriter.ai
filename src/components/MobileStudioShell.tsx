@@ -1067,7 +1067,7 @@ export function MobileStudioShell() {
   };
 
   const startRecording = async (
-    resume?: { beat: SelectedBeat | null; beatPosition: number; recordingMode: RecordingMode },
+    resume?: { beat: SelectedBeat | null; beatPosition: number; recordingMode: RecordingMode; sectionName?: string },
     requestedMode?: RecordingMode,
   ) => {
     stopStudioAir();
@@ -1082,6 +1082,7 @@ export function MobileStudioShell() {
     }
     await take.startRecording({
       recordingMode: nextRecordingMode,
+      sectionName: resume?.sectionName ?? section.name,
       captureBeat: () => ({
         beat: recordingBeat ? { ...recordingBeat } : null,
         beatPosition: recordingBeat ? (resume?.beatPosition ?? Math.max(0, positionSeconds())) : 0,
@@ -1101,7 +1102,7 @@ export function MobileStudioShell() {
   const continueRoughTake = (takeOffsetSeconds: number) => {
     if (take.state.recordingMode === "vocals_only") {
       setRecordingMode("vocals_only");
-      void startRecording({ beat: null, beatPosition: 0, recordingMode: "vocals_only" });
+      void startRecording({ beat: null, beatPosition: 0, recordingMode: "vocals_only", sectionName: take.state.sectionName });
       return;
     }
     const recordingBeat = roughTakeBeat ?? selectedBeat;
@@ -1111,7 +1112,7 @@ export function MobileStudioShell() {
       getBeatDurationSeconds(recordingBeat),
     );
     setRecordingMode("with_beat");
-    void startRecording({ beat: recordingBeat, beatPosition, recordingMode: "with_beat" });
+    void startRecording({ beat: recordingBeat, beatPosition, recordingMode: "with_beat", sectionName: take.state.sectionName });
   };
 
   const toggleRecording = (nextMode?: RecordingMode) => {
@@ -1179,7 +1180,7 @@ export function MobileStudioShell() {
         projectId,
         songId,
         sessionId,
-        sectionName: section.name,
+        sectionName: take.state.sectionName,
         durationSeconds: roughTakeDuration,
         analysis: roughTakeAnalysis,
         beat: take.state.recordingMode === "vocals_only" ? null : (roughTakeBeat ?? take.recordBeatRef.current ?? selectedBeat),
@@ -1739,6 +1740,7 @@ export function MobileStudioShell() {
           </>
         ) : (
           <WriterScreen
+            songTitle={titleDraft.trim() || activeSong?.title || "Untitled Song"}
             readinessLaunchToken={readinessLaunchToken}
             activeSection={activeSection}
             sectionContent={sectionContent}

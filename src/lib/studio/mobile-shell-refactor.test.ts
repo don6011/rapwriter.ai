@@ -27,6 +27,7 @@ describe("mobile studio shell refactor contracts", () => {
       recording: false,
       recordStartedAt: null,
       recordingSeconds: 0,
+      sectionName: "Hook",
       error: "old error",
       url: "blob:existing-take",
       blob: null,
@@ -51,6 +52,36 @@ describe("mobile studio shell refactor contracts", () => {
     expect(recording.error).toBeNull();
   });
 
+  test("captures the section where a rough take begins", () => {
+    const initial = {
+      recording: false,
+      recordStartedAt: null,
+      recordingSeconds: 0,
+      sectionName: "Hook",
+      error: null,
+      url: null,
+      blob: null,
+      duration: 0,
+      beat: null,
+      beatPosition: 0,
+      recordingMode: "with_beat" as const,
+      saved: false,
+      saving: false,
+      analyzing: false,
+      analysis: null,
+    } satisfies RoughTakeState;
+
+    const armed = roughTakeReducer(initial, {
+      type: "record/armed",
+      beat: EMPTY_BEAT,
+      beatPosition: 12,
+      recordingMode: "with_beat",
+      sectionName: "Verse 1",
+    });
+
+    expect(armed.sectionName).toBe("Verse 1");
+  });
+
   test("lets a saved take scrub and continue from its matching beat position", () => {
     const shell = readFileSync(new URL("../../components/MobileStudioShell.tsx", import.meta.url), "utf8");
     const strip = readFileSync(new URL("../../components/studio/panels/RoughTakeStrip.tsx", import.meta.url), "utf8");
@@ -62,7 +93,7 @@ describe("mobile studio shell refactor contracts", () => {
     expect(strip).toContain("Continue at {formatDuration(resumeBeatTime)}");
     expect(strip).toContain("onContinue(resumeOffset)");
     expect(shell).toContain("getTakeResumeBeatTime(");
-    expect(shell).toContain('void startRecording({ beat: recordingBeat, beatPosition, recordingMode: "with_beat" })');
+    expect(shell).toContain('void startRecording({ beat: recordingBeat, beatPosition, recordingMode: "with_beat", sectionName: take.state.sectionName })');
   });
 
   test("keeps beat preview separate from selecting a beat", () => {
@@ -180,8 +211,30 @@ describe("mobile studio shell refactor contracts", () => {
     expect(writer).toContain("<RoughTakeStrip\n            overlay");
     expect(writer).toContain('className="pointer-events-none absolute inset-0 z-0 overflow-hidden"');
     expect(writer).toContain('className="relative z-10 min-h-[54svh]');
+    expect(writer).toContain("grid-cols-[44px_minmax(0,1fr)]");
+    expect(writer).toContain("text-white/18");
+    expect(strip).toContain("Recording rough take");
+    expect(strip).toContain("recording && overlay");
+    expect(strip).toContain("recording && !overlay");
     expect(strip).toContain('"fixed inset-0 z-[70] flex items-end justify-center"');
     expect(transport).not.toContain('className="mt-1.5 flex items-center justify-between gap-2 border-t');
+  });
+
+  test("keeps writing actions truthful and recording-safe", () => {
+    const writer = readFileSync(new URL("../../components/studio/screens/WriterScreen.tsx", import.meta.url), "utf8");
+    const tabs = readFileSync(new URL("../../components/studio/panels/MobileSectionTabs.tsx", import.meta.url), "utf8");
+    const transport = readFileSync(new URL("../../components/studio/panels/PadTransport.tsx", import.meta.url), "utf8");
+    const shell = readFileSync(new URL("../../components/MobileStudioShell.tsx", import.meta.url), "utf8");
+
+    expect(writer).toContain("songTitle: string");
+    expect(writer).toContain('section.name === "Hook" ? "Save hook" : "Save song"');
+    expect(writer).toContain("disabled={recording}");
+    expect(tabs).toContain("disabled?: boolean");
+    expect(transport).toContain("beat.id !== EMPTY_BEAT.id");
+    expect(transport).toContain('"Choose a beat"');
+    expect(transport).toContain("Choose a beat first.");
+    expect(transport).toContain("disabled={recording}");
+    expect(shell).toContain("sectionName: take.state.sectionName");
   });
 
   test("makes the active Studio card a truthful Current Session resume surface", () => {
