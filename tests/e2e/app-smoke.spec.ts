@@ -1,6 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const publicRoutes = ["/", "/?view=locker", "/?view=market", "/?view=profile", "/mobile-preview", "/producer"];
+const publicRoutes = [
+  "/",
+  "/?view=locker",
+  "/?view=market",
+  "/?view=profile",
+  "/marketplace",
+  "/mobile-preview",
+  "/producer",
+  "/collaborations",
+  "/support",
+];
 
 async function expectHealthyPage(page: Page) {
   await expect(page.locator("body")).not.toContainText("Application error");
@@ -54,7 +64,7 @@ test.describe("public app shell", () => {
       page.on("pageerror", (error) => pageErrors.push(error.message));
       await page.goto(route, { waitUntil: "domcontentloaded" });
       await expect(page.locator("body")).toBeVisible();
-      if (route === "/" || route.startsWith("/?view=")) await expectStudioShellReady(page);
+      if (route === "/" || route.startsWith("/?view=") || route === "/marketplace") await expectStudioShellReady(page);
       await expectHealthyPage(page);
       expect(pageErrors).toEqual([]);
     });
@@ -167,11 +177,16 @@ test("writer glass pad stays focused and mobile safe", async ({ page }, testInfo
   await expectHealthyPage(page);
   await page.screenshot({ path: testInfo.outputPath("writer-glass.png"), fullPage: false });
 
-  await page.getByRole("button", { name: "Change beat" }).click();
+  const beatSwitcherTrigger = page
+    .getByRole("button", { name: "Change beat" })
+    .or(page.getByRole("button", { name: "Choose a beat" }).first());
+  await beatSwitcherTrigger.click();
   await expect(page.getByRole("dialog", { name: "Change the beat." })).toBeVisible();
   await expect(page.getByRole("button", { name: "My Beats" })).toBeVisible();
   await expect(page.getByRole("button", { name: "30-sec Previews" })).toBeVisible();
-  await page.getByRole("button", { name: /City Shadows N0izepack Ent/ }).click();
+  const cityShadowsChoice = page.getByText("City Shadows", { exact: true }).locator("..").locator("..");
+  await expect(cityShadowsChoice.getByRole("button", { name: "Preview City Shadows" })).toBeVisible();
+  await cityShadowsChoice.getByRole("button", { name: "Use" }).click();
   await expect(page.getByText("City Shadows", { exact: true })).toBeVisible();
   await expect(editor).toHaveValue("Glass roof, still I see the sky though\nEvery ceiling that they built, I broke the light through");
 
