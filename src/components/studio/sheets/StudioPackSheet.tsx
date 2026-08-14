@@ -1,8 +1,6 @@
 "use client";
 
-import { studioRoomProducts } from "@/lib/product-catalog";
 import type { StudioRoomAccess } from "@/lib/studio-room-access";
-import { getStudioRoomProductId } from "@/lib/studio/beat-snapshot";
 import { getStudioPack } from "@/lib/studio/packs";
 import type { StudioPack, StudioPackId } from "@/lib/studio/types";
 import { cn } from "@/lib/utils";
@@ -15,7 +13,6 @@ export function StudioPackSheet({
   packs,
   getStudioPackAccess,
   onClose,
-  onUnlock,
   onPreview,
   onOpenMembership,
   onStudioDna,
@@ -26,7 +23,6 @@ export function StudioPackSheet({
   packs: StudioPack[];
   getStudioPackAccess: (id: StudioPackId) => StudioRoomAccess;
   onClose: () => void;
-  onUnlock: (id: StudioPackId) => void;
   onPreview: (id: StudioPackId) => void;
   onOpenMembership: () => void;
   onStudioDna: () => void;
@@ -35,7 +31,6 @@ export function StudioPackSheet({
   const [previewId, setPreviewId] = useState<StudioPackId>(active);
   const previewPack = getStudioPack(previewId);
   const previewAccess = getStudioPackAccess(previewPack.id);
-  const previewProduct = studioRoomProducts.find((item) => item.id === getStudioRoomProductId(previewPack.id));
 
   useEffect(() => {
     if (open) setPreviewId(active);
@@ -92,16 +87,11 @@ export function StudioPackSheet({
                       Preview locally
                     </button>
                   )}
-                  <button type="button" onClick={() => onUnlock(previewPack.id)} className="gold-seal mt-3 min-h-11 w-full rounded-xl px-4 text-sm font-semibold text-black">
-                    Unlock Room {previewProduct ? `- ${previewProduct.price}` : ""}
+                  <button type="button" onClick={onOpenMembership} className="gold-seal mt-3 min-h-11 w-full rounded-xl px-4 text-sm font-semibold text-black">
+                    Unlock with RapWriter Pro
                   </button>
-                  {previewAccess.requiredPlan && (
-                    <button type="button" onClick={onOpenMembership} className="mt-2 min-h-10 w-full rounded-xl border border-gold/25 bg-gold/8 px-4 text-xs font-semibold text-gold">
-                      Included with RapWriter Pro
-                    </button>
-                  )}
                   <p className="mt-2 text-center text-[11px] leading-relaxed text-muted-foreground">
-                    Own it permanently{previewAccess.requiredPlan ? ", or use it while membership is active" : " through Studio Store"}.
+                    All locked rooms are included while your Pro membership is active.
                   </p>
                   {process.env.NODE_ENV !== "production" && (
                     <p className="mt-1 text-center text-[10px] leading-relaxed text-white/40">
@@ -158,7 +148,7 @@ export function StudioPackSheet({
           <div className="rounded-2xl border border-white/10 bg-black/24 p-3">
             <div className="label-hw text-gold/80">Pack Access</div>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Membership unlocks room access while active. Studio Store purchases remain yours permanently.
+              RapWriter Pro unlocks every room while your membership is active. Included rooms stay available on every plan.
             </p>
           </div>
         </div>

@@ -1,17 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import {
   bundleProducts,
+  getAnyCatalogProduct,
+  getCatalogProduct,
   studioRoomProducts,
   themeProducts,
   writingPackProducts,
 } from "./product-catalog.ts";
 
 describe("Studio Store catalog pricing", () => {
-  test("prices the Penthouse room as an owned environment asset", () => {
-    const room = studioRoomProducts.find((product) => product.id === "studio-room-penthouse");
-
-    expect(room?.priceCents).toBe(999);
-    expect(room?.price).toBe("$9.99");
+  test("keeps historical room entitlements resolvable without offering room checkout", () => {
+    expect(getCatalogProduct("studio-room-penthouse")).toBeNull();
+    expect(getAnyCatalogProduct("studio-room-penthouse")?.type).toBe("studio_room");
   });
 
   test("keeps the Penthouse bundle below its individual asset total", () => {

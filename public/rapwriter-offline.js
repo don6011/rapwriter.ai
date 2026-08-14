@@ -29,7 +29,7 @@ self.addEventListener("fetch", (event) => {
         void cache.put(request, response.clone());
         return response;
       } catch {
-        return (await caches.match(request)) || (await caches.match("/")) || (await caches.match("/offline"));
+        return (await caches.match(request)) || (await caches.match("/offline")) || (await caches.match("/"));
       }
     })());
     return;

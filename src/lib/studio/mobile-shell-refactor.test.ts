@@ -171,7 +171,9 @@ describe("mobile studio shell refactor contracts", () => {
 
     expect(authDrawer).toContain("z-[60]");
     expect(packSheet).toContain("z-50");
-    expect(packSheet).toContain("onClick={() => onUnlock(previewPack.id)}");
+    expect(packSheet).toContain("onClick={onOpenMembership}");
+    expect(packSheet).toContain("Unlock with RapWriter Pro");
+    expect(packSheet).not.toContain("onUnlock");
     expect(shell).toContain("setSectionContent(nextSections)");
     expect(shell).toContain("setActiveSection(nextSectionIndex >= 0 ? nextSectionIndex : 0)");
     expect(shell).toContain("take.resetForSongSwitch()");

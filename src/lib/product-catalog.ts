@@ -353,12 +353,12 @@ export const bundleProducts: CatalogBundle[] = [
 // Capability products remain resolvable for historical purchases, but they are
 // no longer offered for sale. New access comes from RapWriter membership.
 export const legacyCapabilityProducts = [
+  ...studioRoomProducts,
   ...producerStyleProducts,
   ...vocalChainProducts,
 ];
 
 export const marketplaceProducts = [
-  ...studioRoomProducts,
   ...writingPackProducts,
   ...ambientPackProducts,
   ...themeProducts,

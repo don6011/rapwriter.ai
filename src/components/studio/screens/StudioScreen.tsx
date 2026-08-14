@@ -74,7 +74,6 @@ export function StudioScreen({
   studioDna,
   studioAirPlaying,
   getStudioPackAccess,
-  onUnlockStudioPack,
   onOpenMembership,
   onStudioPack,
   onPreviewStudioPack,
@@ -135,7 +134,6 @@ export function StudioScreen({
   studioDna: StudioDna;
   studioAirPlaying: boolean;
   getStudioPackAccess: (id: StudioPackId) => StudioRoomAccess;
-  onUnlockStudioPack: (id: StudioPackId) => void;
   onOpenMembership: () => void;
   onStudioPack: (id: StudioPackId) => void;
   onPreviewStudioPack: (id: StudioPackId) => void;
@@ -159,7 +157,7 @@ export function StudioScreen({
   const padStatus = saveStatus === "saving" ? "Saving" : saveStatus === "error" ? "On device" : "Saved";
 
   return (
-    <div className="flex-1 overflow-y-auto pb-32">
+    <div className="flex-1 overflow-x-hidden overflow-y-auto overscroll-x-none pb-32">
       <section className="relative h-[288px] overflow-hidden">
         <img
           src={studioPack.image}
@@ -437,7 +435,6 @@ export function StudioScreen({
         packs={studioPacks}
         getStudioPackAccess={getStudioPackAccess}
         onClose={() => setStudioPackSheetOpen(false)}
-        onUnlock={onUnlockStudioPack}
         onPreview={onPreviewStudioPack}
         onOpenMembership={() => {
           setStudioPackSheetOpen(false);

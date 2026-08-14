@@ -3,9 +3,7 @@
 import { useEffect } from "react";
 import type { useRapWriterData } from "@/hooks/use-rapwriter-data";
 import type { Beat } from "@/lib/marketplace";
-import { studioRoomProducts } from "@/lib/product-catalog";
-import { getStudioRoomProductId } from "@/lib/studio/beat-snapshot";
-import type { PadActionStatus, ProductUnlock, StudioPackId } from "@/lib/studio/types";
+import type { PadActionStatus, ProductUnlock } from "@/lib/studio/types";
 
 type Workspace = ReturnType<typeof useRapWriterData>;
 
@@ -78,21 +76,6 @@ export function useStudioCommerce({
       });
   }
 
-  function unlockStudioPack(id: StudioPackId) {
-    const product = studioRoomProducts.find((item) => item.id === getStudioRoomProductId(id));
-    if (!product) {
-      setPadActionStatus({ state: "error", message: "This room is not available for purchase yet." });
-      return;
-    }
-    unlockProduct({
-      id: product.id,
-      title: product.title,
-      category: "Studio Room",
-      detail: product.detail,
-      price: product.price,
-    });
-  }
-
   function licenseBeat(beat: Beat) {
     if (!user) {
       requestAuth("Sign in to license this beat and keep it in your Locker.");
@@ -122,5 +105,5 @@ export function useStudioCommerce({
       });
   }
 
-  return { unlockProduct, unlockStudioPack, licenseBeat };
+  return { unlockProduct, licenseBeat };
 }

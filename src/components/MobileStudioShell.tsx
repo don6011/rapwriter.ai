@@ -220,7 +220,7 @@ export function MobileStudioShell() {
     titleStatus,
     setTitleStatus,
   } = useWritingPad(activeSong?.title);
-  const { unlockProduct, unlockStudioPack, licenseBeat } = useStudioCommerce({
+  const { unlockProduct, licenseBeat } = useStudioCommerce({
     user,
     unlockProductEntitlement,
     saveSessionProductUnlock,
@@ -1546,7 +1546,6 @@ export function MobileStudioShell() {
                 studioDna={studioDna}
                 studioAirPlaying={studioAirPlaying}
                 getStudioPackAccess={getStudioPackAccess}
-                onUnlockStudioPack={unlockStudioPack}
                 onOpenMembership={() => {
                   setActiveNav("profile");
                   window.requestAnimationFrame(() => document.getElementById("profile-membership")?.scrollIntoView({ behavior: "smooth", block: "start" }));
