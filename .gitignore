@@ -44,3 +44,12 @@ supabase/.temp/
 *.sw?
 .vercel
 .env*
+
+# Capacitor build products and copied web assets
+ios/App/Pods/
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+android/.gradle/
+android/app/build/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json

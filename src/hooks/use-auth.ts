@@ -181,7 +181,7 @@ export function useAuth() {
     };
   }, [confirmServerSession, supabase]);
 
-  const signIn = async (email: string, next = "/") => {
+  const signIn = async (email: string, next = "/studio") => {
     if (!supabase) return { error: new Error("Supabase is not configured.") };
     const params = new URLSearchParams({ next });
     const redirectTo = `${window.location.origin}/api/auth/callback?${params}`;
@@ -237,7 +237,7 @@ export function useAuth() {
 
   const sendPasswordReset = async (email: string) => {
     if (!supabase) return { error: new Error("Supabase is not configured.") };
-    const next = encodeURIComponent("/?auth_mode=recovery");
+    const next = encodeURIComponent("/studio?auth_mode=recovery");
     return supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/api/auth/callback?next=${next}`,
     });

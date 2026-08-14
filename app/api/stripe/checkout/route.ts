@@ -177,8 +177,8 @@ export async function POST(request: Request) {
       mode: "payment",
       client_reference_id: order.id,
       customer_email: user.email ?? undefined,
-      success_url: safeCheckoutReturnUrl(data.success_url, appUrl, `/?view=locker&checkout=success&order=${order.id}`),
-      cancel_url: safeCheckoutReturnUrl(data.cancel_url, appUrl, `/?view=market&checkout=cancelled&order=${order.id}`),
+      success_url: safeCheckoutReturnUrl(data.success_url, appUrl, `/studio?view=locker&checkout=success&order=${order.id}`),
+      cancel_url: safeCheckoutReturnUrl(data.cancel_url, appUrl, `/studio?view=market&checkout=cancelled&order=${order.id}`),
       metadata: {
         order_id: order.id,
         user_id: user.id,

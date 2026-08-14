@@ -1,5 +1,5 @@
-import { MobileStudioShell } from "@/components/MobileStudioShell";
+import { redirect } from "next/navigation";
 
 export default function HomePage() {
-  return <MobileStudioShell />;
+  redirect("/studio");
 }

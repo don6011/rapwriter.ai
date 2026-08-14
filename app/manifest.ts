@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "RapWriter.ai",
     short_name: "RapWriter",
     description: "Write, rehearse, and prepare every record for the booth.",
-    start_url: "/",
+    start_url: "/studio",
     scope: "/",
     display: "standalone",
     orientation: "portrait",

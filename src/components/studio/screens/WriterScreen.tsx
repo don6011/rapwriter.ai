@@ -7,6 +7,7 @@ import { PenView } from "@/components/studio/panels/PenView";
 import { RoughTakeStrip } from "@/components/studio/panels/RoughTakeStrip";
 import { MobileDrawer } from "@/components/studio/primitives/MobileDrawer";
 import { GhostwriterSheet } from "@/components/studio/sheets/GhostwriterSheet";
+import { RevisionHistoryUpgradeSheet } from "@/components/studio/sheets/RevisionHistoryUpgradeSheet";
 import { StudioAirSheet } from "@/components/studio/sheets/StudioAirSheet";
 import type { WorkspaceMembership } from "@/lib/membership";
 import { countBars } from "@/lib/studio/bars";
@@ -122,6 +123,7 @@ export function WriterScreen({
   const [ghostwriterOpen, setGhostwriterOpen] = useState(false);
   const [studioAirOpen, setStudioAirOpen] = useState(false);
   const [readinessOpen, setReadinessOpen] = useState(false);
+  const [historyUpgradeOpen, setHistoryUpgradeOpen] = useState(false);
   const [transportCompact, setTransportCompact] = useState(false);
   const [editorScrollTop, setEditorScrollTop] = useState(0);
   const writerScrollRef = useRef<HTMLDivElement | null>(null);
@@ -142,6 +144,18 @@ export function WriterScreen({
     text,
     number: text.trim() ? ++logicalBarNumber : null,
   }));
+
+  const openHistory = () => {
+    if (!signedIn) {
+      onSyncRequest();
+      return;
+    }
+    if (!hasHistory) {
+      setHistoryUpgradeOpen(true);
+      return;
+    }
+    onOpenHistory();
+  };
 
   useEffect(() => {
     if (readinessLaunchToken > 0) setReadinessOpen(true);
@@ -226,9 +240,9 @@ export function WriterScreen({
         </div>
         <button
           type="button"
-          onClick={signedIn ? onOpenHistory : onSyncRequest}
-          aria-label={signedIn ? "Open revision history" : "Protect device-only draft"}
-          title={signedIn ? "Revision history" : "Sign in to sync"}
+          onClick={openHistory}
+          aria-label={!signedIn ? "Protect device-only draft" : hasHistory ? "Open revision history" : "Learn about revision history"}
+          title={!signedIn ? "Sign in to sync" : hasHistory ? "Revision history" : "Revision history with Pro"}
           className={cn(
             "flex min-h-9 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] transition-colors hover:bg-white/8",
             !signedIn || saveStatus === "error" ? "bg-gold/12 text-gold" : "bg-emerald-500/12 text-emerald-300",
@@ -341,7 +355,7 @@ export function WriterScreen({
               <Pencil className="mb-0.5 h-3.5 w-3.5" />
               {penView ? "Edit" : hasPenView ? "Pen View" : "Pen Pro"}
             </button>
-            <button type="button" onClick={!signedIn ? onSyncRequest : hasHistory ? onOpenHistory : onUpgrade} className="flex min-h-10 flex-col items-center justify-center rounded-full border border-transparent px-2.5 text-[9px] font-semibold text-muted-foreground transition-colors hover:border-white/10 hover:bg-white/[0.035]">
+            <button type="button" onClick={openHistory} className="flex min-h-10 flex-col items-center justify-center rounded-full border border-transparent px-2.5 text-[9px] font-semibold text-muted-foreground transition-colors hover:border-white/10 hover:bg-white/[0.035]">
               <History className="mb-0.5 h-3.5 w-3.5" />
               {hasHistory ? "History" : "History Pro"}
             </button>
@@ -444,6 +458,7 @@ export function WriterScreen({
         onToggle={onToggleStudioAir}
         onVolume={onStudioAirVolume}
       />
+      <RevisionHistoryUpgradeSheet open={historyUpgradeOpen} onClose={() => setHistoryUpgradeOpen(false)} onUpgrade={onUpgrade} />
     </div>
   );
 }
