@@ -245,15 +245,21 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
       const recorder = negotiatedMimeType
         ? new MediaRecorder(stream, { mimeType: negotiatedMimeType })
         : new MediaRecorder(stream);
-      const startedAt = Date.now();
-      const { beat: beatAtStart, beatPosition: beatPositionAtStart } = captureBeat();
+      let startedAt = Date.now();
+      const { beat: beatToStart } = captureBeat();
       recorderRef.current = recorder;
-      recordBeatRef.current = beatAtStart;
-      recordBeatPositionRef.current = beatPositionAtStart;
-      dispatch({ type: "record/armed", beat: beatAtStart, beatPosition: beatPositionAtStart, recordingMode, sectionName });
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) recorderChunksRef.current.push(event.data);
+      };
+
+      recorder.onstart = () => {
+        startedAt = Date.now();
+        const { beat: beatAtStart, beatPosition: beatPositionAtStart } = captureBeat();
+        recordBeatRef.current = beatAtStart;
+        recordBeatPositionRef.current = beatPositionAtStart;
+        dispatch({ type: "record/armed", beat: beatAtStart, beatPosition: beatPositionAtStart, recordingMode, sectionName });
+        dispatch({ type: "record/started", startedAt });
       };
 
       recorder.onstop = async () => {
@@ -284,9 +290,8 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
         }
       };
 
-      await beforeStart(beatAtStart);
+      await beforeStart(beatToStart);
       recorder.start();
-      dispatch({ type: "record/started", startedAt });
     } catch {
       setWebAudioSessionType("playback");
       dispatch({ type: "record/failed", message: "Microphone permission was blocked." });

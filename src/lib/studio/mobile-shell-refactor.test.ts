@@ -82,6 +82,16 @@ describe("mobile studio shell refactor contracts", () => {
     expect(armed.sectionName).toBe("Verse 1");
   });
 
+  test("captures beat timing when the recorder actually starts", () => {
+    const takeHook = readFileSync(new URL("../../components/studio/state/use-rough-take.ts", import.meta.url), "utf8");
+    const beatHook = readFileSync(new URL("../../components/studio/state/use-beat-playback.ts", import.meta.url), "utf8");
+
+    expect(takeHook).toContain("recorder.onstart = () => {");
+    expect(takeHook).toContain("const { beat: beatAtStart, beatPosition: beatPositionAtStart } = captureBeat();");
+    expect(takeHook.indexOf("await beforeStart(beatToStart);")).toBeLessThan(takeHook.indexOf("recorder.start();"));
+    expect(beatHook).toContain("const audioTime = beatAudioRef.current?.currentTime;");
+  });
+
   test("lets a saved take scrub and continue from its matching beat position", () => {
     const shell = readFileSync(new URL("../../components/MobileStudioShell.tsx", import.meta.url), "utf8");
     const strip = readFileSync(new URL("../../components/studio/panels/RoughTakeStrip.tsx", import.meta.url), "utf8");

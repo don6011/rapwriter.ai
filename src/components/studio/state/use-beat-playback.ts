@@ -191,7 +191,12 @@ export function useBeatPlayback({ onPause }: BeatPlaybackOptions) {
   }, []);
 
   /** The live playback position, readable outside a render (draft writes, take capture). */
-  const positionSeconds = useCallback(() => beatCurrentTimeRef.current, []);
+  const positionSeconds = useCallback(() => {
+    const audioTime = beatAudioRef.current?.currentTime;
+    return typeof audioTime === "number" && Number.isFinite(audioTime)
+      ? audioTime
+      : beatCurrentTimeRef.current;
+  }, []);
 
   return {
     playing,
