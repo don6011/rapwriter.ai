@@ -106,12 +106,17 @@ export function RoughTakeStrip({
     onReviewStart();
     setWebAudioSessionType("playback");
     const reviewBeat = reviewBeatRef.current;
-    if (reviewBeat) {
-      const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
-      reviewBeat.currentTime = beatDuration > 0 ? (beatStartTime + audio.currentTime) % beatDuration : beatStartTime + audio.currentTime;
-      void reviewBeat.play().catch(() => undefined);
-    }
-    void audio.play().then(() => setReviewPlaying(true)).catch(() => {
+    void audio.play().then(async () => {
+      if (reviewBeat) {
+        const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
+        reviewBeat.currentTime = beatDuration > 0 ? (beatStartTime + audio.currentTime) % beatDuration : beatStartTime + audio.currentTime;
+        await reviewBeat.play();
+        const alignedBeatTime = beatDuration > 0 ? (beatStartTime + audio.currentTime) % beatDuration : beatStartTime + audio.currentTime;
+        if (Math.abs(reviewBeat.currentTime - alignedBeatTime) > 0.08) reviewBeat.currentTime = alignedBeatTime;
+      }
+      setReviewPlaying(true);
+    }).catch(() => {
+      audio.pause();
       reviewBeat?.pause();
       setReviewPlaying(false);
     });

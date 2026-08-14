@@ -168,8 +168,8 @@ export type StartRecordingOptions = {
   sectionName: string;
   /** Read after getUserMedia resolves, so the beat position matches the real take start. */
   captureBeat: () => { beat: SelectedBeat | null; beatPosition: number };
-  /** Runs immediately before recorder.start(), for kicking off beat playback. */
-  beforeStart: (beat: SelectedBeat | null) => Promise<void>;
+  /** Runs once MediaRecorder is live, for starting an already-buffered beat. */
+  afterStart: (beat: SelectedBeat | null) => Promise<void>;
 };
 
 export function useRoughTake(serverTake: RoughTakeRow | null) {
@@ -228,7 +228,7 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
     if (recorder && recorder.state !== "inactive") recorder.stop();
   }, []);
 
-  const startRecording = useCallback(async ({ captureBeat, beforeStart, recordingMode, sectionName }: StartRecordingOptions) => {
+  const startRecording = useCallback(async ({ captureBeat, afterStart, recordingMode, sectionName }: StartRecordingOptions) => {
     dispatch({ type: "record/arm" });
     analysisRunRef.current += 1;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
@@ -255,11 +255,13 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
 
       recorder.onstart = () => {
         startedAt = Date.now();
-        const { beat: beatAtStart, beatPosition: beatPositionAtStart } = captureBeat();
-        recordBeatRef.current = beatAtStart;
-        recordBeatPositionRef.current = beatPositionAtStart;
-        dispatch({ type: "record/armed", beat: beatAtStart, beatPosition: beatPositionAtStart, recordingMode, sectionName });
         dispatch({ type: "record/started", startedAt });
+        void afterStart(beatToStart).finally(() => {
+          const { beat: beatAtStart, beatPosition: beatPositionAtStart } = captureBeat();
+          recordBeatRef.current = beatAtStart;
+          recordBeatPositionRef.current = beatPositionAtStart;
+          dispatch({ type: "record/armed", beat: beatAtStart, beatPosition: beatPositionAtStart, recordingMode, sectionName });
+        });
       };
 
       recorder.onstop = async () => {
@@ -290,7 +292,6 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
         }
       };
 
-      await beforeStart(beatToStart);
       recorder.start();
     } catch {
       setWebAudioSessionType("playback");

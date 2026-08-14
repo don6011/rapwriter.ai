@@ -87,9 +87,10 @@ describe("mobile studio shell refactor contracts", () => {
     const beatHook = readFileSync(new URL("../../components/studio/state/use-beat-playback.ts", import.meta.url), "utf8");
 
     expect(takeHook).toContain("recorder.onstart = () => {");
-    expect(takeHook).toContain("const { beat: beatAtStart, beatPosition: beatPositionAtStart } = captureBeat();");
-    expect(takeHook.indexOf("await beforeStart(beatToStart);")).toBeLessThan(takeHook.indexOf("recorder.start();"));
+    expect(takeHook).toContain("void afterStart(beatToStart).finally(() => {");
+    expect(takeHook.indexOf("recorder.start();")).toBeGreaterThan(takeHook.indexOf("recorder.onstart = () => {"));
     expect(beatHook).toContain("const audioTime = beatAudioRef.current?.currentTime;");
+    expect(beatHook).toContain("async function prepareBeatPreview");
   });
 
   test("lets a saved take scrub and continue from its matching beat position", () => {

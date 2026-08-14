@@ -58,7 +58,13 @@ export function useBeatPlayback({ onPause }: BeatPlaybackOptions) {
     if (reset) setBeatCurrentTime(0);
   }, []);
 
-  async function startBeatPreview(beat: SelectedBeat = selectedBeat) {
+  async function prepareBeatPreview(beat: SelectedBeat = selectedBeat) {
+    const preparedAudio = beatAudioRef.current;
+    if (preparedAudio && activePreviewBeatIdRef.current === beat.id && preparedAudio.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      return preparedAudio;
+    }
+
+    if (preparedAudio) stopBeatPreview({ reset: false });
     activePreviewBeatIdRef.current = beat.id;
     const duration = getBeatDurationSeconds(beat);
     setBeatDuration(duration);
@@ -93,14 +99,20 @@ export function useBeatPlayback({ onPause }: BeatPlaybackOptions) {
       setBeatDuration(mediaDuration);
       audio.currentTime = resumeAt;
       setBeatCurrentTime(resumeAt);
-      await audio.play();
-      trackMarketplaceEvent("beat_play", beat.id);
-      setPlaying(true);
-      return;
+      return audio;
     }
 
     activePreviewBeatIdRef.current = null;
     setBeatError(beat.id === EMPTY_BEAT.id ? "Choose an approved beat from Studio Store." : "This beat has no playable preview.");
+    return null;
+  }
+
+  async function startBeatPreview(beat: SelectedBeat = selectedBeat) {
+    const audio = await prepareBeatPreview(beat);
+    if (!audio || beatAudioRef.current !== audio) return;
+    await audio.play();
+    trackMarketplaceEvent("beat_play", beat.id);
+    setPlaying(true);
   }
 
   const toggleBeatPlayback = () => {
@@ -212,6 +224,7 @@ export function useBeatPlayback({ onPause }: BeatPlaybackOptions) {
     resetTransport,
     positionSeconds,
     stopBeatPreview,
+    prepareBeatPreview,
     startBeatPreview,
     toggleBeatPlayback,
     seekBeatPlayback,

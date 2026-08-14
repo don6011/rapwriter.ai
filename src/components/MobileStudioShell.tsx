@@ -184,6 +184,7 @@ export function MobileStudioShell() {
     resetTransport,
     positionSeconds,
     stopBeatPreview,
+    prepareBeatPreview,
     startBeatPreview,
     toggleBeatPlayback,
     seekBeatPlayback,
@@ -1090,6 +1091,13 @@ export function MobileStudioShell() {
       if (recordingBeat.id !== selectedBeat.id) selectBeatKeepingPreview(recordingBeat);
       seekTo(resume.beatPosition);
     }
+    if (recordingBeat && !playing) {
+      try {
+        await prepareBeatPreview(recordingBeat);
+      } catch {
+        setBeatError("The beat could not be prepared, but recording is still available.");
+      }
+    }
     await take.startRecording({
       recordingMode: nextRecordingMode,
       sectionName: resume?.sectionName ?? section.name,
@@ -1097,7 +1105,7 @@ export function MobileStudioShell() {
         beat: recordingBeat ? { ...recordingBeat } : null,
         beatPosition: recordingBeat ? (resume?.beatPosition ?? Math.max(0, positionSeconds())) : 0,
       }),
-      beforeStart: async (beatAtStart) => {
+      afterStart: async (beatAtStart) => {
         if (!beatAtStart) return;
         if (playing && !resume) return;
         try {
