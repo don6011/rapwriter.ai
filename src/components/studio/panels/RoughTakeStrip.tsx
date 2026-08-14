@@ -5,6 +5,7 @@ import { getTakeResumeBeatTime, resolveBeatPreviewUrl } from "@/lib/beat-playbac
 import type { RoughTakeAnalysis } from "@/lib/booth-ready-v2";
 import { getBeatDurationSeconds } from "@/lib/studio/beat-snapshot";
 import { formatDuration } from "@/lib/studio/format";
+import { setWebAudioSessionType } from "@/lib/studio/audio-session";
 import type { SelectedBeat } from "@/lib/studio/types";
 import { cn } from "@/lib/utils";
 import { Pause, Play } from "lucide-react";
@@ -103,6 +104,7 @@ export function RoughTakeStrip({
       return;
     }
     onReviewStart();
+    setWebAudioSessionType("playback");
     const reviewBeat = reviewBeatRef.current;
     if (reviewBeat) {
       const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
@@ -169,11 +171,6 @@ export function RoughTakeStrip({
               const nextTime = event.currentTarget.currentTime;
               setReviewTime(nextTime);
               setResumeOffset(nextTime);
-              const reviewBeat = reviewBeatRef.current;
-              if (!reviewBeat || !beat) return;
-              const beatDuration = getBeatDurationSeconds(beat);
-              const expectedTime = beatDuration > 0 ? (beatStartTime + nextTime) % beatDuration : beatStartTime + nextTime;
-              if (Math.abs(reviewBeat.currentTime - expectedTime) > 0.35) reviewBeat.currentTime = expectedTime;
             }}
             onEnded={() => {
               const reviewBeat = reviewBeatRef.current;

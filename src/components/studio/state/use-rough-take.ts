@@ -7,6 +7,7 @@ import { beatSnapshotFromRecord } from "@/lib/studio/beat-snapshot";
 import { isRoughTakeAnalysis } from "@/lib/studio/booth-ready";
 import type { SelectedBeat } from "@/lib/studio/types";
 import { preferredRoughTakeMimeType, resolvedRoughTakeMimeType } from "@/lib/studio/rough-take-mime";
+import { setWebAudioSessionType } from "@/lib/studio/audio-session";
 
 /**
  * The thirteen values that used to live as separate `useState` calls in the shell.
@@ -217,6 +218,7 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
     return () => {
       recorderRef.current?.stop();
       recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+      setWebAudioSessionType("playback");
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     };
   }, []);
@@ -235,6 +237,7 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
     }
 
     try {
+      setWebAudioSessionType("play-and-record");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recorderStreamRef.current = stream;
       recorderChunksRef.current = [];
@@ -255,6 +258,9 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
 
       recorder.onstop = async () => {
         const analysisRunId = analysisRunRef.current;
+        recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+        recorderStreamRef.current = null;
+        setWebAudioSessionType("playback");
         const duration = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
         const captured = new Blob(recorderChunksRef.current, {
           type: resolvedRoughTakeMimeType(recorder.mimeType, negotiatedMimeType),
@@ -263,8 +269,6 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
         if (urlRef.current) URL.revokeObjectURL(urlRef.current);
         urlRef.current = url;
         dispatch({ type: "take/captured", url, blob: captured, duration });
-        recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
-        recorderStreamRef.current = null;
         try {
           const analysis = await analyzeRoughTakeAudio(captured);
           if (analysisRunRef.current === analysisRunId) dispatch({ type: "take/analysis-ready", analysis });
@@ -284,6 +288,7 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
       recorder.start();
       dispatch({ type: "record/started", startedAt });
     } catch {
+      setWebAudioSessionType("playback");
       dispatch({ type: "record/failed", message: "Microphone permission was blocked." });
     }
   }, []);
