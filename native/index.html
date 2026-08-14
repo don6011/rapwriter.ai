@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#050506" />
+    <meta name="theme-color" content="#070708" />
     <title>RapWriter</title>
     <style>
-      :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #050506; }
+      :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #070708; }
       * { box-sizing: border-box; }
-      body { min-height: 100svh; margin: 0; display: grid; place-items: center; padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom)); background: radial-gradient(circle at 50% 0%, rgba(246,199,72,.12), transparent 36%), #050506; color: #f7f4eb; }
+      body { min-height: 100svh; margin: 0; display: grid; place-items: center; padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom)); background: radial-gradient(circle at 50% 0%, rgba(246,199,72,.12), transparent 36%), #070708; color: #f7f4eb; }
       main { width: min(100%, 360px); text-align: center; }
-      .mark { width: 52px; height: 52px; margin: 0 auto 20px; display: grid; place-items: center; border: 1px solid rgba(246,199,72,.4); border-radius: 50%; color: #f6c748; font-size: 25px; }
+      .mark { display: block; width: 76px; height: 76px; margin: 0 auto 20px; object-fit: contain; }
       h1 { margin: 0; font-size: 24px; letter-spacing: 0; }
       p { margin: 12px auto 0; max-width: 280px; color: rgba(247,244,235,.64); font-size: 14px; line-height: 1.55; }
       button { width: 100%; min-height: 48px; margin-top: 26px; border: 0; border-radius: 12px; background: #f6c748; color: #100e08; font: 700 14px inherit; }
@@ -18,10 +18,17 @@
   </head>
   <body>
     <main>
-      <div class="mark" aria-hidden="true">R</div>
+      <img class="mark" src="./rapwriter-mark.png" alt="" />
       <h1>Your studio is offline.</h1>
       <p>Reconnect to continue your session. Work already saved on this device remains protected.</p>
-      <button type="button" onclick="location.reload()">Try again</button>
+      <button type="button" onclick="returnToStudio()">Try again</button>
     </main>
+    <script>
+      function returnToStudio() {
+        window.location.replace("https://rapwriter.ai/studio");
+      }
+
+      window.addEventListener("online", returnToStudio);
+    </script>
   </body>
 </html>

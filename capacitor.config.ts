@@ -8,6 +8,7 @@ const config: CapacitorConfig = {
     // Native release builds load the production app while the local shell remains
     // available as a graceful offline first-launch fallback.
     url: process.env.CAPACITOR_SERVER_URL ?? "https://rapwriter.ai/studio",
+    errorPath: "index.html",
     cleartext: false,
     androidScheme: "https",
     allowNavigation: [
