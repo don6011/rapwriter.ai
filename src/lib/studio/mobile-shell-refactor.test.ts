@@ -96,6 +96,15 @@ describe("mobile studio shell refactor contracts", () => {
     expect(shell).toContain('void startRecording({ beat: recordingBeat, beatPosition, recordingMode: "with_beat", sectionName: take.state.sectionName })');
   });
 
+  test("hands beat playback exclusively to rough-take review", () => {
+    const shell = readFileSync(new URL("../../components/MobileStudioShell.tsx", import.meta.url), "utf8");
+    const strip = readFileSync(new URL("../../components/studio/panels/RoughTakeStrip.tsx", import.meta.url), "utf8");
+
+    expect(shell).toContain("if (recording) {\n      stopBeatPreview({ reset: false });\n      take.stopRecording();");
+    expect(shell).toContain("onReviewRoughTake={() => stopBeatPreview({ reset: false })}");
+    expect(strip).toContain("onReviewStart();\n    const reviewBeat = reviewBeatRef.current;");
+  });
+
   test("keeps beat preview separate from selecting a beat", () => {
     const locker = readFileSync(new URL("../../components/studio/screens/LockerScreen.tsx", import.meta.url), "utf8");
     const switcher = readFileSync(new URL("../../components/studio/sheets/BeatSwitcherSheet.tsx", import.meta.url), "utf8");

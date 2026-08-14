@@ -39,6 +39,7 @@ export function StudioScreen({
   roughTakeSaving,
   onSaveRoughTake,
   onContinueRoughTake,
+  onReviewRoughTake,
   activeSong,
   songTitleDraft,
   titleEditing,
@@ -99,6 +100,7 @@ export function StudioScreen({
   roughTakeSaving: boolean;
   onSaveRoughTake: () => void;
   onContinueRoughTake: (takeOffsetSeconds: number) => void;
+  onReviewRoughTake: () => void;
   activeSong: SongRow | null;
   songTitleDraft: string;
   titleEditing: boolean;
@@ -343,6 +345,7 @@ export function StudioScreen({
               onDelete={onDeleteRoughTake}
               onSave={onSaveRoughTake}
               onContinue={onContinueRoughTake}
+              onReviewStart={onReviewRoughTake}
             />
             <button
               type="button"

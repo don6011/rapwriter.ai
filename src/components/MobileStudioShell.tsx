@@ -1127,6 +1127,7 @@ export function MobileStudioShell() {
 
   const toggleRecording = (nextMode?: RecordingMode) => {
     if (recording) {
+      stopBeatPreview({ reset: false });
       take.stopRecording();
       return;
     }
@@ -1500,6 +1501,7 @@ export function MobileStudioShell() {
                 roughTakeSaving={roughTakeSaving}
                 onSaveRoughTake={saveRoughTake}
                 onContinueRoughTake={continueRoughTake}
+                onReviewRoughTake={() => stopBeatPreview({ reset: false })}
                 activeSong={activeSong}
                 songTitleDraft={titleDraft}
                 titleEditing={titleEditing}
@@ -1798,6 +1800,7 @@ export function MobileStudioShell() {
             onDeleteRoughTake={deleteRoughTake}
             onSaveRoughTake={saveRoughTake}
             onContinueRoughTake={continueRoughTake}
+            onReviewRoughTake={() => stopBeatPreview({ reset: false })}
             onPrepareForBooth={() => void openCurrentBoothExport()}
             studioPack={activeStudioPack}
             studioDna={studioDna}

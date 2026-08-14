@@ -59,6 +59,7 @@ export function WriterScreen({
   onDeleteRoughTake,
   onSaveRoughTake,
   onContinueRoughTake,
+  onReviewRoughTake,
   onPrepareForBooth,
   studioPack,
   studioDna,
@@ -107,6 +108,7 @@ export function WriterScreen({
   onDeleteRoughTake: () => void;
   onSaveRoughTake: () => void;
   onContinueRoughTake: (takeOffsetSeconds: number) => void;
+  onReviewRoughTake: () => void;
   onPrepareForBooth: () => void;
   studioPack: StudioPack;
   studioDna: StudioDna;
@@ -291,6 +293,7 @@ export function WriterScreen({
             onDelete={onDeleteRoughTake}
             onSave={onSaveRoughTake}
             onContinue={onContinueRoughTake}
+            onReviewStart={onReviewRoughTake}
           />
         </div>
         <div className="isolate overflow-hidden rounded-2xl border border-white/12 bg-black/26 shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_18px_50px_rgba(0,0,0,0.26)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 focus-within:border-gold/28 focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_0_0_3px_rgba(246,199,72,0.055),0_18px_50px_rgba(0,0,0,0.3)]">

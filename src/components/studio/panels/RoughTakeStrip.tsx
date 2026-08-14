@@ -27,6 +27,7 @@ export function RoughTakeStrip({
   onDelete,
   onSave,
   onContinue,
+  onReviewStart,
 }: {
   recording: boolean;
   recordingSeconds: number;
@@ -44,6 +45,7 @@ export function RoughTakeStrip({
   onDelete: () => void;
   onSave: () => void;
   onContinue: (takeOffsetSeconds: number) => void;
+  onReviewStart: () => void;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const reviewBeatRef = useRef<HTMLAudioElement | null>(null);
@@ -100,6 +102,7 @@ export function RoughTakeStrip({
       setReviewPlaying(false);
       return;
     }
+    onReviewStart();
     const reviewBeat = reviewBeatRef.current;
     if (reviewBeat) {
       const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
