@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { Pause, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+const ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS = 0.1;
+
 export function RoughTakeStrip({
   recording,
   recordingSeconds,
@@ -85,7 +87,7 @@ export function RoughTakeStrip({
     const audio = audioRef.current;
     if (!audio) return;
     const nextTime = Math.max(0, Math.min(seconds, roughTakeDuration));
-    audio.currentTime = nextTime;
+    audio.currentTime = Math.min(roughTakeDuration, nextTime + ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS);
     setReviewTime(nextTime);
     setResumeOffset(nextTime);
 
@@ -107,15 +109,19 @@ export function RoughTakeStrip({
     setWebAudioSessionType("playback");
     const reviewBeat = reviewBeatRef.current;
     const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
+    if (reviewTime <= 0.01 && audio.currentTime <= 0.01) {
+      audio.currentTime = Math.min(roughTakeDuration, ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS);
+    }
     if (reviewBeat) {
-      reviewBeat.currentTime = beatDuration > 0 ? (beatStartTime + audio.currentTime) % beatDuration : beatStartTime + audio.currentTime;
+      reviewBeat.currentTime = beatDuration > 0 ? (beatStartTime + reviewTime) % beatDuration : beatStartTime + reviewTime;
     }
 
     const vocalPlayback = audio.play();
     const beatPlayback = reviewBeat?.play() ?? Promise.resolve();
     void Promise.all([vocalPlayback, beatPlayback]).then(() => {
       if (reviewBeat) {
-        const alignedBeatTime = beatDuration > 0 ? (beatStartTime + audio.currentTime) % beatDuration : beatStartTime + audio.currentTime;
+        const logicalAudioTime = Math.max(0, audio.currentTime - ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS);
+        const alignedBeatTime = beatDuration > 0 ? (beatStartTime + logicalAudioTime) % beatDuration : beatStartTime + logicalAudioTime;
         if (Math.abs(reviewBeat.currentTime - alignedBeatTime) > 0.08) reviewBeat.currentTime = alignedBeatTime;
       }
       setReviewPlaying(true);
@@ -177,14 +183,15 @@ export function RoughTakeStrip({
             src={roughTakeUrl}
             preload="metadata"
             onTimeUpdate={(event) => {
-              const nextTime = event.currentTarget.currentTime;
+              const nextTime = Math.max(0, event.currentTarget.currentTime - ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS);
               setReviewTime(nextTime);
               setResumeOffset(nextTime);
             }}
-            onEnded={() => {
+            onEnded={(event) => {
               const reviewBeat = reviewBeatRef.current;
               reviewBeat?.pause();
               if (reviewBeat) reviewBeat.currentTime = beatStartTime;
+              event.currentTarget.currentTime = Math.min(roughTakeDuration, ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS);
               setReviewPlaying(false);
               setReviewTime(0);
               setResumeOffset(roughTakeDuration);
