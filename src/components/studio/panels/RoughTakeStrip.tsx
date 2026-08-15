@@ -88,6 +88,7 @@ export function RoughTakeStrip({
   const [syncOffsetMs, setSyncOffsetMs] = useState(DEFAULT_ROUGH_TAKE_SYNC_MS);
   const [audioDeviceChanged, setAudioDeviceChanged] = useState(false);
   const [reviewWithBeat, setReviewWithBeat] = useState(true);
+  const [compatibilityPlayback, setCompatibilityPlayback] = useState(false);
   const beatPreviewUrl = beat ? resolveBeatPreviewUrl(beat) : null;
   const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
   const resumeBeatTime = getTakeResumeBeatTime(beatStartTime, resumeOffset, beatDuration);
@@ -126,6 +127,7 @@ export function RoughTakeStrip({
     setReviewTime(0);
     setResumeOffset(roughTakeDuration);
     setReviewWithBeat(true);
+    setCompatibilityPlayback(false);
   }, [beat?.id, roughTakeDuration, roughTakeUrl]);
 
   useEffect(() => () => {
@@ -312,12 +314,14 @@ export function RoughTakeStrip({
     setWebAudioSessionType("playback");
     try {
       await startWebAudioReview(reviewTime, syncOffsetMs, reviewWithBeat);
+      setCompatibilityPlayback(false);
       reviewStartPendingRef.current = false;
       return;
     } catch {
       // Older WebViews and cross-origin media fall back to element playback.
       stopWebAudioReview();
       reviewModeRef.current = "elements";
+      setCompatibilityPlayback(true);
       reviewStartPendingRef.current = false;
     }
     const reviewBeat = reviewBeatRef.current;
@@ -422,6 +426,11 @@ export function RoughTakeStrip({
               const nextTime = reviewWithBeat ? getRoughTakeLogicalTime(event.currentTarget.currentTime, roughTakeDuration, syncOffsetMs) : event.currentTarget.currentTime;
               setReviewTime(nextTime);
               setResumeOffset(nextTime);
+              const fallbackBeat = reviewBeatRef.current;
+              if (reviewModeRef.current === "elements" && reviewWithBeat && reviewPlaying && fallbackBeat && beat) {
+                const expectedBeatTime = getRoughTakeReviewBeatTime(beatStartTime, nextTime, getBeatDurationSeconds(beat), syncOffsetMs);
+                if (Math.abs(fallbackBeat.currentTime - expectedBeatTime) > 0.035) fallbackBeat.currentTime = expectedBeatTime;
+              }
             }}
             onEnded={(event) => {
               const reviewBeat = reviewBeatRef.current;
@@ -449,6 +458,11 @@ export function RoughTakeStrip({
           </div>
           {beatPreviewUrl && (
             <div className="mt-3 rounded-xl border border-white/8 bg-black/25 px-3 py-2.5">
+              {compatibilityPlayback && (
+                <p className="mb-2.5 rounded-lg border border-amber-400/25 bg-amber-400/8 px-2.5 py-2 text-[10px] leading-4 text-amber-200" role="status">
+                  Compatibility playback active. RapWriter is correcting sync continuously.
+                </p>
+              )}
               {audioDeviceChanged && (
                 <div className="mb-2.5 flex items-center justify-between gap-3 rounded-lg border border-gold/25 bg-gold/8 px-2.5 py-2 text-[10px] text-gold" role="status">
                   <span>Audio device changed — re-check sync.</span>

@@ -131,6 +131,8 @@ describe("mobile studio shell refactor contracts", () => {
     expect(strip).toContain("reviewBeat.start(startAt, beatOffset);");
     expect(strip).toContain("vocal.start(startAt, vocalOffset);");
     expect(strip).toContain('reviewModeRef.current = "web-audio"');
+    expect(strip).toContain("Compatibility playback active. RapWriter is correcting sync continuously.");
+    expect(strip).toContain("Math.abs(fallbackBeat.currentTime - expectedBeatTime) > 0.035");
     expect(strip).toContain('aria-label="Review vocal sync"');
     expect(strip).toContain("ROUGH_TAKE_SYNC_STORAGE_KEY");
     expect(strip).toContain('addEventListener("devicechange", handleDeviceChange)');
