@@ -9,6 +9,7 @@ import { MobileDrawer } from "@/components/studio/primitives/MobileDrawer";
 import { GhostwriterSheet } from "@/components/studio/sheets/GhostwriterSheet";
 import { RevisionHistoryUpgradeSheet } from "@/components/studio/sheets/RevisionHistoryUpgradeSheet";
 import { StudioAirSheet } from "@/components/studio/sheets/StudioAirSheet";
+import { isAiGenerationEnabled } from "@/lib/feature-flags";
 import type { WorkspaceMembership } from "@/lib/membership";
 import { countBars } from "@/lib/studio/bars";
 import { getWritingMomentum } from "@/lib/studio/intelligence";
@@ -137,7 +138,8 @@ export function WriterScreen({
   const writerSaveLabel = !signedIn ? "On device" : saveStatus === "error" ? "On device" : saveStatus;
   const hasPenView = artistMembership?.entitlements.full_pen_view === true;
   const hasHistory = artistMembership?.entitlements.version_history === true;
-  const hasGhostwriter = artistMembership?.entitlements.ghostwriter === true;
+  const aiGenerationEnabled = isAiGenerationEnabled();
+  const hasGhostwriter = aiGenerationEnabled && artistMembership?.entitlements.ghostwriter === true;
   const hasPremiumExports = artistMembership?.entitlements.premium_exports === true;
   const savePrimary = section.name === "Hook" ? padActions.onSaveHook : padActions.onSaveSong;
   const savePrimaryLabel = section.name === "Hook" ? "Save hook" : "Save song";
@@ -371,14 +373,16 @@ export function WriterScreen({
         {padActions.status.message && (
           <div className={cn("mt-2 text-center text-[11px]", padActions.status.state === "error" ? "text-rec" : "text-gold")}>{padActions.status.message}</div>
         )}
-        <button
-          type="button"
-          onClick={() => hasGhostwriter ? setGhostwriterOpen(true) : onUpgrade()}
-          className="mt-3 flex min-h-12 w-full items-center justify-between rounded-xl border border-gold/35 bg-gold/10 px-4 text-sm font-semibold text-gold"
-        >
-          <span className="inline-flex items-center gap-2"><WandSparkles className="h-4 w-4" />Ghostwriter{hasGhostwriter ? "" : " Pro"}</span>
-          <ChevronRight className="h-4 w-4" />
-        </button>
+        {aiGenerationEnabled && (
+          <button
+            type="button"
+            onClick={() => hasGhostwriter ? setGhostwriterOpen(true) : onUpgrade()}
+            className="mt-3 flex min-h-12 w-full items-center justify-between rounded-xl border border-gold/35 bg-gold/10 px-4 text-sm font-semibold text-gold"
+          >
+            <span className="inline-flex items-center gap-2"><WandSparkles className="h-4 w-4" />Ghostwriter{hasGhostwriter ? "" : " Pro"}</span>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        )}
         <div className="mt-4 space-y-2 pb-4">
           <MobileDrawer title="Session Actions">
             <div className="grid grid-cols-3 gap-2">
@@ -433,24 +437,27 @@ export function WriterScreen({
                   onPrepareForBooth();
                   return;
                 }
-                setGhostwriterOpen(true);
+                if (aiGenerationEnabled) setGhostwriterOpen(true);
+                else setReadinessOpen(false);
               }}
             />
           </MobileDrawer>
         </div>
       </div>
-      <GhostwriterSheet
-        open={ghostwriterOpen}
-        sectionName={section.name}
-        sectionText={sectionText}
-        beat={selectedBeat}
-        studioDna={studioDna}
-        environmentIntel={environmentIntel}
-        actions={producerActions}
-        membership={artistMembership}
-        onUpgrade={onUpgrade}
-        onClose={() => setGhostwriterOpen(false)}
-      />
+      {aiGenerationEnabled && (
+        <GhostwriterSheet
+          open={ghostwriterOpen}
+          sectionName={section.name}
+          sectionText={sectionText}
+          beat={selectedBeat}
+          studioDna={studioDna}
+          environmentIntel={environmentIntel}
+          actions={producerActions}
+          membership={artistMembership}
+          onUpgrade={onUpgrade}
+          onClose={() => setGhostwriterOpen(false)}
+        />
+      )}
       <StudioAirSheet
         open={studioAirOpen}
         studioPack={studioPack}

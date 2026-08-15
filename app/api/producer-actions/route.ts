@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/api/auth";
 import { parseJson } from "@/lib/api/json";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
 import { hasValidRequestOrigin } from "@/lib/api/origin";
+import { isAiGenerationEnabled } from "@/lib/feature-flags";
 import { producerActionFeature } from "@/lib/ai-features";
 import { producerActionCreateSchema } from "@/lib/schemas";
 import { AiGatewayError } from "@/lib/server/ai-gateway";
@@ -10,6 +11,7 @@ import { generateProducerActionWithProvider } from "@/lib/server/producer-action
 import { membershipErrorResponse, MembershipAccessError } from "@/lib/server/membership-access";
 
 export async function POST(request: Request) {
+  if (!isAiGenerationEnabled()) return NextResponse.json({ error: "Not found." }, { status: 404 });
   if (!hasValidRequestOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   const { supabase, user, response } = await requireUser();
   if (response) return response;
