@@ -124,12 +124,14 @@ describe("mobile studio shell refactor contracts", () => {
     expect(shell).toContain("onReviewRoughTake={() => stopBeatPreview({ reset: false })}");
     expect(strip).toContain('onReviewStart();\n    setWebAudioSessionType("playback");\n    const reviewBeat = reviewBeatRef.current;');
     expect(strip).toContain("const vocalPlayback = audio.play();");
-    expect(strip).toContain("const beatPlayback = reviewBeat?.play() ?? Promise.resolve();");
+    expect(strip).toContain("const beatPlayback = reviewWithBeat ? (reviewBeat?.play() ?? Promise.resolve()) : Promise.resolve();");
     expect(strip).toContain("void Promise.all([vocalPlayback, beatPlayback])");
     expect(strip).toContain('aria-label="Review vocal sync"');
     expect(strip).toContain("ROUGH_TAKE_SYNC_STORAGE_KEY");
     expect(strip).toContain('addEventListener("devicechange", handleDeviceChange)');
     expect(strip).toContain("Audio device changed — re-check sync.");
+    expect(strip).toContain("Use this for a take recorded through the phone speaker so RapWriter does not add a second beat.");
+    expect(strip).toContain("const [reviewWithBeat, setReviewWithBeat] = useState(true)");
     expect(strip).toContain("getRoughTakeVocalMediaTime");
     expect(strip).toContain('setWebAudioSessionType("playback")');
     expect(strip).not.toContain("Math.abs(reviewBeat.currentTime - expectedTime)");
@@ -158,6 +160,7 @@ describe("mobile studio shell refactor contracts", () => {
     expect(transport).toContain("setRecordFlowOpen(true)");
     expect(transport).toContain("onToggleRecordingRef.current(pendingMode)");
     expect(locker).toContain('{ id: "vocals", label: "Vocals"');
+    expect(transport).toContain("Phone speakers can bleed into the microphone and double the beat during playback.");
     expect(locker).toContain("<LockerVocalCard");
   });
 

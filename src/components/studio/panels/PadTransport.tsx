@@ -178,6 +178,11 @@ export function PadTransport({
                 );
               })}
             </div>
+            {hasBeat && (
+              <p className="mt-3 rounded-lg border border-gold/20 bg-gold/8 px-3 py-2 text-[10px] leading-4 text-gold/85">
+                Use headphones with “With beat.” Phone speakers can bleed into the microphone and double the beat during playback.
+              </p>
+            )}
           </div>
         </div>
       )}

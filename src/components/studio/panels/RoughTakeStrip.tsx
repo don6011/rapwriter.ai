@@ -66,6 +66,7 @@ export function RoughTakeStrip({
   const [dismissed, setDismissed] = useState(saved);
   const [syncOffsetMs, setSyncOffsetMs] = useState(DEFAULT_ROUGH_TAKE_SYNC_MS);
   const [audioDeviceChanged, setAudioDeviceChanged] = useState(false);
+  const [reviewWithBeat, setReviewWithBeat] = useState(true);
   const beatPreviewUrl = beat ? resolveBeatPreviewUrl(beat) : null;
   const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
   const resumeBeatTime = getTakeResumeBeatTime(beatStartTime, resumeOffset, beatDuration);
@@ -93,6 +94,7 @@ export function RoughTakeStrip({
     setReviewPlaying(false);
     setReviewTime(0);
     setResumeOffset(roughTakeDuration);
+    setReviewWithBeat(true);
   }, [beat?.id, roughTakeDuration, roughTakeUrl]);
 
   useEffect(() => () => {
@@ -114,7 +116,7 @@ export function RoughTakeStrip({
     const audio = audioRef.current;
     if (!audio) return;
     const nextTime = Math.max(0, Math.min(seconds, roughTakeDuration));
-    audio.currentTime = getRoughTakeVocalMediaTime(nextTime, roughTakeDuration, syncOffsetMs);
+    audio.currentTime = reviewWithBeat ? getRoughTakeVocalMediaTime(nextTime, roughTakeDuration, syncOffsetMs) : nextTime;
     setReviewTime(nextTime);
     setResumeOffset(nextTime);
 
@@ -154,15 +156,15 @@ export function RoughTakeStrip({
     setWebAudioSessionType("playback");
     const reviewBeat = reviewBeatRef.current;
     const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
-    audio.currentTime = getRoughTakeVocalMediaTime(reviewTime, roughTakeDuration, syncOffsetMs);
+    audio.currentTime = reviewWithBeat ? getRoughTakeVocalMediaTime(reviewTime, roughTakeDuration, syncOffsetMs) : reviewTime;
     if (reviewBeat) {
       reviewBeat.currentTime = getRoughTakeReviewBeatTime(beatStartTime, reviewTime, beatDuration, syncOffsetMs);
     }
 
     const vocalPlayback = audio.play();
-    const beatPlayback = reviewBeat?.play() ?? Promise.resolve();
+    const beatPlayback = reviewWithBeat ? (reviewBeat?.play() ?? Promise.resolve()) : Promise.resolve();
     void Promise.all([vocalPlayback, beatPlayback]).then(() => {
-      if (reviewBeat) {
+      if (reviewBeat && reviewWithBeat) {
         const logicalAudioTime = getRoughTakeLogicalTime(audio.currentTime, roughTakeDuration, syncOffsetMs);
         const alignedBeatTime = getRoughTakeReviewBeatTime(beatStartTime, logicalAudioTime, beatDuration, syncOffsetMs);
         if (Math.abs(reviewBeat.currentTime - alignedBeatTime) > 0.08) reviewBeat.currentTime = alignedBeatTime;
@@ -173,6 +175,24 @@ export function RoughTakeStrip({
       reviewBeat?.pause();
       setReviewPlaying(false);
     });
+  };
+
+  const toggleReviewBeat = () => {
+    const nextReviewWithBeat = !reviewWithBeat;
+    setReviewWithBeat(nextReviewWithBeat);
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = nextReviewWithBeat ? getRoughTakeVocalMediaTime(reviewTime, roughTakeDuration, syncOffsetMs) : reviewTime;
+    }
+    const reviewBeat = reviewBeatRef.current;
+    if (!reviewBeat) return;
+    if (!nextReviewWithBeat) {
+      reviewBeat.pause();
+      return;
+    }
+    if (!reviewPlaying || !beat) return;
+    reviewBeat.currentTime = getRoughTakeReviewBeatTime(beatStartTime, reviewTime, getBeatDurationSeconds(beat), syncOffsetMs);
+    void reviewBeat.play().catch(() => setReviewWithBeat(false));
   };
 
   const content = recording && overlay ? (
@@ -226,7 +246,7 @@ export function RoughTakeStrip({
             src={roughTakeUrl}
             preload="metadata"
             onTimeUpdate={(event) => {
-              const nextTime = getRoughTakeLogicalTime(event.currentTarget.currentTime, roughTakeDuration, syncOffsetMs);
+              const nextTime = reviewWithBeat ? getRoughTakeLogicalTime(event.currentTarget.currentTime, roughTakeDuration, syncOffsetMs) : event.currentTarget.currentTime;
               setReviewTime(nextTime);
               setResumeOffset(nextTime);
             }}
@@ -234,7 +254,7 @@ export function RoughTakeStrip({
               const reviewBeat = reviewBeatRef.current;
               reviewBeat?.pause();
               if (reviewBeat) reviewBeat.currentTime = beatStartTime;
-              event.currentTarget.currentTime = getRoughTakeVocalMediaTime(0, roughTakeDuration, syncOffsetMs);
+              event.currentTarget.currentTime = reviewWithBeat ? getRoughTakeVocalMediaTime(0, roughTakeDuration, syncOffsetMs) : 0;
               setReviewPlaying(false);
               setReviewTime(0);
               setResumeOffset(roughTakeDuration);
@@ -248,7 +268,7 @@ export function RoughTakeStrip({
             </button>
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-3 text-xs">
-                <span className="font-medium text-white/85">{beatPreviewUrl ? "Listen with beat" : saved ? "Kept take" : "Listen back"}</span>
+                <span className="font-medium text-white/85">{beatPreviewUrl ? (reviewWithBeat ? "Listen with beat" : "Captured audio only") : saved ? "Kept take" : "Listen back"}</span>
                 <span className="tabular-nums text-muted-foreground">{formatDuration(reviewTime)} / {formatDuration(roughTakeDuration)}</span>
               </div>
               <TakeWaveform currentTime={reviewTime} duration={roughTakeDuration} active={reviewPlaying} saved={saved} onSeek={seekReview} />
@@ -265,30 +285,42 @@ export function RoughTakeStrip({
                 </div>
               )}
               <div className="flex items-center justify-between gap-3 text-[11px]">
-                <span className="font-semibold text-white/75">Review sync</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono tabular-nums text-gold">{syncOffsetMs > 0 ? "+" : ""}{syncOffsetMs} ms</span>
-                  <button type="button" onClick={() => updateReviewSync(DEFAULT_ROUGH_TAKE_SYNC_MS)} className="text-white/45 underline-offset-2 hover:text-white/70 hover:underline">
-                    Reset
-                  </button>
-                </div>
+                <span className="font-semibold text-white/75">Backing beat</span>
+                <button type="button" onClick={toggleReviewBeat} className={cn("rounded-full border px-2.5 py-1 font-semibold", reviewWithBeat ? "border-gold/30 bg-gold/10 text-gold" : "border-white/12 bg-white/[0.03] text-white/55")} aria-pressed={reviewWithBeat}>
+                  {reviewWithBeat ? "On" : "Off"}
+                </button>
               </div>
-              <input
-                type="range"
-                min={MIN_ROUGH_TAKE_SYNC_MS}
-                max={MAX_ROUGH_TAKE_SYNC_MS}
-                step={5}
-                value={syncOffsetMs}
-                onChange={(event) => updateReviewSync(Number(event.currentTarget.value))}
-                className="mt-2 h-8 w-full accent-[#ffcc33]"
-                aria-label="Review vocal sync"
-                aria-valuetext={syncOffsetMs === 0 ? "No timing adjustment" : `${Math.abs(syncOffsetMs)} milliseconds ${syncOffsetMs > 0 ? "earlier" : "later"}`}
-              />
-              <div className="flex justify-between text-[9px] uppercase tracking-[0.12em] text-white/35">
-                <span>Vocals later</span>
-                <span>Vocals earlier</span>
-              </div>
-              <p className="mt-1.5 text-[10px] leading-4 text-white/42">Move right if vocals sound late. Saved on this device.</p>
+              {reviewWithBeat ? (
+                <>
+                  <div className="mt-2 flex items-center justify-between gap-3 text-[11px]">
+                    <span className="font-semibold text-white/75">Review sync</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono tabular-nums text-gold">{syncOffsetMs > 0 ? "+" : ""}{syncOffsetMs} ms</span>
+                      <button type="button" onClick={() => updateReviewSync(DEFAULT_ROUGH_TAKE_SYNC_MS)} className="text-white/45 underline-offset-2 hover:text-white/70 hover:underline">
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min={MIN_ROUGH_TAKE_SYNC_MS}
+                    max={MAX_ROUGH_TAKE_SYNC_MS}
+                    step={5}
+                    value={syncOffsetMs}
+                    onChange={(event) => updateReviewSync(Number(event.currentTarget.value))}
+                    className="mt-2 h-8 w-full accent-[#ffcc33]"
+                    aria-label="Review vocal sync"
+                    aria-valuetext={syncOffsetMs === 0 ? "No timing adjustment" : `${Math.abs(syncOffsetMs)} milliseconds ${syncOffsetMs > 0 ? "earlier" : "later"}`}
+                  />
+                  <div className="flex justify-between text-[9px] uppercase tracking-[0.12em] text-white/35">
+                    <span>Vocals later</span>
+                    <span>Vocals earlier</span>
+                  </div>
+                  <p className="mt-1.5 text-[10px] leading-4 text-white/42">Move right if vocals sound late. Saved on this device.</p>
+                </>
+              ) : (
+                <p className="mt-2 text-[10px] leading-4 text-white/45">Use this for a take recorded through the phone speaker so RapWriter does not add a second beat.</p>
+              )}
             </div>
           )}
           <div className="mt-3 grid grid-cols-2 gap-2">
