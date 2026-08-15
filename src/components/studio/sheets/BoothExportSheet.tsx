@@ -8,6 +8,7 @@ import { downloadBoothFile } from "@/lib/studio/export-snapshot";
 import { formatDuration } from "@/lib/studio/format";
 import { mobileSections } from "@/lib/studio/sections";
 import { ChevronRight, Download, FileText, LockKeyhole, Mic, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { useState } from "react";
 
 export function BoothExportSheet({
   open,
@@ -30,11 +31,26 @@ export function BoothExportSheet({
   onFreeze: () => void;
   onUpgrade: () => void;
 }) {
+  const [downloading, setDownloading] = useState<"txt" | "pdf" | "zip" | "rough-take" | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   if (!open || !draft) return null;
   const snapshot = exportRecord?.snapshot ?? draft.snapshot;
   const score = exportRecord?.booth_score ?? snapshot.boothReady.score;
   const readyChecks = snapshot.boothReady.checklist.filter((item) => item.complete).length;
   const missingSections = mobileSections.filter((section) => !(snapshot.sections[section.name] ?? "").trim());
+
+  const handleDownload = async (format: "txt" | "pdf" | "zip" | "rough-take") => {
+    if (!exportRecord || downloading) return;
+    setDownloading(format);
+    setDownloadError(null);
+    try {
+      await downloadBoothFile(exportRecord.id, format);
+    } catch (downloadFailure) {
+      setDownloadError(downloadFailure instanceof Error ? downloadFailure.message : "RapWriter could not prepare this export.");
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[130] flex items-end justify-center bg-black/78 px-3 pt-12 backdrop-blur-sm" role="presentation" onMouseDown={onClose}>
@@ -90,19 +106,20 @@ export function BoothExportSheet({
             </>
           ) : (
             <div className="mt-4 space-y-2">
-              <button type="button" onClick={() => downloadBoothFile(exportRecord.id, "txt")} className="flex min-h-12 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.035] px-4 text-sm font-semibold text-white/85">
-                <span className="inline-flex items-center gap-2"><FileText className="h-4 w-4 text-gold" />Lyrics sheet</span><span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">TXT</span>
+              {downloadError && <div className="rounded-xl border border-rec/25 bg-rec/10 p-3 text-xs text-rec">{downloadError}</div>}
+              <button type="button" disabled={Boolean(downloading)} onClick={() => void handleDownload("txt")} className="flex min-h-12 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.035] px-4 text-sm font-semibold text-white/85 disabled:opacity-55">
+                <span className="inline-flex items-center gap-2">{downloading === "txt" ? <RefreshCw className="h-4 w-4 animate-spin text-gold" /> : <FileText className="h-4 w-4 text-gold" />}{downloading === "txt" ? "Preparing lyrics..." : "Lyrics sheet"}</span><span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">TXT</span>
               </button>
               {premiumExports ? (
                 <>
-                  <button type="button" onClick={() => downloadBoothFile(exportRecord.id, "pdf")} className="flex min-h-12 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.035] px-4 text-sm font-semibold text-white/85">
-                    <span className="inline-flex items-center gap-2"><FileText className="h-4 w-4 text-gold" />Studio lyric book</span><span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">PDF</span>
+                  <button type="button" disabled={Boolean(downloading)} onClick={() => void handleDownload("pdf")} className="flex min-h-12 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.035] px-4 text-sm font-semibold text-white/85 disabled:opacity-55">
+                    <span className="inline-flex items-center gap-2">{downloading === "pdf" ? <RefreshCw className="h-4 w-4 animate-spin text-gold" /> : <FileText className="h-4 w-4 text-gold" />}{downloading === "pdf" ? "Preparing lyric book..." : "Studio lyric book"}</span><span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">PDF</span>
                   </button>
-                  <button type="button" onClick={() => downloadBoothFile(exportRecord.id, "zip")} className="gold-seal flex min-h-13 w-full items-center justify-between rounded-xl px-4 text-sm font-semibold">
-                    <span className="inline-flex items-center gap-2"><Download className="h-4 w-4" />Download studio package</span><span className="text-[10px] uppercase tracking-[0.12em]">ZIP</span>
+                  <button type="button" disabled={Boolean(downloading)} onClick={() => void handleDownload("zip")} className="gold-seal flex min-h-13 w-full items-center justify-between rounded-xl px-4 text-sm font-semibold disabled:opacity-55">
+                    <span className="inline-flex items-center gap-2">{downloading === "zip" ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{downloading === "zip" ? "Preparing studio package..." : "Download studio package"}</span><span className="text-[10px] uppercase tracking-[0.12em]">ZIP</span>
                   </button>
                   {exportRecord.rough_take_id && (
-                    <button type="button" onClick={() => downloadBoothFile(exportRecord.id, "rough-take")} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-gold/25 text-xs font-semibold text-gold"><Mic className="h-4 w-4" />Download rough take</button>
+                    <button type="button" disabled={Boolean(downloading)} onClick={() => void handleDownload("rough-take")} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-gold/25 text-xs font-semibold text-gold disabled:opacity-55">{downloading === "rough-take" ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}{downloading === "rough-take" ? "Preparing rough take..." : "Download rough take"}</button>
                   )}
                 </>
               ) : (
