@@ -117,7 +117,7 @@ describe("mobile studio shell refactor contracts", () => {
     expect(strip).toContain("const vocalPlayback = audio.play();");
     expect(strip).toContain("const beatPlayback = reviewBeat?.play() ?? Promise.resolve();");
     expect(strip).toContain("void Promise.all([vocalPlayback, beatPlayback])");
-    expect(strip).toContain("ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS = 0.1");
+    expect(strip).toContain("ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS = 0.15");
     expect(strip).toContain("nextTime + ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS");
     expect(strip).toContain('setWebAudioSessionType("playback")');
     expect(strip).not.toContain("Math.abs(reviewBeat.currentTime - expectedTime)");
