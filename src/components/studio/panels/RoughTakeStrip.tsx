@@ -21,6 +21,17 @@ import { cn } from "@/lib/utils";
 import { Pause, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+type ReviewAudioBuffers = {
+  key: string;
+  vocal: AudioBuffer;
+  beat: AudioBuffer | null;
+};
+
+type ReviewClock = {
+  contextStartTime: number;
+  logicalStartTime: number;
+};
+
 export function RoughTakeStrip({
   recording,
   recordingSeconds,
@@ -60,6 +71,16 @@ export function RoughTakeStrip({
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const reviewBeatRef = useRef<HTMLAudioElement | null>(null);
+  const reviewContextRef = useRef<AudioContext | null>(null);
+  const reviewVocalSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const reviewBeatSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const reviewBuffersRef = useRef<ReviewAudioBuffers | null>(null);
+  const reviewBufferLoadRef = useRef<Promise<ReviewAudioBuffers> | null>(null);
+  const reviewClockRef = useRef<ReviewClock | null>(null);
+  const reviewFrameRef = useRef<number | null>(null);
+  const reviewGenerationRef = useRef(0);
+  const reviewModeRef = useRef<"web-audio" | "elements" | null>(null);
+  const reviewStartPendingRef = useRef(false);
   const [reviewPlaying, setReviewPlaying] = useState(false);
   const [reviewTime, setReviewTime] = useState(0);
   const [resumeOffset, setResumeOffset] = useState(roughTakeDuration);
@@ -91,6 +112,16 @@ export function RoughTakeStrip({
   useEffect(() => {
     audioRef.current?.pause();
     reviewBeatRef.current?.pause();
+    reviewGenerationRef.current += 1;
+    reviewVocalSourceRef.current?.stop();
+    reviewBeatSourceRef.current?.stop();
+    reviewVocalSourceRef.current = null;
+    reviewBeatSourceRef.current = null;
+    reviewClockRef.current = null;
+    reviewModeRef.current = null;
+    reviewStartPendingRef.current = false;
+    if (reviewFrameRef.current !== null) window.cancelAnimationFrame(reviewFrameRef.current);
+    reviewFrameRef.current = null;
     setReviewPlaying(false);
     setReviewTime(0);
     setResumeOffset(roughTakeDuration);
@@ -100,6 +131,11 @@ export function RoughTakeStrip({
   useEffect(() => () => {
     audioRef.current?.pause();
     reviewBeatRef.current?.pause();
+    reviewGenerationRef.current += 1;
+    reviewVocalSourceRef.current?.stop();
+    reviewBeatSourceRef.current?.stop();
+    if (reviewFrameRef.current !== null) window.cancelAnimationFrame(reviewFrameRef.current);
+    void reviewContextRef.current?.close();
   }, []);
 
   useEffect(() => {
@@ -112,10 +148,115 @@ export function RoughTakeStrip({
 
   if ((!recording && !roughTakeUrl && !error) || (overlay && dismissed)) return null;
 
+  const currentWebAudioReviewTime = () => {
+    const context = reviewContextRef.current;
+    const clock = reviewClockRef.current;
+    if (!context || !clock) return reviewTime;
+    return Math.min(roughTakeDuration, clock.logicalStartTime + Math.max(0, context.currentTime - clock.contextStartTime));
+  };
+
+  const stopWebAudioReview = () => {
+    reviewGenerationRef.current += 1;
+    if (reviewFrameRef.current !== null) window.cancelAnimationFrame(reviewFrameRef.current);
+    reviewFrameRef.current = null;
+    try {
+      reviewVocalSourceRef.current?.stop();
+      reviewBeatSourceRef.current?.stop();
+    } catch {
+      // A source can already be stopped by its natural end.
+    }
+    reviewVocalSourceRef.current = null;
+    reviewBeatSourceRef.current = null;
+    reviewClockRef.current = null;
+  };
+
+  const loadWebAudioReview = async () => {
+    if (!roughTakeUrl) throw new Error("No rough take is available.");
+    const key = `${roughTakeUrl}|${beatPreviewUrl ?? ""}`;
+    if (reviewBuffersRef.current?.key === key) return reviewBuffersRef.current;
+    if (reviewBufferLoadRef.current) return reviewBufferLoadRef.current;
+
+    const context = reviewContextRef.current ?? new AudioContext();
+    reviewContextRef.current = context;
+    const decodeUrl = async (url: string) => {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Review audio could not be loaded.");
+      return context.decodeAudioData(await response.arrayBuffer());
+    };
+    const load = Promise.all([decodeUrl(roughTakeUrl), beatPreviewUrl ? decodeUrl(beatPreviewUrl) : Promise.resolve(null)])
+      .then(([vocal, loadedBeat]) => {
+        const buffers = { key, vocal, beat: loadedBeat } satisfies ReviewAudioBuffers;
+        reviewBuffersRef.current = buffers;
+        return buffers;
+      })
+      .finally(() => {
+        reviewBufferLoadRef.current = null;
+      });
+    reviewBufferLoadRef.current = load;
+    return load;
+  };
+
+  const startWebAudioReview = async (logicalTime: number, requestedSyncMs: number, includeBeat: boolean) => {
+    const context = reviewContextRef.current ?? new AudioContext();
+    reviewContextRef.current = context;
+    if (context.state === "suspended") await context.resume();
+    const loadGeneration = reviewGenerationRef.current;
+    const buffers = await loadWebAudioReview();
+    if (reviewGenerationRef.current !== loadGeneration) throw new Error("Review playback was canceled.");
+    stopWebAudioReview();
+
+    const generation = reviewGenerationRef.current;
+    const vocal = context.createBufferSource();
+    vocal.buffer = buffers.vocal;
+    vocal.connect(context.destination);
+    const appliedSyncMs = includeBeat ? requestedSyncMs : 0;
+    const vocalOffset = Math.min(Math.max(0, buffers.vocal.duration - 0.001), getRoughTakeVocalMediaTime(logicalTime, roughTakeDuration, appliedSyncMs));
+    const startAt = context.currentTime + 0.04;
+    reviewVocalSourceRef.current = vocal;
+
+    if (includeBeat && buffers.beat) {
+      const reviewBeat = context.createBufferSource();
+      reviewBeat.buffer = buffers.beat;
+      reviewBeat.connect(context.destination);
+      const requestedBeatOffset = getRoughTakeReviewBeatTime(beatStartTime, logicalTime, beatDuration, appliedSyncMs);
+      const beatOffset = Math.min(Math.max(0, buffers.beat.duration - 0.001), requestedBeatOffset);
+      reviewBeat.start(startAt, beatOffset);
+      reviewBeatSourceRef.current = reviewBeat;
+    }
+
+    reviewClockRef.current = { contextStartTime: startAt, logicalStartTime: logicalTime };
+    reviewModeRef.current = "web-audio";
+    vocal.onended = () => {
+      if (reviewGenerationRef.current !== generation) return;
+      stopWebAudioReview();
+      setReviewPlaying(false);
+      setReviewTime(0);
+      setResumeOffset(roughTakeDuration);
+    };
+    vocal.start(startAt, vocalOffset);
+    setReviewPlaying(true);
+
+    const updateClock = () => {
+      if (reviewGenerationRef.current !== generation) return;
+      const nextTime = currentWebAudioReviewTime();
+      setReviewTime(nextTime);
+      setResumeOffset(nextTime);
+      reviewFrameRef.current = window.requestAnimationFrame(updateClock);
+    };
+    reviewFrameRef.current = window.requestAnimationFrame(updateClock);
+  };
+
   const seekReview = (seconds: number) => {
+    const nextTime = Math.max(0, Math.min(seconds, roughTakeDuration));
+    if (reviewModeRef.current === "web-audio" && reviewPlaying) {
+      stopWebAudioReview();
+      setReviewTime(nextTime);
+      setResumeOffset(nextTime);
+      void startWebAudioReview(nextTime, syncOffsetMs, reviewWithBeat).catch(() => setReviewPlaying(false));
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) return;
-    const nextTime = Math.max(0, Math.min(seconds, roughTakeDuration));
     audio.currentTime = reviewWithBeat ? getRoughTakeVocalMediaTime(nextTime, roughTakeDuration, syncOffsetMs) : nextTime;
     setReviewTime(nextTime);
     setResumeOffset(nextTime);
@@ -127,6 +268,7 @@ export function RoughTakeStrip({
 
   const updateReviewSync = (requestedSyncMs: number) => {
     const nextSyncMs = normalizeRoughTakeSyncMs(requestedSyncMs);
+    const webAudioTime = reviewModeRef.current === "web-audio" && reviewPlaying ? currentWebAudioReviewTime() : null;
     setSyncOffsetMs(nextSyncMs);
     setAudioDeviceChanged(false);
     try {
@@ -141,19 +283,43 @@ export function RoughTakeStrip({
     if (reviewBeat && beat) {
       reviewBeat.currentTime = getRoughTakeReviewBeatTime(beatStartTime, reviewTime, getBeatDurationSeconds(beat), nextSyncMs);
     }
+    if (webAudioTime !== null) {
+      stopWebAudioReview();
+      setReviewTime(webAudioTime);
+      void startWebAudioReview(webAudioTime, nextSyncMs, reviewWithBeat).catch(() => setReviewPlaying(false));
+    }
   };
 
-  const toggleReview = () => {
+  const toggleReview = async () => {
     const audio = audioRef.current;
     if (!audio) return;
     if (reviewPlaying) {
-      audio.pause();
-      reviewBeatRef.current?.pause();
+      if (reviewModeRef.current === "web-audio") {
+        const pausedAt = currentWebAudioReviewTime();
+        stopWebAudioReview();
+        setReviewTime(pausedAt);
+        setResumeOffset(pausedAt);
+      } else {
+        audio.pause();
+        reviewBeatRef.current?.pause();
+      }
       setReviewPlaying(false);
       return;
     }
+    if (reviewStartPendingRef.current) return;
+    reviewStartPendingRef.current = true;
     onReviewStart();
     setWebAudioSessionType("playback");
+    try {
+      await startWebAudioReview(reviewTime, syncOffsetMs, reviewWithBeat);
+      reviewStartPendingRef.current = false;
+      return;
+    } catch {
+      // Older WebViews and cross-origin media fall back to element playback.
+      stopWebAudioReview();
+      reviewModeRef.current = "elements";
+      reviewStartPendingRef.current = false;
+    }
     const reviewBeat = reviewBeatRef.current;
     const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
     audio.currentTime = reviewWithBeat ? getRoughTakeVocalMediaTime(reviewTime, roughTakeDuration, syncOffsetMs) : reviewTime;
@@ -179,7 +345,14 @@ export function RoughTakeStrip({
 
   const toggleReviewBeat = () => {
     const nextReviewWithBeat = !reviewWithBeat;
+    const webAudioTime = reviewModeRef.current === "web-audio" && reviewPlaying ? currentWebAudioReviewTime() : null;
     setReviewWithBeat(nextReviewWithBeat);
+    if (webAudioTime !== null) {
+      stopWebAudioReview();
+      setReviewTime(webAudioTime);
+      void startWebAudioReview(webAudioTime, syncOffsetMs, nextReviewWithBeat).catch(() => setReviewPlaying(false));
+      return;
+    }
     const audio = audioRef.current;
     if (audio) {
       audio.currentTime = nextReviewWithBeat ? getRoughTakeVocalMediaTime(reviewTime, roughTakeDuration, syncOffsetMs) : reviewTime;
@@ -263,7 +436,7 @@ export function RoughTakeStrip({
           />
           {beatPreviewUrl && <audio ref={reviewBeatRef} src={beatPreviewUrl} preload="metadata" className="hidden" />}
           <div className="flex items-center gap-3">
-            <button onClick={toggleReview} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gold text-black" aria-label={reviewPlaying ? "Pause rough take" : "Play rough take"}>
+            <button onClick={() => void toggleReview()} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gold text-black" aria-label={reviewPlaying ? "Pause rough take" : "Play rough take"}>
               {reviewPlaying ? <Pause className="h-4 w-4" fill="currentColor" /> : <Play className="h-4 w-4" fill="currentColor" />}
             </button>
             <div className="min-w-0 flex-1">

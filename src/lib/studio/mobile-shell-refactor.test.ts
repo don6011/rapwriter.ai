@@ -123,10 +123,14 @@ describe("mobile studio shell refactor contracts", () => {
     expect(shell).toContain("if (recording) {\n      stopBeatPreview({ reset: false });\n      take.stopRecording();");
     expect(shell).toContain("onReviewRoughTake={() => stopBeatPreview({ reset: false })}");
     expect(shell).toContain("const deleteRoughTake = () => {\n    stopBeatPreview({ reset: true });\n    take.deleteTake();");
-    expect(strip).toContain('onReviewStart();\n    setWebAudioSessionType("playback");\n    const reviewBeat = reviewBeatRef.current;');
+    expect(strip).toContain('onReviewStart();\n    setWebAudioSessionType("playback");\n    try {\n      await startWebAudioReview');
     expect(strip).toContain("const vocalPlayback = audio.play();");
     expect(strip).toContain("const beatPlayback = reviewWithBeat ? (reviewBeat?.play() ?? Promise.resolve()) : Promise.resolve();");
     expect(strip).toContain("void Promise.all([vocalPlayback, beatPlayback])");
+    expect(strip).toContain("const startAt = context.currentTime + 0.04;");
+    expect(strip).toContain("reviewBeat.start(startAt, beatOffset);");
+    expect(strip).toContain("vocal.start(startAt, vocalOffset);");
+    expect(strip).toContain('reviewModeRef.current = "web-audio"');
     expect(strip).toContain('aria-label="Review vocal sync"');
     expect(strip).toContain("ROUGH_TAKE_SYNC_STORAGE_KEY");
     expect(strip).toContain('addEventListener("devicechange", handleDeviceChange)');
