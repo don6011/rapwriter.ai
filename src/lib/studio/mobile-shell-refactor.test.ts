@@ -139,7 +139,7 @@ describe("mobile studio shell refactor contracts", () => {
     expect(transport).toContain('"Vocals only"');
     expect(transport).toContain('{recording ? "Stop" : "Start"}');
     expect(transport).toContain("setRecordFlowOpen(true)");
-    expect(transport).toContain("onToggleRecording(mode)");
+    expect(transport).toContain("onToggleRecordingRef.current(pendingMode)");
     expect(locker).toContain('{ id: "vocals", label: "Vocals"');
     expect(locker).toContain("<LockerVocalCard");
   });
@@ -259,6 +259,15 @@ describe("mobile studio shell refactor contracts", () => {
     expect(transport).toContain("Choose a beat first.");
     expect(transport).toContain("disabled={recording}");
     expect(shell).toContain("sectionName: take.state.sectionName");
+  });
+
+  test("gives artists a three-second count-in after choosing a recording mode", () => {
+    const transport = readFileSync(new URL("../../components/studio/panels/PadTransport.tsx", import.meta.url), "utf8");
+
+    expect(transport).toContain("setCountdown(3)");
+    expect(transport).toContain('aria-label="Recording count-in"');
+    expect(transport).toContain('pendingMode === "with_beat" ? "The beat starts after 1."');
+    expect(transport).toContain("onToggleRecordingRef.current(pendingMode)");
   });
 
   test("makes the active Studio card a truthful Current Session resume surface", () => {

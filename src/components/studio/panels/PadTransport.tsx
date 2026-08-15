@@ -7,7 +7,7 @@ import type { SelectedBeat } from "@/lib/studio/types";
 import type { RecordingMode } from "@/components/studio/state/use-rough-take";
 import { cn } from "@/lib/utils";
 import { Headphones, Mic, Pause, Play, RefreshCw, Square, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function PadTransport({
   beat,
@@ -41,12 +41,43 @@ export function PadTransport({
   onRecordingModeChange: (mode: RecordingMode) => void;
 }) {
   const [recordFlowOpen, setRecordFlowOpen] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [pendingMode, setPendingMode] = useState<RecordingMode | null>(null);
+  const onToggleRecordingRef = useRef(onToggleRecording);
+  onToggleRecordingRef.current = onToggleRecording;
   const hasBeat = beat.id !== EMPTY_BEAT.id;
 
   const beginRecording = (mode: RecordingMode) => {
+    if (playing) onToggleBeat();
     onRecordingModeChange(mode);
     setRecordFlowOpen(false);
-    onToggleRecording(mode);
+    setPendingMode(mode);
+    setCountdown(3);
+  };
+
+  useEffect(() => {
+    if (countdown === null || !pendingMode) return;
+    const timer = window.setTimeout(() => {
+      if (countdown > 1) {
+        setCountdown(countdown - 1);
+        return;
+      }
+      setCountdown(null);
+      setPendingMode(null);
+      onToggleRecordingRef.current(pendingMode);
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [countdown, pendingMode]);
+
+  useEffect(() => {
+    if (!recording) return;
+    setCountdown(null);
+    setPendingMode(null);
+  }, [recording]);
+
+  const cancelCountdown = () => {
+    setCountdown(null);
+    setPendingMode(null);
   };
 
   return (
@@ -94,6 +125,7 @@ export function PadTransport({
           </div>
           <button
             onClick={() => recording ? onToggleRecording() : setRecordFlowOpen(true)}
+            disabled={countdown !== null}
             className={cn(
               "flex shrink-0 flex-col items-center justify-center rounded-xl border font-semibold",
               compact ? "h-10 min-w-[48px] px-1 text-[9px]" : "h-12 min-w-[58px] px-2 text-[10px]",
@@ -146,6 +178,21 @@ export function PadTransport({
                 );
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {countdown !== null && !recording && (
+        <div className="fixed inset-0 z-[75] grid place-items-center bg-black/78 backdrop-blur-md" role="dialog" aria-modal="true" aria-label="Recording count-in">
+          <div className="flex flex-col items-center px-6 text-center" aria-live="assertive">
+            <div className="label-hw text-gold">Get ready</div>
+            <div key={countdown} className="mt-3 text-[8rem] font-black leading-none tabular-nums text-white animate-in zoom-in-75 duration-200">
+              {countdown}
+            </div>
+            <p className="mt-4 text-sm text-white/65">{pendingMode === "with_beat" ? "The beat starts after 1." : "Recording starts after 1."}</p>
+            <button type="button" onClick={cancelCountdown} className="mt-8 min-h-11 rounded-full border border-white/15 bg-white/[0.04] px-6 text-sm font-semibold text-white/75">
+              Cancel
+            </button>
           </div>
         </div>
       )}
