@@ -93,6 +93,15 @@ describe("mobile studio shell refactor contracts", () => {
     expect(beatHook).toContain("async function prepareBeatPreview");
   });
 
+  test("captures rough takes without speech-driven beat ducking", () => {
+    const takeHook = readFileSync(new URL("../../components/studio/state/use-rough-take.ts", import.meta.url), "utf8");
+
+    expect(takeHook).toContain("echoCancellation: false");
+    expect(takeHook).toContain("noiseSuppression: false");
+    expect(takeHook).toContain("autoGainControl: false");
+    expect(takeHook).toContain("audio: ROUGH_TAKE_AUDIO_CONSTRAINTS");
+  });
+
   test("lets a saved take scrub and continue from its matching beat position", () => {
     const shell = readFileSync(new URL("../../components/MobileStudioShell.tsx", import.meta.url), "utf8");
     const strip = readFileSync(new URL("../../components/studio/panels/RoughTakeStrip.tsx", import.meta.url), "utf8");

@@ -36,6 +36,14 @@ export type RoughTakeState = {
 
 export type RecordingMode = "with_beat" | "vocals_only";
 
+export const ROUGH_TAKE_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: false,
+  noiseSuppression: false,
+  autoGainControl: false,
+  channelCount: { ideal: 1 },
+  sampleRate: { ideal: 48_000 },
+};
+
 const initialState: RoughTakeState = {
   recording: false,
   recordStartedAt: null,
@@ -238,7 +246,7 @@ export function useRoughTake(serverTake: RoughTakeRow | null) {
 
     try {
       setWebAudioSessionType("play-and-record");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: ROUGH_TAKE_AUDIO_CONSTRAINTS });
       recorderStreamRef.current = stream;
       recorderChunksRef.current = [];
       const negotiatedMimeType = preferredRoughTakeMimeType((mimeType) => MediaRecorder.isTypeSupported(mimeType));
