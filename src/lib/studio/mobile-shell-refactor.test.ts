@@ -128,6 +128,8 @@ describe("mobile studio shell refactor contracts", () => {
     expect(strip).toContain("void Promise.all([vocalPlayback, beatPlayback])");
     expect(strip).toContain('aria-label="Review vocal sync"');
     expect(strip).toContain("ROUGH_TAKE_SYNC_STORAGE_KEY");
+    expect(strip).toContain('addEventListener("devicechange", handleDeviceChange)');
+    expect(strip).toContain("Audio device changed — re-check sync.");
     expect(strip).toContain("getRoughTakeVocalMediaTime");
     expect(strip).toContain('setWebAudioSessionType("playback")');
     expect(strip).not.toContain("Math.abs(reviewBeat.currentTime - expectedTime)");

@@ -65,6 +65,7 @@ export function RoughTakeStrip({
   const [resumeOffset, setResumeOffset] = useState(roughTakeDuration);
   const [dismissed, setDismissed] = useState(saved);
   const [syncOffsetMs, setSyncOffsetMs] = useState(DEFAULT_ROUGH_TAKE_SYNC_MS);
+  const [audioDeviceChanged, setAudioDeviceChanged] = useState(false);
   const beatPreviewUrl = beat ? resolveBeatPreviewUrl(beat) : null;
   const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
   const resumeBeatTime = getTakeResumeBeatTime(beatStartTime, resumeOffset, beatDuration);
@@ -76,6 +77,14 @@ export function RoughTakeStrip({
     } catch {
       // Private browsing or managed devices can make localStorage unavailable.
     }
+  }, []);
+
+  useEffect(() => {
+    const mediaDevices = navigator.mediaDevices;
+    if (!mediaDevices?.addEventListener) return;
+    const handleDeviceChange = () => setAudioDeviceChanged(true);
+    mediaDevices.addEventListener("devicechange", handleDeviceChange);
+    return () => mediaDevices.removeEventListener("devicechange", handleDeviceChange);
   }, []);
 
   useEffect(() => {
@@ -117,6 +126,7 @@ export function RoughTakeStrip({
   const updateReviewSync = (requestedSyncMs: number) => {
     const nextSyncMs = normalizeRoughTakeSyncMs(requestedSyncMs);
     setSyncOffsetMs(nextSyncMs);
+    setAudioDeviceChanged(false);
     try {
       window.localStorage.setItem(ROUGH_TAKE_SYNC_STORAGE_KEY, String(nextSyncMs));
     } catch {
@@ -246,6 +256,14 @@ export function RoughTakeStrip({
           </div>
           {beatPreviewUrl && (
             <div className="mt-3 rounded-xl border border-white/8 bg-black/25 px-3 py-2.5">
+              {audioDeviceChanged && (
+                <div className="mb-2.5 flex items-center justify-between gap-3 rounded-lg border border-gold/25 bg-gold/8 px-2.5 py-2 text-[10px] text-gold" role="status">
+                  <span>Audio device changed — re-check sync.</span>
+                  <button type="button" onClick={() => setAudioDeviceChanged(false)} className="shrink-0 text-white/55 underline-offset-2 hover:text-white/80 hover:underline">
+                    Dismiss
+                  </button>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-3 text-[11px]">
                 <span className="font-semibold text-white/75">Review sync</span>
                 <div className="flex items-center gap-2">
