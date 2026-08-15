@@ -1143,6 +1143,7 @@ export function MobileStudioShell() {
   };
 
   const deleteRoughTake = () => {
+    stopBeatPreview({ reset: true });
     take.deleteTake();
   };
 
