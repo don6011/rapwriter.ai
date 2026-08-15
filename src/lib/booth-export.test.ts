@@ -67,10 +67,13 @@ describe("Booth Ready export", () => {
   test("keeps every export format behind RapWriter Pro", () => {
     const createRoute = readFileSync(new URL("../../app/api/booth-exports/route.ts", import.meta.url), "utf8");
     const downloadRoute = readFileSync(new URL("../../app/api/booth-exports/[id]/route.ts", import.meta.url), "utf8");
+    const roughTakeRoute = readFileSync(new URL("../../app/api/booth-exports/[id]/rough-take/route.ts", import.meta.url), "utf8");
     const writer = readFileSync(new URL("../components/studio/screens/WriterScreen.tsx", import.meta.url), "utf8");
 
     expect(createRoute).toContain('requireMembershipEntitlement(supabase, user.id, "artist", "premium_exports")');
     expect(downloadRoute.indexOf("requireMembershipEntitlement")).toBeLessThan(downloadRoute.indexOf('format.data === "txt"'));
+    expect(roughTakeRoute.indexOf("requireMembershipEntitlement")).toBeLessThan(roughTakeRoute.indexOf(".download(roughTake.storage_path)"));
+    expect(roughTakeRoute).not.toContain("NextResponse.redirect");
     expect(writer).toContain("Export Song");
     expect(writer).toContain('hasPremiumExports ? "Ready" : "Pro"');
   });

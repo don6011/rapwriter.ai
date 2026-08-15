@@ -36,9 +36,17 @@ export async function GET(_request: Request, context: RouteContext) {
   if (roughTakeError) return NextResponse.json({ error: roughTakeError.message }, { status: 500 });
   if (!roughTake) return NextResponse.json({ error: "Rough take is no longer available." }, { status: 404 });
 
-  const { data, error: signError } = await supabase.storage.from(roughTake.storage_bucket).createSignedUrl(roughTake.storage_path, 60 * 5, { download: true });
-  if (signError) return NextResponse.json({ error: "Rough take download is unavailable." }, { status: 500 });
-  const redirect = NextResponse.redirect(data.signedUrl, 307);
-  redirect.headers.set("Cache-Control", "private, no-store");
-  return redirect;
+  const { data: audio, error: downloadError } = await supabase.storage.from(roughTake.storage_bucket).download(roughTake.storage_path);
+  if (downloadError || !audio) return NextResponse.json({ error: "Rough take download is unavailable." }, { status: 500 });
+
+  const extension = roughTake.storage_path.split(".").pop()?.replace(/[^a-z0-9]/gi, "").toLowerCase() || "m4a";
+  return new NextResponse(audio, {
+    headers: {
+      "Cache-Control": "private, no-store",
+      "Content-Disposition": `attachment; filename="rapwriter-rough-take.${extension}"`,
+      "Content-Length": String(audio.size),
+      "Content-Type": audio.type || "audio/mp4",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 }
