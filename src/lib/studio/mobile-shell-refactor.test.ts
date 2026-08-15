@@ -126,8 +126,9 @@ describe("mobile studio shell refactor contracts", () => {
     expect(strip).toContain("const vocalPlayback = audio.play();");
     expect(strip).toContain("const beatPlayback = reviewBeat?.play() ?? Promise.resolve();");
     expect(strip).toContain("void Promise.all([vocalPlayback, beatPlayback])");
-    expect(strip).toContain("ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS = 0.15");
-    expect(strip).toContain("nextTime + ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS");
+    expect(strip).toContain('aria-label="Review vocal sync"');
+    expect(strip).toContain("ROUGH_TAKE_SYNC_STORAGE_KEY");
+    expect(strip).toContain("getRoughTakeVocalMediaTime");
     expect(strip).toContain('setWebAudioSessionType("playback")');
     expect(strip).not.toContain("Math.abs(reviewBeat.currentTime - expectedTime)");
   });

@@ -6,12 +6,20 @@ import type { RoughTakeAnalysis } from "@/lib/booth-ready-v2";
 import { getBeatDurationSeconds } from "@/lib/studio/beat-snapshot";
 import { formatDuration } from "@/lib/studio/format";
 import { setWebAudioSessionType } from "@/lib/studio/audio-session";
+import {
+  DEFAULT_ROUGH_TAKE_SYNC_MS,
+  getRoughTakeLogicalTime,
+  getRoughTakeReviewBeatTime,
+  getRoughTakeVocalMediaTime,
+  MAX_ROUGH_TAKE_SYNC_MS,
+  MIN_ROUGH_TAKE_SYNC_MS,
+  normalizeRoughTakeSyncMs,
+  ROUGH_TAKE_SYNC_STORAGE_KEY,
+} from "@/lib/studio/rough-take-sync";
 import type { SelectedBeat } from "@/lib/studio/types";
 import { cn } from "@/lib/utils";
 import { Pause, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-
-const ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS = 0.15;
 
 export function RoughTakeStrip({
   recording,
@@ -56,9 +64,19 @@ export function RoughTakeStrip({
   const [reviewTime, setReviewTime] = useState(0);
   const [resumeOffset, setResumeOffset] = useState(roughTakeDuration);
   const [dismissed, setDismissed] = useState(saved);
+  const [syncOffsetMs, setSyncOffsetMs] = useState(DEFAULT_ROUGH_TAKE_SYNC_MS);
   const beatPreviewUrl = beat ? resolveBeatPreviewUrl(beat) : null;
   const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
   const resumeBeatTime = getTakeResumeBeatTime(beatStartTime, resumeOffset, beatDuration);
+
+  useEffect(() => {
+    try {
+      const storedSync = window.localStorage.getItem(ROUGH_TAKE_SYNC_STORAGE_KEY);
+      if (storedSync !== null) setSyncOffsetMs(normalizeRoughTakeSyncMs(Number(storedSync)));
+    } catch {
+      // Private browsing or managed devices can make localStorage unavailable.
+    }
+  }, []);
 
   useEffect(() => {
     audioRef.current?.pause();
@@ -87,13 +105,30 @@ export function RoughTakeStrip({
     const audio = audioRef.current;
     if (!audio) return;
     const nextTime = Math.max(0, Math.min(seconds, roughTakeDuration));
-    audio.currentTime = Math.min(roughTakeDuration, nextTime + ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS);
+    audio.currentTime = getRoughTakeVocalMediaTime(nextTime, roughTakeDuration, syncOffsetMs);
     setReviewTime(nextTime);
     setResumeOffset(nextTime);
 
     const reviewBeat = reviewBeatRef.current;
     if (!reviewBeat || !beat) return;
-    reviewBeat.currentTime = getTakeResumeBeatTime(beatStartTime, nextTime, getBeatDurationSeconds(beat));
+    reviewBeat.currentTime = getRoughTakeReviewBeatTime(beatStartTime, nextTime, getBeatDurationSeconds(beat), syncOffsetMs);
+  };
+
+  const updateReviewSync = (requestedSyncMs: number) => {
+    const nextSyncMs = normalizeRoughTakeSyncMs(requestedSyncMs);
+    setSyncOffsetMs(nextSyncMs);
+    try {
+      window.localStorage.setItem(ROUGH_TAKE_SYNC_STORAGE_KEY, String(nextSyncMs));
+    } catch {
+      // The control still works for this session when persistence is unavailable.
+    }
+
+    const audio = audioRef.current;
+    if (audio) audio.currentTime = getRoughTakeVocalMediaTime(reviewTime, roughTakeDuration, nextSyncMs);
+    const reviewBeat = reviewBeatRef.current;
+    if (reviewBeat && beat) {
+      reviewBeat.currentTime = getRoughTakeReviewBeatTime(beatStartTime, reviewTime, getBeatDurationSeconds(beat), nextSyncMs);
+    }
   };
 
   const toggleReview = () => {
@@ -109,19 +144,17 @@ export function RoughTakeStrip({
     setWebAudioSessionType("playback");
     const reviewBeat = reviewBeatRef.current;
     const beatDuration = beat ? getBeatDurationSeconds(beat) : 0;
-    if (reviewTime <= 0.01 && audio.currentTime <= 0.01) {
-      audio.currentTime = Math.min(roughTakeDuration, ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS);
-    }
+    audio.currentTime = getRoughTakeVocalMediaTime(reviewTime, roughTakeDuration, syncOffsetMs);
     if (reviewBeat) {
-      reviewBeat.currentTime = beatDuration > 0 ? (beatStartTime + reviewTime) % beatDuration : beatStartTime + reviewTime;
+      reviewBeat.currentTime = getRoughTakeReviewBeatTime(beatStartTime, reviewTime, beatDuration, syncOffsetMs);
     }
 
     const vocalPlayback = audio.play();
     const beatPlayback = reviewBeat?.play() ?? Promise.resolve();
     void Promise.all([vocalPlayback, beatPlayback]).then(() => {
       if (reviewBeat) {
-        const logicalAudioTime = Math.max(0, audio.currentTime - ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS);
-        const alignedBeatTime = beatDuration > 0 ? (beatStartTime + logicalAudioTime) % beatDuration : beatStartTime + logicalAudioTime;
+        const logicalAudioTime = getRoughTakeLogicalTime(audio.currentTime, roughTakeDuration, syncOffsetMs);
+        const alignedBeatTime = getRoughTakeReviewBeatTime(beatStartTime, logicalAudioTime, beatDuration, syncOffsetMs);
         if (Math.abs(reviewBeat.currentTime - alignedBeatTime) > 0.08) reviewBeat.currentTime = alignedBeatTime;
       }
       setReviewPlaying(true);
@@ -183,7 +216,7 @@ export function RoughTakeStrip({
             src={roughTakeUrl}
             preload="metadata"
             onTimeUpdate={(event) => {
-              const nextTime = Math.max(0, event.currentTarget.currentTime - ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS);
+              const nextTime = getRoughTakeLogicalTime(event.currentTarget.currentTime, roughTakeDuration, syncOffsetMs);
               setReviewTime(nextTime);
               setResumeOffset(nextTime);
             }}
@@ -191,7 +224,7 @@ export function RoughTakeStrip({
               const reviewBeat = reviewBeatRef.current;
               reviewBeat?.pause();
               if (reviewBeat) reviewBeat.currentTime = beatStartTime;
-              event.currentTarget.currentTime = Math.min(roughTakeDuration, ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS);
+              event.currentTarget.currentTime = getRoughTakeVocalMediaTime(0, roughTakeDuration, syncOffsetMs);
               setReviewPlaying(false);
               setReviewTime(0);
               setResumeOffset(roughTakeDuration);
@@ -211,6 +244,35 @@ export function RoughTakeStrip({
               <TakeWaveform currentTime={reviewTime} duration={roughTakeDuration} active={reviewPlaying} saved={saved} onSeek={seekReview} />
             </div>
           </div>
+          {beatPreviewUrl && (
+            <div className="mt-3 rounded-xl border border-white/8 bg-black/25 px-3 py-2.5">
+              <div className="flex items-center justify-between gap-3 text-[11px]">
+                <span className="font-semibold text-white/75">Review sync</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono tabular-nums text-gold">{syncOffsetMs > 0 ? "+" : ""}{syncOffsetMs} ms</span>
+                  <button type="button" onClick={() => updateReviewSync(DEFAULT_ROUGH_TAKE_SYNC_MS)} className="text-white/45 underline-offset-2 hover:text-white/70 hover:underline">
+                    Reset
+                  </button>
+                </div>
+              </div>
+              <input
+                type="range"
+                min={MIN_ROUGH_TAKE_SYNC_MS}
+                max={MAX_ROUGH_TAKE_SYNC_MS}
+                step={5}
+                value={syncOffsetMs}
+                onChange={(event) => updateReviewSync(Number(event.currentTarget.value))}
+                className="mt-2 h-8 w-full accent-[#ffcc33]"
+                aria-label="Review vocal sync"
+                aria-valuetext={syncOffsetMs === 0 ? "No timing adjustment" : `${Math.abs(syncOffsetMs)} milliseconds ${syncOffsetMs > 0 ? "earlier" : "later"}`}
+              />
+              <div className="flex justify-between text-[9px] uppercase tracking-[0.12em] text-white/35">
+                <span>Vocals later</span>
+                <span>Vocals earlier</span>
+              </div>
+              <p className="mt-1.5 text-[10px] leading-4 text-white/42">Move right if vocals sound late. Saved on this device.</p>
+            </div>
+          )}
           <div className="mt-3 grid grid-cols-2 gap-2">
             {saved ? (
               <button onClick={() => onContinue(resumeOffset)} className="min-h-10 rounded-xl border border-emerald-500/25 bg-emerald-500/12 px-3 text-xs font-semibold text-emerald-300">
