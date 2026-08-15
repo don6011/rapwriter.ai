@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { Pause, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-const ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS = 0.13;
+const ROUGH_TAKE_REVIEW_VOCAL_ADVANCE_SECONDS = 0.15;
 
 export function RoughTakeStrip({
   recording,
